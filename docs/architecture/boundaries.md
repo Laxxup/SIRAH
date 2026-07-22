@@ -9,10 +9,19 @@ calibraciones ni proveedores concretos.
 
 ## SIRAH
 
-Poseerá el catálogo de capacidades (`face.look`, `face.blink`,
+Posee la responsabilidad del catálogo futuro de capacidades (`face.look`, `face.blink`,
 `face.speech.start`, `vision.capture`, `dialogue.listen`), conversación,
 percepción, clientes concretos, protocolos y traducción a contratos de Cortex.
 Estas capacidades son ejemplos de límite, no afirmaciones de implementación.
+
+También pertenecen a SIRAH los futuros puertos internos de cámara, voz, LLM y
+memoria, sus adaptadores concretos, la persistencia SQLite, MQTT o Serial, y la
+composición mediante CLI, GUI o daemon. No se crean todavía porque no existe
+código real que los justifique.
+
+Cortex expone actualmente solo `RobotPort` y `EventInboxPort`; no importa
+código de SIRAH. SIRAH podrá depender de Cortex cuando se adopte un mecanismo
+técnico de integración.
 
 ## Firmware
 
@@ -27,4 +36,3 @@ SIRAH solicita capacidad → Cortex planifica y valida → RobotPort despacha
 ```
 
 Un LLM nunca controla directamente GPIO, PWM, PCA9685 ni servos.
-

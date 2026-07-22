@@ -20,6 +20,19 @@ retirarlo de Cortex mediante un commit explícito.
 La dirección de dependencia es SIRAH → Cortex. La integración técnica queda
 pendiente.
 
+## Trazabilidad del experimento Velxio
+
+- commit de origen en Cortex:
+  `ea10d96f3a58cb6b6ccde4ab01bc7ac7ac32c52f`;
+- commit de copia en SIRAH:
+  `8462538c0293a03375b9479a99f51e2d240b2495`.
+
+Los seis artefactos de sesión, sketch, ZIP y exportación Velxio coinciden
+exactamente por SHA-256 entre ambos repositorios. El `README.md` de Cortex era
+vacío; el de SIRAH se enriqueció deliberadamente con propósito, estado,
+validación, seguridad, procedencia y decisión, y es la versión documental
+autoritativa. Esta diferencia no altera el artefacto experimental preservado.
+
 ## Alternativas
 
 ### A. Árbol completo desde ahora
@@ -54,4 +67,3 @@ Revisar cuando exista al menos uno de estos hechos:
 - firmware cargado y validado en un microcontrolador;
 - pruebas compartidas que necesiten una raíz estable;
 - decisión adoptada sobre empaquetado, procesos o integración con Cortex.
-

@@ -39,7 +39,14 @@ El diagrama es conceptual. El mecanismo técnico entre ambos repositorios
 | Controlador facial ESP32/PCA9685 | Planeado | No validado | Inventario proporcionado por el equipo |
 | ESP32-CAM | Planeado | No validado | Sin implementación local encontrada |
 | Conversación (STT/LLM/TTS) | Planeado | No validado | Sin implementación local encontrada |
-| Visión y percepción | Planeado | No validado | Contratos genéricos solo en Cortex |
+| Visión y percepción | Planeado | No validado | Sin implementación local encontrada |
+
+El experimento Velxio procede del commit de Cortex
+`ea10d96f3a58cb6b6ccde4ab01bc7ac7ac32c52f` y fue preservado en este
+repositorio por el commit `8462538c0293a03375b9479a99f51e2d240b2495`. Sus
+seis artefactos ejecutables y de simulación coinciden por SHA-256; el README de
+esta copia es deliberadamente más completo y constituye su documentación
+autoritativa.
 
 No se encontró evidencia local de firmware estable para siete servos, Gemini,
 Vosk, Piper, cámara, MQTT o Serial concreto. No se presentan como
@@ -71,4 +78,3 @@ hay implementaciones estables que demuestren esas responsabilidades.
 - validación eléctrica, mecánica y de seguridad del controlador facial;
 - adquisición y procesamiento de imágenes;
 - proveedores y arquitectura de conversación.
-
