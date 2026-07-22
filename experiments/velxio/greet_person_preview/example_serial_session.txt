@@ -1,0 +1,16 @@
+# SIRAH GREET_PERSON — Velxio preview
+
+READY|sirah-velxio-preview
+PROTOCOL|experimental-serial-v0
+LIMITS|right_arm|angle=0..120|speed=0.1..50
+
+> SET_POSITION|plan-v15-greet_person-0|right_arm|60.0|30.0
+< ACCEPTED|plan-v15-greet_person-0
+< APPLIED|plan-v15-greet_person-0|right_arm|60.0|duration_ms=2000
+
+> SET_POSITION|plan-v15-greet_person-1|right_arm|0.0|30.0
+< ACCEPTED|plan-v15-greet_person-1
+< APPLIED|plan-v15-greet_person-1|right_arm|0.0|duration_ms=2000
+
+> SET_POSITION|demo-invalid-angle|right_arm|500.0|30.0
+< REJECTED|demo-invalid-angle|angle_out_of_range

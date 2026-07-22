@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "author": "Velxio",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-arduino-uno",
+      "id": "uno",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "servo_1784488101843_f6y78ekb2",
+      "top": -182,
+      "left": 175,
+      "attrs": {
+        "angle": 0,
+        "horn": "single",
+        "hornColor": "#ccc"
+      }
+    }
+  ],
+  "connections": [
+    [
+      "servo_1784488101843_f6y78ekb2:GND",
+      "esp32:GND",
+      "black",
+      []
+    ],
+    [
+      "servo_1784488101843_f6y78ekb2:V+",
+      "esp32:VIN",
+      "#cc0000",
+      []
+    ],
+    [
+      "servo_1784488101843_f6y78ekb2:PWM",
+      "esp32:18",
+      "#22c55e",
+      []
+    ]
+  ]
+}
