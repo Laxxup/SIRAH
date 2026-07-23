@@ -13,6 +13,7 @@ from .cortex_integration import (
     create_default_catalog,
 )
 from .context import ConversationMessage, PresentContext, SessionContextStore
+from .conversation import ConversationOrchestrator, ConversationResult
 from .errors import (
     CapabilityExecutionError,
     CapabilityRejectedError,
@@ -40,6 +41,8 @@ __all__ = [
     "CapabilityRequest",
     "CapabilityRunner",
     "ConversationMessage",
+    "ConversationOrchestrator",
+    "ConversationResult",
     "DecisionType",
     "IntelligenceDecision",
     "IntelligencePort",
