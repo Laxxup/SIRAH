@@ -1,11 +1,17 @@
 # Roadmap de reconstrucción
 
-## Hito completado
+## Hitos completados
 
 SIRAH Cortex `0.1.0a1` establece una primera distribución alpha local del
 núcleo determinista. Este hito aporta contratos, estado, Runtime, planificación,
 seguridad, ejecución y tracking comprobados, sin afirmar estabilidad definitiva
 ni certificación para hardware real.
+
+SIRAH `0.1.0.dev0` añade una integración pre-alpha simulada con Cortex, contexto
+presente en memoria y razonamiento opcional por texto mediante Gemini. La
+inteligencia propone capacidades estructuradas; el catálogo, la política local,
+Cortex y `RobotPort` conservan la autoridad de ejecución. Las pruebas normales
+no usan red.
 
 ## Trabajo activo
 
@@ -20,16 +26,17 @@ creará solo al existir una implementación comprobable.
 
 ## Fases siguientes
 
-| Orden | Fase | Resultado esperado |
+| Estado | Fase | Resultado |
 |---|---|---|
-| 1 | Integración simulada SIRAH–Cortex | Un caso de uso mínimo usa la distribución de Cortex sin hardware y conserva sus compuertas de seguridad |
-| 2 | Un servo real | Movimiento limitado, alimentado y detenido de forma segura, con evidencia en hardware |
-| 3 | Gemini por texto | Entrada y salida textual sin autoridad mecánica directa |
-| 4 | Contexto de sesión | Estado conversacional acotado y separado de `WorldState` |
-| 5 | Voz | Experimento medible de entrada y salida de audio |
-| 6 | Visión | Adquisición y observación reproducibles antes de reconocimiento persistente |
-| 7 | Integración multimodal | Coordinación comprobable de texto, voz, visión y capacidades robóticas |
-| 8 | Robustecimiento | Manejo de fallos, seguridad, privacidad, observabilidad y validación prolongada |
+| Completada | Integración simulada SIRAH–Cortex | `robot.home` y `robot.stop` atraviesan Cortex y un adaptador simulado |
+| Completada | Gemini por texto | Decisión estructurada opcional, sin autoridad mecánica directa |
+| Completada | Contexto de sesión inicial | Estado reciente acotado, separado de `WorldState` y sin persistencia |
+| Siguiente | Un servo real y Serial | Movimiento limitado, alimentado y detenido de forma segura, con evidencia en hardware |
+| Planeada | Contexto avanzado | Resumen y políticas de privacidad comprobables |
+| Planeada | Voz | Experimento medible de entrada y salida de audio |
+| Planeada | Visión | Adquisición y observación reproducibles antes de reconocimiento persistente |
+| Planeada | Integración multimodal | Coordinación comprobable de texto, voz, visión y capacidades robóticas |
+| Planeada | Robustecimiento | Manejo de fallos, seguridad, privacidad, observabilidad y validación prolongada |
 
 Antes del servo real deben documentarse alimentación, cableado, límites,
 calibraciones y parada física. Antes de visión debe inventariarse la ESP32-CAM

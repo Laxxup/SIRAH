@@ -12,10 +12,45 @@ SIRAH Cortex es el núcleo determinista hermano. Posee dominio, eventos,
 cancelación y emergencia. SIRAH utilizará Cortex; Cortex no dependerá de este
 repositorio.
 
-SIRAH compone conversación, visión y dispositivos sobre SIRAH Cortex. Cortex
-conserva el núcleo determinista y se comunica con adaptadores mediante
-`RobotPort`; los adaptadores traducen hacia firmware y hardware. El mecanismo
-técnico de integración entre ambos repositorios sigue pendiente.
+SIRAH compone conversación, percepción y dispositivos sobre SIRAH Cortex.
+Cortex conserva el núcleo determinista y se comunica con adaptadores mediante
+`RobotPort`; los adaptadores futuros traducirán hacia firmware y hardware.
+
+## Pre-alpha local 0.1.0.dev0
+
+La distribución `sirah`, importable como `sirah`, demuestra actualmente:
+
+- conversación escrita con un proveedor de inteligencia intercambiable;
+- contexto presente limitado y no persistente;
+- decisiones estructuradas de Gemini mediante el SDK `google-genai`;
+- catálogo y política local de capacidades;
+- ejecución real a través de SIRAH Cortex `0.1.0a1`;
+- un `RobotPort` simulado, determinista y sin hardware.
+
+`robot.home` y `robot.stop` son las capacidades garantizadas. `arm.greet` está
+implementada de forma provisional reutilizando el plan mecánico existente en
+Cortex; depende de API provisional y puede cambiar durante la serie pre-alpha.
+Gemini propone una capacidad nominal, pero nunca crea `RobotCommand`, accede a
+`RobotPort` ni decide grados, PWM, GPIO, canales o límites.
+
+La versión base funciona sin Gemini:
+
+```bash
+python -m pip install .
+python examples/offline_conversation.py
+```
+
+Gemini es opcional:
+
+```bash
+python -m pip install ".[gemini]"
+export GEMINI_API_KEY="valor-configurado-fuera-del-repositorio"
+export SIRAH_GEMINI_MODEL="gemini-3.6-flash"  # opcional
+```
+
+Si existen ambas claves, `GEMINI_API_KEY` tiene precedencia sobre
+`GOOGLE_API_KEY`. La disponibilidad, las cuotas y los modelos dependen del
+proyecto de Google. Consulta [la guía operativa de Gemini](docs/gemini.md).
 
 ## Historia del proyecto
 
@@ -36,6 +71,8 @@ reglas de recuperación de conocimiento se documentan en
 
 | Área | Estado | Validación | Evidencia local |
 |---|---|---|---|
+| Texto, contexto y Cortex simulado | Implementado en pre-alpha | Validado sin red | `src/sirah/`, `tests/`, `examples/` |
+| Gemini por texto | Implementado, opcional | Validado con dobles; smoke vivo opt-in | `src/sirah/gemini.py` |
 | Saludo Velxio con un servo | Experimental | Validado en simulación | `experiments/velxio/greet_person_preview/` |
 | Controlador facial ESP32/PCA9685 | Planeado | No validado | Inventario proporcionado por el equipo |
 | ESP32-CAM | Planeado | No validado | Sin implementación local encontrada |
@@ -49,9 +86,9 @@ seis artefactos ejecutables y de simulación coinciden por SHA-256; el README de
 esta copia es deliberadamente más completo y constituye su documentación
 autoritativa.
 
-No se encontró evidencia local de firmware estable para siete servos, Gemini,
-Vosk, Piper, cámara, MQTT o Serial concreto. No se presentan como
-implementados.
+No existe firmware estable para siete servos, Vosk, Piper, cámara, MQTT o
+Serial concreto. Gemini existe únicamente como integración textual opcional;
+no se presentan voz, visión o hardware real como implementados.
 
 ## Hardware conocido
 
@@ -65,18 +102,25 @@ No existe evidencia local de validación física ni calibraciones.
 - `docs/architecture/`: decisiones y límites transversales.
 - `docs/components/`: inventario comprobable y estado de componentes.
 - `docs/history.md`: evolución desde el prototipo experimental.
+- `src/sirah/`: aplicación pre-alpha y sus límites de autoridad.
+- `tests/`: pruebas normales sin red.
+- `examples/`: demostración offline y smoke Gemini opt-in.
 - `experiments/`: prototipos sin promover a integración estable.
 - `docs/roadmap.md`: trabajo activo y criterios de promoción.
 
-No existen todavía `src/`, `subsystems/`, `adapters/` ni `firmware/` porque no
-hay implementaciones estables que demuestren esas responsabilidades.
+No existen todavía paquetes de voz, visión, firmware, GUI ni hardware porque
+no hay implementaciones que demuestren esas responsabilidades.
 
 ## Decisiones abiertas
 
-- forma de integrar SIRAH con Cortex;
 - topología de procesos y equipos (PC, Raspberry Pi, ESP32);
 - protocolos Serial, MQTT o HTTP;
 - estructura de software y lenguajes;
 - validación eléctrica, mecánica y de seguridad del controlador facial;
 - adquisición y procesamiento de imágenes;
-- proveedores y arquitectura de conversación.
+- licencia de SIRAH para una futura publicación pública.
+
+SIRAH `0.1.0.dev0` es pre-alpha, no una API estable. No controla hardware real
+y no es software certificado para seguridad funcional. Cortex y la política
+local mejoran la seguridad lógica, pero no sustituyen firmware seguro,
+watchdog, alimentación protegida, paro físico ni validación mecánica.

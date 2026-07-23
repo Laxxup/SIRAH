@@ -9,19 +9,21 @@ calibraciones ni proveedores concretos.
 
 ## SIRAH
 
-Posee la responsabilidad del catálogo futuro de capacidades (`face.look`, `face.blink`,
-`face.speech.start`, `vision.capture`, `dialogue.listen`), conversación,
-percepción, clientes concretos, protocolos y traducción a contratos de Cortex.
-Estas capacidades son ejemplos de límite, no afirmaciones de implementación.
+Posee el catálogo actual de `robot.home`, `robot.stop` y `arm.greet`
+provisional, la política local, el contexto presente, la conversación textual,
+los proveedores concretos y la traducción a contratos de Cortex. También posee
+el adaptador robótico simulado porque demuestra la composición del sistema
+completo, no una responsabilidad nueva del núcleo determinista.
 
 También pertenecen a SIRAH los futuros puertos internos de cámara, voz, LLM y
 memoria, sus adaptadores concretos, la persistencia SQLite, MQTT o Serial, y la
 composición mediante CLI, GUI o daemon. No se crean todavía porque no existe
 código real que los justifique.
 
-Cortex expone actualmente solo `RobotPort` y `EventInboxPort`; no importa
-código de SIRAH. SIRAH podrá depender de Cortex cuando se adopte un mecanismo
-técnico de integración.
+Cortex no importa código de SIRAH. SIRAH depende de la distribución
+`sirah-cortex==0.1.0a1` y usa preferentemente su fachada pública. `arm.greet`
+reutiliza provisionalmente planificación desde submódulos de Cortex y puede
+cambiar durante la serie alpha.
 
 ## Código heredado
 
@@ -41,8 +43,9 @@ en este repositorio.
 Posee canales PCA9685, ángulos, pulsos, límites locales, GPIO, I2C,
 calibraciones, alimentación y comportamiento del microcontrolador.
 
-El flujo permitido comienza con una solicitud de capacidad en SIRAH. Cortex la
-planifica y valida; `RobotPort` la despacha; un adaptador la traduce y el
-firmware la ejecuta.
+El flujo permitido comienza con una propuesta de capacidad en SIRAH. El
+catálogo y la política la autorizan; una traducción determinista crea
+estructuras de Cortex; `SafetySupervisor` valida; `ActionExecutor` entrega por
+`RobotPort`; un adaptador futuro traducirá al firmware.
 
 Un LLM nunca controla directamente GPIO, PWM, PCA9685 ni servos.
