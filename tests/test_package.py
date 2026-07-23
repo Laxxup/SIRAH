@@ -16,6 +16,11 @@ EXPECTED_PUBLIC_API = {
     "CapabilityRejectedError",
     "CapabilityRequest",
     "CapabilityRunner",
+    "ComponentId",
+    "ComponentKind",
+    "ComponentRegistry",
+    "ComponentState",
+    "ComponentStatus",
     "ConversationMessage",
     "ConversationOrchestrator",
     "ConversationResult",
@@ -30,8 +35,10 @@ EXPECTED_PUBLIC_API = {
     "InvalidIntelligenceResponseError",
     "ParameterDefinition",
     "PresentContext",
+    "PresentSystem",
     "SessionContextStore",
     "SirahApplicationError",
+    "SystemSnapshot",
     "create_default_catalog",
 }
 
