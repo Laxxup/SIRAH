@@ -3,33 +3,34 @@
 **Sistema Inteligente Robótico de Asistencia Humana**
 
 SIRAH es el sistema completo del robot: capacidades concretas, dispositivos,
-protocolos, firmware, experimentos y documentación de integración. Este
-repositorio comienza de forma deliberadamente mínima y crecerá cuando exista
-código real que justifique nuevas responsabilidades.
+protocolos, firmware, experimentos y documentación de integración. La
+reconstrucción actual comienza de forma deliberadamente mínima y crecerá cuando
+exista código real que justifique nuevas responsabilidades.
 
 SIRAH Cortex es el núcleo determinista hermano. Posee dominio, eventos,
 `WorldState`, comportamiento, planificación, seguridad, ejecución, tracking,
 cancelación y emergencia. SIRAH utilizará Cortex; Cortex no dependerá de este
 repositorio.
 
-```text
-conversación / visión / dispositivos
-                │
-                ▼
-              SIRAH
-                │
-                ▼
-          SIRAH Cortex
-                │
-                ▼
-      RobotPort / adaptadores
-                │
-                ▼
-      ESP32 / firmware / hardware
-```
+SIRAH compone conversación, visión y dispositivos sobre SIRAH Cortex. Cortex
+conserva el núcleo determinista y se comunica con adaptadores mediante
+`RobotPort`; los adaptadores traducen hacia firmware y hardware. El mecanismo
+técnico de integración entre ambos repositorios sigue pendiente.
 
-El diagrama es conceptual. El mecanismo técnico entre ambos repositorios
-(paquete, Git, IPC, MQTT u otro) sigue pendiente.
+## Historia del proyecto
+
+SIRAH es anterior a esta reconstrucción. Un
+[prototipo experimental previo](https://gitlab.com/Laxxup/ipt-sirah) permitió
+explorar conversación, visión, dispositivos, persistencia e interfaces y
+obtener experiencia práctica sobre sus dependencias y límites.
+
+El repositorio actual reconstruye el sistema con fronteras arquitectónicas más
+explícitas. El núcleo determinista se desarrolla por separado como
+[SIRAH Cortex](https://github.com/Laxxup/SIRAH-Cortex). El prototipo anterior es
+una referencia histórica valiosa, no la arquitectura autoritativa ni evidencia
+de que todas sus capacidades estén disponibles actualmente. La historia y las
+reglas de recuperación de conocimiento se documentan en
+[`docs/history.md`](docs/history.md).
 
 ## Estado actual
 
@@ -63,6 +64,7 @@ No existe evidencia local de validación física ni calibraciones.
 
 - `docs/architecture/`: decisiones y límites transversales.
 - `docs/components/`: inventario comprobable y estado de componentes.
+- `docs/history.md`: evolución desde el prototipo experimental.
 - `experiments/`: prototipos sin promover a integración estable.
 - `docs/roadmap.md`: trabajo activo y criterios de promoción.
 
