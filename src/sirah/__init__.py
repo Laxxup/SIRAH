@@ -30,6 +30,15 @@ from .intelligence import (
     IntelligenceRequest,
     IntelligenceResponse,
 )
+from .system import (
+    ComponentId,
+    ComponentKind,
+    ComponentRegistry,
+    ComponentState,
+    ComponentStatus,
+    PresentSystem,
+    SystemSnapshot,
+)
 
 __all__ = [
     "CapabilityCatalog",
@@ -40,6 +49,11 @@ __all__ = [
     "CapabilityRejectedError",
     "CapabilityRequest",
     "CapabilityRunner",
+    "ComponentId",
+    "ComponentKind",
+    "ComponentRegistry",
+    "ComponentState",
+    "ComponentStatus",
     "ConversationMessage",
     "ConversationOrchestrator",
     "ConversationResult",
@@ -54,7 +68,9 @@ __all__ = [
     "InvalidIntelligenceResponseError",
     "ParameterDefinition",
     "PresentContext",
+    "PresentSystem",
     "SessionContextStore",
     "SirahApplicationError",
+    "SystemSnapshot",
     "create_default_catalog",
 ]

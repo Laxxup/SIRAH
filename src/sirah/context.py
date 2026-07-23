@@ -49,6 +49,15 @@ class SessionContextStore:
             raise ValueError("session_id debe ser una cadena no vacía.")
         return self._sessions.get(session_id, PresentContext(session_id=session_id))
 
+    def clear(self, session_id: str) -> PresentContext:
+        """Reinicia el contexto temporal de una sesión y lo devuelve vacío."""
+
+        if not isinstance(session_id, str) or not session_id.strip():
+            raise ValueError("session_id debe ser una cadena no vacía.")
+        context = PresentContext(session_id=session_id)
+        self._sessions[session_id] = context
+        return context
+
     def append(self, session_id: str, message: ConversationMessage) -> PresentContext:
         context = self.get(session_id)
         messages = self._trim((*context.messages, message))
@@ -86,4 +95,3 @@ class SessionContextStore:
         while kept and sum(len(item.text) for item in kept) > self._max_characters:
             kept.pop(0)
         return tuple(kept)
-
