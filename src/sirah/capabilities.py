@@ -6,10 +6,15 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from math import isfinite
 from types import MappingProxyType
+from typing import TYPE_CHECKING
+
 from .errors import CapabilityRejectedError
 
+if TYPE_CHECKING:
+    from sirah_cortex import RobotCommand
+
 ParameterValue = str | int | float | bool
-CapabilityTranslator = Callable[["CapabilityRequest"], object]
+CapabilityTranslator = Callable[["CapabilityRequest"], tuple["RobotCommand", ...]]
 
 _FORBIDDEN_FRAGMENTS = frozenset(
     {
