@@ -41,9 +41,10 @@ def main() -> int:
     print(f"capability={result.requested_capability}")
     print(f"authorized={result.capability_executed}")
     print(f"commands={len(robot.commands)}")
+    if result.safe_error:
+        print(f"safe_error={result.safe_error.split(':', 1)[0]}")
     return 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
-
