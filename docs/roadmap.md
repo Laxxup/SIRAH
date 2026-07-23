@@ -13,6 +13,10 @@ inteligencia propone capacidades estructuradas; el catálogo, la política local
 Cortex y `RobotPort` conservan la autoridad de ejecución. Las pruebas normales
 no usan red.
 
+La SIRAH Laboratory Console y el `SystemSnapshot` completan la demostración
+textual de esta pre-alpha. La consola sigue siendo una herramienta de
+laboratorio, no un producto final.
+
 ## Trabajo activo
 
 El único artefacto ejecutable recuperado es el saludo Velxio experimental con

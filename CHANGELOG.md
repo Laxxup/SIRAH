@@ -36,12 +36,18 @@ funcional.
 - Adaptador textual Gemini opcional, con esquema estricto y reintentos
   limitados.
 - Ejemplos offline y smoke Gemini opt-in.
+- SIRAH Laboratory Console con fake por defecto, estado de componentes,
+  capacidades habilitadas y snapshot operativo de lectura.
+- Comandos locales para estado, componentes, capacidades, contexto, eventos,
+  limpieza y cierre.
 - Historia del proyecto y reglas para recuperar conocimiento heredado.
 
 ### Changed
 
 - Límites documentados para impedir migraciones automáticas de código heredado.
 - Roadmap actualizado con la integración pre-alpha comprobada.
+- La actualización cierra la demostración pre-alpha `0.1.0.dev0`; no crea un
+  tag ni una release.
 
 ### Planned
 

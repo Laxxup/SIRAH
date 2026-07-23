@@ -49,3 +49,14 @@ estructuras de Cortex; `SafetySupervisor` valida; `ActionExecutor` entrega por
 `RobotPort`; un adaptador futuro traducirá al firmware.
 
 Un LLM nunca controla directamente GPIO, PWM, PCA9685 ni servos.
+
+## Consola de laboratorio y futuro panel local
+
+La SIRAH Laboratory Console consume `ConversationOrchestrator` y
+`SystemSnapshot`. Puede presentar conversación, componentes, capacidades,
+eventos y resultados, pero no contiene políticas, no llama directamente a
+`RobotPort`, no accede al SDK de Gemini y no mantiene estado autoritativo.
+
+Un panel local futuro deberá consumir los mismos servicios públicos y solicitar
+acciones mediante `CapabilityPolicy` y Cortex. No se implementan todavía
+FastAPI, Flask, WebSocket, HTML, JavaScript, GTK ni Qt.

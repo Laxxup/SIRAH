@@ -16,6 +16,12 @@ SIRAH compone conversación, percepción y dispositivos sobre SIRAH Cortex.
 Cortex conserva el núcleo determinista y se comunica con adaptadores mediante
 `RobotPort`; los adaptadores futuros traducirán hacia firmware y hardware.
 
+SIRAH es un agente robótico modular, no solamente un chatbot. Mantiene una
+conciencia situacional operativa limitada: representa el contexto actual, los
+componentes disponibles, las capacidades habilitadas, el estado de Cortex y
+los resultados recientes. Esto no describe conciencia humana, sentiencia ni
+experiencia subjetiva.
+
 ## Pre-alpha local 0.1.0.dev0
 
 La distribución `sirah`, importable como `sirah`, demuestra actualmente:
@@ -52,6 +58,28 @@ Si existen ambas claves, `GEMINI_API_KEY` tiene precedencia sobre
 `GOOGLE_API_KEY`. La disponibilidad, las cuotas y los modelos dependen del
 proyecto de Google. Consulta [la guía operativa de Gemini](docs/gemini.md).
 
+## SIRAH Laboratory Console
+
+La consola de laboratorio es una demostración interactiva textual, no una
+interfaz definitiva ni un servidor. Conserva una sesión en memoria, permite
+seleccionar el fake o Gemini y muestra la separación entre conversación,
+propuesta, validación y ejecución:
+
+```bash
+.venv/bin/python examples/interactive_conversation.py --help
+.venv/bin/python examples/interactive_conversation.py
+.venv/bin/python examples/interactive_conversation.py --enable-greet
+```
+
+Comandos locales: `/ayuda`, `/estado`, `/componentes`, `/capacidades`,
+`/contexto`, `/eventos`, `/limpiar` y `/salir`. No llegan al proveedor de
+inteligencia ni controlan hardware directamente.
+
+La demostración actual reconoce un cuerpo simulado y señala cámara,
+micrófono, altavoz, memoria persistente y hardware físico como no configurados.
+La ausencia de esos componentes no impide conversar por texto ni ejecutar las
+capacidades permitidas sobre el robot simulado.
+
 ## Historia del proyecto
 
 SIRAH es anterior a esta reconstrucción. Un
@@ -73,6 +101,16 @@ reglas de recuperación de conocimiento se documentan en
 |---|---|---|---|
 | Texto, contexto y Cortex simulado | Implementado en pre-alpha | Validado sin red | `src/sirah/`, `tests/`, `examples/` |
 | Gemini por texto | Implementado, opcional | Validado con dobles; smoke vivo opt-in | `src/sirah/gemini.py` |
+| Conversa por texto | Implementado | Fake determinista y consola | `examples/interactive_conversation.py` |
+| Contexto de sesión | Implementado | Memoria temporal acotada | `src/sirah/context.py` |
+| Cortex | Implementado | API real `sirah-cortex==0.1.0a1` | `src/sirah/cortex_integration.py` |
+| Robot simulado | Implementado | `RobotPort` y eventos observables | `src/sirah/simulated_robot.py` |
+| Brazo simulado | Provisional | Solo con `--enable-greet` | `arm.greet` |
+| Cámara | No configurada | Sin implementación | `perception.camera` |
+| Micrófono | No configurado | Sin implementación | `input.microphone` |
+| Altavoz | No configurado | Sin implementación | `output.speaker` |
+| Memoria persistente | No configurada | Sin SQLite ni archivos | `memory.persistent` |
+| Hardware real | No configurado | Sin firmware o transporte | `robot.physical` |
 | Saludo Velxio con un servo | Experimental | Validado en simulación | `experiments/velxio/greet_person_preview/` |
 | Controlador facial ESP32/PCA9685 | Planeado | No validado | Inventario proporcionado por el equipo |
 | ESP32-CAM | Planeado | No validado | Sin implementación local encontrada |

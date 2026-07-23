@@ -30,7 +30,7 @@ python3.13 -m venv .venv
 Antes de cada commit funcional ejecuta:
 
 ```bash
-.venv/bin/python -m ruff check src tests
+.venv/bin/python -m ruff check src tests examples
 .venv/bin/python -m mypy src tests --ignore-missing-imports
 .venv/bin/python -m pytest -q
 git diff --check
