@@ -12,6 +12,7 @@ from .cortex_integration import (
     CapabilityRunner,
     create_default_catalog,
 )
+from .context import ConversationMessage, PresentContext, SessionContextStore
 from .errors import (
     CapabilityExecutionError,
     CapabilityRejectedError,
@@ -31,11 +32,14 @@ __all__ = [
     "CapabilityRejectedError",
     "CapabilityRequest",
     "CapabilityRunner",
+    "ConversationMessage",
     "IntelligenceRateLimitError",
     "IntelligenceTimeoutError",
     "IntelligenceUnavailableError",
     "InvalidIntelligenceResponseError",
     "ParameterDefinition",
+    "PresentContext",
+    "SessionContextStore",
     "SirahApplicationError",
     "create_default_catalog",
 ]
