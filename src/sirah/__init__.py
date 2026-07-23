@@ -22,6 +22,13 @@ from .errors import (
     InvalidIntelligenceResponseError,
     SirahApplicationError,
 )
+from .intelligence import (
+    DecisionType,
+    IntelligenceDecision,
+    IntelligencePort,
+    IntelligenceRequest,
+    IntelligenceResponse,
+)
 
 __all__ = [
     "CapabilityCatalog",
@@ -33,7 +40,12 @@ __all__ = [
     "CapabilityRequest",
     "CapabilityRunner",
     "ConversationMessage",
+    "DecisionType",
+    "IntelligenceDecision",
+    "IntelligencePort",
     "IntelligenceRateLimitError",
+    "IntelligenceRequest",
+    "IntelligenceResponse",
     "IntelligenceTimeoutError",
     "IntelligenceUnavailableError",
     "InvalidIntelligenceResponseError",
