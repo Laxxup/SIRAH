@@ -69,6 +69,7 @@ class GeminiIntelligenceAdapter:
         sleep: Callable[[float], None] = time.sleep,
         jitter: Callable[[], float] = random.random,
     ) -> None:
+        _load_dependencies()
         if max_retries < 0 or max_retries > 5:
             raise ValueError("max_retries debe estar entre 0 y 5.")
         self.model = model or os.environ.get(
