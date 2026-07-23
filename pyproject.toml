@@ -8,6 +8,8 @@ version = "0.1.0.dev0"
 description = "Safe conversational orchestration for the SIRAH robotic system"
 readme = "README.md"
 requires-python = ">=3.13"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 dependencies = ["sirah-cortex==0.1.0a1"]
 
 [project.optional-dependencies]
@@ -31,4 +33,3 @@ namespace_packages = true
 [tool.ruff]
 line-length = 88
 target-version = "py313"
-

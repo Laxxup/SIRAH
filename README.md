@@ -118,9 +118,10 @@ no hay implementaciones que demuestren esas responsabilidades.
 - estructura de software y lenguajes;
 - validación eléctrica, mecánica y de seguridad del controlador facial;
 - adquisición y procesamiento de imágenes;
-- licencia de SIRAH para una futura publicación pública.
+- licencia declarada: Apache-2.0.
 
-SIRAH `0.1.0.dev0` es pre-alpha, no una API estable. No controla hardware real
-y no es software certificado para seguridad funcional. Cortex y la política
-local mejoran la seguridad lógica, pero no sustituyen firmware seguro,
-watchdog, alimentación protegida, paro físico ni validación mecánica.
+SIRAH se distribuye bajo Apache-2.0. SIRAH `0.1.0.dev0` sigue siendo
+pre-alpha, no una API estable. No controla hardware real y no es software
+certificado para seguridad funcional. Cortex y la política local mejoran la
+seguridad lógica, pero no sustituyen firmware seguro, watchdog, alimentación
+protegida, paro físico ni validación mecánica.

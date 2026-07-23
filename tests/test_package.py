@@ -63,7 +63,8 @@ def test_distribution_metadata_configuration() -> None:
         "google-genai",
         "pydantic",
     ]
-    assert "license" not in project
+    assert project["license"] == "Apache-2.0"
+    assert project["license-files"] == ["LICENSE"]
 
 
 def test_base_facade_does_not_import_google_sdk() -> None:

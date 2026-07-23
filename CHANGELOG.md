@@ -22,8 +22,9 @@ la etapa del prototipo experimental.
 
 ## [0.1.0.dev0]
 
-Primera distribución pre-alpha local, sin fecha de publicación ni promesa de
-estabilidad.
+Primera distribución pre-alpha local bajo Apache-2.0, sin fecha de publicación
+ni promesa de estabilidad. No es software certificado para seguridad
+funcional.
 
 ### Added
 
