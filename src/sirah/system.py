@@ -96,6 +96,10 @@ class SystemSnapshot:
     recent_commands: tuple[str, ...]
     recent_events: tuple[str, ...]
     safe_errors: tuple[str, ...]
+    silent_mode: bool = False
+    autonomy_active: bool = True
+    tts_active: bool = False
+    last_initiative_reason: str | None = None
 
 
 class PresentSystem:
@@ -118,6 +122,10 @@ class PresentSystem:
         self._recent_commands: list[str] = []
         self._recent_events: list[str] = []
         self._safe_errors: list[str] = []
+        self._silent_mode = False
+        self._autonomy_active = True
+        self._tts_active = False
+        self._last_initiative_reason: str | None = None
 
     def record_result(self, result: object) -> None:
         """Registra solo campos resumidos de un ConversationResult."""
@@ -138,6 +146,15 @@ class PresentSystem:
         self._recent_events = self._recent_events[-8:]
         self._safe_errors = self._safe_errors[-4:]
 
+    def record_interaction_state(self, memory: object) -> None:
+        """Copia únicamente el estado resumido específico de SIRAH."""
+
+        self._silent_mode = bool(getattr(memory, "silent_mode", False))
+        self._autonomy_active = bool(getattr(memory, "autonomy_active", True))
+        self._tts_active = bool(getattr(memory, "tts_active", False))
+        reason = getattr(memory, "last_reason", None)
+        self._last_initiative_reason = str(reason) if reason else None
+
     def snapshot(self, session_id: str) -> SystemSnapshot:
         context: PresentContext = self.contexts.get(session_id)
         return SystemSnapshot(
@@ -155,4 +172,8 @@ class PresentSystem:
             recent_commands=tuple(self._recent_commands),
             recent_events=tuple(self._recent_events),
             safe_errors=tuple(self._safe_errors),
+            silent_mode=self._silent_mode,
+            autonomy_active=self._autonomy_active,
+            tts_active=self._tts_active,
+            last_initiative_reason=self._last_initiative_reason,
         )
