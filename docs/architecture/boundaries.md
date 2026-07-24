@@ -86,3 +86,14 @@ eventos y resultados, pero no contiene políticas, no llama directamente a
 Un panel local futuro deberá consumir los mismos servicios públicos y solicitar
 acciones mediante `CapabilityPolicy` y Cortex. No se implementan todavía
 FastAPI, Flask, WebSocket, HTML, JavaScript, GTK ni Qt.
+### Memoria social e iniciativa
+
+`WorldState` de Cortex conserva presencia y expiración genéricas. SIRAH conserva
+por separado `presence_key` efímeras, saludos pendientes y confirmados, con TTL
+de 600 segundos y máximo de 128 entradas. Una clave de simulación como
+`person:one` no es identidad humana.
+
+`PresentSystem` es una proyección de lectura de `InteractionMemory`. El saludo
+hablado (`interaction.greet`) no requiere `arm.greet`, que representa un gesto
+mecánico opcional. Piper y Vosk siguen planificados; no forman parte de esta
+integración.

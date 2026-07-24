@@ -12,6 +12,10 @@ la etapa del prototipo experimental.
 
 ### Changed
 
+- El circuito situacional se dividió en interacción, simulación, voz, comandos
+  locales y composición de runtime. La memoria social ahora expira, se poda y
+  confirma saludos al finalizar el TTS simulado.
+
 - Ningún cambio todavía.
 
 ### Planned

@@ -50,3 +50,16 @@ sola vez, aplicar cooldown, respetar silencio y detener TTS/robot localmente.
 La percepción, TTS, identidad de personas y autonomía siguen siendo simulados
 o parciales. La decisión deberá revisarse al incorporar STT, TTS real, visión,
 identidad persistente o hardware físico.
+### Evolución del ciclo social
+
+La presencia simulada se identifica con una clave efímera, no con identidad
+humana. `InteractionMemory` es la única fuente de verdad para silencio,
+autonomía, TTS y saludos. Los saludos se mantienen pendientes durante la
+reproducción y solo se confirman al finalizarla; fallo o cancelación elimina el
+pendiente sin marcar a la presencia como saludada. La memoria se poda mediante
+reloj inyectado, TTL de 600 segundos y máximo de 128 entradas.
+
+El código se divide por razones de cambio en `interaction.py`, `speech.py`,
+`simulation.py`, `local_commands.py` y `situational_runtime.py`; `situational.py`
+solo conserva reexports. Piper, Vosk e identidad persistente siguen fuera de
+alcance.

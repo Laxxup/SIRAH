@@ -54,3 +54,7 @@ puertos o adaptadores.
 
 La promoción desde `experiments/` exige objetivo, procedimiento, resultado,
 decisión y evidencia de simulación o hardware.
+La siguiente estabilización mantiene la percepción simulada y separa el módulo
+situacional antes de integrar Piper. Piper deberá incluir cancelación, limpieza
+de WAV temporal y pruebas sin audio. Vosk se mantiene posterior y será
+push-to-talk, no escucha permanente.

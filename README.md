@@ -103,6 +103,15 @@ reglas de recuperación de conocimiento se documentan en
 
 ## Estado actual
 
+La iniciativa situacional usa presencia efímera: `presence_key` identifica una
+observación simulada, no una persona. La memoria social mantiene saludos
+pendientes y confirmados con TTL de 600 segundos y un máximo de 128 entradas.
+El saludo se confirma únicamente cuando termina el TTS simulado. `PresentSystem`
+proyecta `InteractionMemory`; no mantiene otra fuente de verdad.
+
+`interaction.greet` es interacción vocal; `arm.greet` es un gesto mecánico
+opcional y no se ejecuta implícitamente.
+
 | Área | Estado | Validación | Evidencia local |
 |---|---|---|---|
 | Texto, contexto y Cortex simulado | Implementado en pre-alpha | Validado sin red | `src/sirah/`, `tests/`, `examples/` |
