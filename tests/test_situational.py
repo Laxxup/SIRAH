@@ -6,6 +6,7 @@ from sirah import CapabilityRunner
 from sirah.interaction import (
     InitiativeAction,
     InteractionMemory,
+    PendingSpeech,
     evaluate_initiative,
 )
 from sirah import create_default_catalog
@@ -243,3 +244,54 @@ def test_social_greeting_does_not_require_arm_capability() -> None:
     assert service.evaluate_and_act().action is InitiativeAction.GREET
     service.finish_speech()
     assert speech.spoken_texts == [service.GREETING_TEXT]
+
+
+@pytest.mark.parametrize("maximum", [1, 128])
+def test_confirmed_memory_never_exceeds_configured_limit(maximum: int) -> None:
+    memory = InteractionMemory(maximum_remembered_presences=maximum)
+    for index in range(maximum + 3):
+        memory = memory.confirm(f"presence:{index}", float(index))
+    assert len(memory.confirmed_greetings) <= maximum
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"maximum_remembered_presences": 0},
+    {"maximum_remembered_presences": -1},
+    {"greeting_memory_ttl_seconds": 0},
+    {"greeting_memory_ttl_seconds": -1},
+])
+def test_invalid_memory_configuration_is_rejected(kwargs: dict[str, float]) -> None:
+    with pytest.raises(ValueError):
+        InteractionMemory(**kwargs)
+
+
+def test_negative_cooldown_is_rejected() -> None:
+    with pytest.raises(ValueError):
+        coordinator(cooldown=-1)
+
+
+def test_pruning_is_persistent_and_visible_in_snapshot() -> None:
+    service, clock, _ = coordinator()
+    service.memory = service.memory.confirm("presence:old", 0.0)
+    clock.advance(601.0)
+    service.evaluate()
+    assert service.memory.confirmed_greetings == ()
+
+
+def test_active_speech_is_explicit_and_finish_without_operation_is_safe() -> None:
+    service, _, _ = coordinator()
+    service.finish_speech()
+    assert service.memory.active_speech is None
+    service.inject_presence(present=True, presence_key="presence:one")
+    service.evaluate_and_act(presence_key="presence:one")
+    assert service.memory.active_speech == PendingSpeech("presence:one", service.GREETING_TEXT)
+    service.finish_speech()
+    assert service.memory.active_speech is None
+
+
+def test_same_timestamp_events_have_distinct_ids() -> None:
+    perception = SimulatedPerception()
+    first = perception.presence_event(present=True, observed_at=0.0, expires_at=1.0, presence_key="a")
+    second = perception.presence_event(present=True, observed_at=0.0, expires_at=1.0, presence_key="a")
+    third = perception.presence_event(present=True, observed_at=0.0, expires_at=1.0, presence_key="b")
+    assert len({first.event_id, second.event_id, third.event_id}) == 3

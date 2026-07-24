@@ -97,3 +97,10 @@ de 600 segundos y máximo de 128 entradas. Una clave de simulación como
 hablado (`interaction.greet`) no requiere `arm.greet`, que representa un gesto
 mecánico opcional. Piper y Vosk siguen planificados; no forman parte de esta
 integración.
+
+La memoria valida TTL y capacidad positivos, y el cooldown no puede ser
+negativo. La poda se persiste antes de evaluar iniciativas. Una reproducción
+activa se representa mediante una única operación `PendingSpeech` asociada a
+`presence_key`; finalizar sin operación no confirma ninguna presencia. Los
+eventos simulados usan identificadores deterministas con secuencia, fuente y
+clave operacional.

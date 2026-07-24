@@ -44,5 +44,10 @@ class FakeSpeechOutput:
         self.active = False
 
 class SimulatedPerception:
-    def presence_event(self, *, present: bool, observed_at: float, expires_at: float, confidence: float = 1.0, source: str = "simulated-perception") -> Event:
-        return Event(type=EventType.PERSON_PRESENCE_OBSERVED, payload={"present": present, "confidence": confidence, "observed_at": observed_at, "expires_at": expires_at, "source": source, "knowledge": KnowledgeKind.OBSERVED}, event_id=f"simulated-presence:{observed_at}:{present}", timestamp=observed_at)
+    def __init__(self) -> None:
+        self._sequence = 0
+
+    def presence_event(self, *, present: bool, observed_at: float, expires_at: float, confidence: float = 1.0, source: str = "simulated-perception", presence_key: str = "anonymous_presence") -> Event:
+        self._sequence += 1
+        event_id = f"{source}:{presence_key}:{observed_at}:{self._sequence}"
+        return Event(type=EventType.PERSON_PRESENCE_OBSERVED, payload={"present": present, "confidence": confidence, "observed_at": observed_at, "expires_at": expires_at, "source": source, "knowledge": KnowledgeKind.OBSERVED}, event_id=event_id, timestamp=observed_at)

@@ -63,3 +63,8 @@ El código se divide por razones de cambio en `interaction.py`, `speech.py`,
 `simulation.py`, `local_commands.py` y `situational_runtime.py`; `situational.py`
 solo conserva reexports. Piper, Vosk e identidad persistente siguen fuera de
 alcance.
+
+Las invariantes del ciclo exigen TTL y límite positivos, cooldown no negativo,
+poda persistente y una única operación de voz activa. `RobotState` se importa
+desde la fachada pública de Cortex cuando está disponible; Runtime e inbox
+continúan encapsulados por compatibilidad provisional.

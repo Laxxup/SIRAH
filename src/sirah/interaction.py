@@ -2,13 +2,17 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
-from sirah_cortex import WorldState
-from sirah_cortex.domain.robot_state import RobotState
+from sirah_cortex import RobotState, WorldState
 
 @dataclass(frozen=True, slots=True)
 class GreetingRecord:
     key: str
     expires_at: float
+
+@dataclass(frozen=True, slots=True)
+class PendingSpeech:
+    presence_key: str
+    text: str
 
 class InitiativeAction(str, Enum):
     GREET = "greet"
@@ -23,16 +27,31 @@ class InitiativeDecision:
 
 @dataclass(frozen=True, slots=True)
 class InteractionMemory:
-    pending_greetings: frozenset[str] = frozenset()
     confirmed_greetings: tuple[GreetingRecord, ...] = ()
+    active_speech: PendingSpeech | None = None
     last_greeting_at: float | None = None
     silent_mode: bool = False
     autonomy_active: bool = True
     initiative: str | None = None
-    tts_active: bool = False
     last_reason: str | None = None
     greeting_memory_ttl_seconds: float = 600.0
     maximum_remembered_presences: int = 128
+
+    def __post_init__(self) -> None:
+        if self.greeting_memory_ttl_seconds <= 0:
+            raise ValueError("greeting_memory_ttl_seconds debe ser mayor que cero.")
+        if self.maximum_remembered_presences <= 0:
+            raise ValueError("maximum_remembered_presences debe ser mayor que cero.")
+
+    @property
+    def pending_greetings(self) -> frozenset[str]:
+        if self.active_speech is None:
+            return frozenset()
+        return frozenset({self.active_speech.presence_key})
+
+    @property
+    def tts_active(self) -> bool:
+        return self.active_speech is not None
 
     def prune(self, now: float) -> "InteractionMemory":
         records = tuple(r for r in self.confirmed_greetings if r.expires_at > now)
@@ -44,23 +63,37 @@ class InteractionMemory:
         return self._replace(confirmed_greetings=records)
 
     def pending(self, key: str) -> "InteractionMemory":
-        return self._replace(pending_greetings=self.pending_greetings | {key})
+        if self.active_speech is not None:
+            raise ValueError("Ya existe una operación de voz activa.")
+        return self._replace(active_speech=PendingSpeech(key, ""))
+
+    def with_speech(self, key: str, text: str) -> "InteractionMemory":
+        if self.active_speech is not None:
+            raise ValueError("Ya existe una operación de voz activa.")
+        return self._replace(active_speech=PendingSpeech(key, text))
 
     def confirm(self, key: str, now: float) -> "InteractionMemory":
         current = self.prune(now)
         records = tuple(r for r in current.confirmed_greetings if r.key != key)
         records += (GreetingRecord(key, now + self.greeting_memory_ttl_seconds),)
+        records = tuple(
+            sorted(records, key=lambda r: (r.expires_at, r.key))[
+                -self.maximum_remembered_presences :
+            ]
+        )
         return current._replace(
-            pending_greetings=current.pending_greetings - {key},
+            active_speech=None,
             confirmed_greetings=records,
             last_greeting_at=now,
             initiative="greet",
-            tts_active=False,
         )
 
     def cancel_pending(self, key: str | None = None) -> "InteractionMemory":
-        pending = frozenset() if key is None else self.pending_greetings - {key}
-        return self._replace(pending_greetings=pending, tts_active=False)
+        if self.active_speech is None:
+            return self._replace(active_speech=None)
+        if key is None or self.active_speech.presence_key == key:
+            return self._replace(active_speech=None)
+        return self
 
     def _replace(self, **changes: object) -> "InteractionMemory":
         values = {name: getattr(self, name) for name in self.__dataclass_fields__}
