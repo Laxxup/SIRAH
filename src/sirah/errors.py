@@ -5,6 +5,10 @@ class SirahApplicationError(Exception):
     """Error base controlado por SIRAH."""
 
 
+class SituationalError(SirahApplicationError):
+    """Error controlado del circuito situado."""
+
+
 class CapabilityRejectedError(SirahApplicationError):
     """La política local rechazó una solicitud de capacidad."""
 
@@ -31,4 +35,3 @@ class IntelligenceRateLimitError(IntelligenceError):
 
 class InvalidIntelligenceResponseError(IntelligenceError):
     """La respuesta del proveedor no satisface el contrato de SIRAH."""
-

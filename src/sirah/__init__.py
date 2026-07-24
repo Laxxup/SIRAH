@@ -39,21 +39,9 @@ from .system import (
     PresentSystem,
     SystemSnapshot,
 )
-from .situational import (
-    FakeClock,
-    FakeSpeechOutput,
-    InitiativeAction,
-    InitiativeDecision,
-    InteractionMemory,
-    LocalStopRouter,
-    MonotonicClock,
-    SimulatedPerception,
-    SituationalCoordinator,
-    SpeechFailure,
-    StopResult,
-    build_situational_runtime,
-    evaluate_initiative,
-)
+from .interaction import InitiativeAction, InitiativeDecision, InteractionMemory, evaluate_initiative
+from .situational_runtime import SituationalCoordinator
+from .speech import SpeechOutputPort
 
 __all__ = [
     "CapabilityCatalog",
@@ -81,24 +69,17 @@ __all__ = [
     "IntelligenceTimeoutError",
     "IntelligenceUnavailableError",
     "InvalidIntelligenceResponseError",
-    "FakeClock",
-    "FakeSpeechOutput",
     "InitiativeAction",
     "InitiativeDecision",
     "InteractionMemory",
-    "LocalStopRouter",
-    "MonotonicClock",
     "ParameterDefinition",
     "PresentContext",
     "PresentSystem",
     "SessionContextStore",
-    "SimulatedPerception",
     "SituationalCoordinator",
-    "SpeechFailure",
-    "StopResult",
+    "SpeechOutputPort",
     "SirahApplicationError",
     "SystemSnapshot",
-    "build_situational_runtime",
     "evaluate_initiative",
     "create_default_catalog",
 ]

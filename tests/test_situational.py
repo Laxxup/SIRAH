@@ -2,20 +2,17 @@
 
 import pytest
 
-from sirah import (
-    CapabilityRunner,
-    FakeClock,
-    FakeSpeechOutput,
+from sirah import CapabilityRunner
+from sirah.interaction import (
     InitiativeAction,
     InteractionMemory,
-    LocalStopRouter,
-    SimulatedPerception,
-    SituationalCoordinator,
-    SpeechFailure,
-    build_situational_runtime,
-    create_default_catalog,
     evaluate_initiative,
 )
+from sirah import create_default_catalog
+from sirah.local_commands import LocalStopRouter
+from sirah.simulation import FakeClock, FakeSpeechOutput, SimulatedPerception
+from sirah.situational_runtime import SituationalCoordinator, build_situational_runtime
+from sirah.speech import SpeechFailure
 from sirah.intelligence import (
     DecisionType,
     IntelligenceDecision,
@@ -63,7 +60,9 @@ def test_presence_proposes_and_records_deterministic_greeting() -> None:
     decision = service.evaluate_and_act(presence_key="person:one")
     assert decision.action is InitiativeAction.GREET
     assert speech.spoken_texts == [service.GREETING_TEXT]
-    assert "person:one" in service.memory.greeted_keys
+    assert "person:one" in service.memory.pending_greetings
+    service.finish_speech()
+    assert any(record.key == "person:one" for record in service.memory.confirmed_greetings)
 
 
 def test_absence_does_not_propose_greeting() -> None:
@@ -94,7 +93,7 @@ def test_unavailable_tts_degrades_without_marking_greeted() -> None:
     decision = service.evaluate_and_act(presence_key="person:one")
     assert decision.action is InitiativeAction.WAIT
     assert decision.reason == "tts_unavailable"
-    assert service.memory.greeted_keys == frozenset()
+    assert service.memory.confirmed_greetings == ()
     assert speech.errors == []
 
 
@@ -202,3 +201,45 @@ def test_policy_is_pure_and_uses_cortex_state() -> None:
         tts_available=True,
     )
     assert decision.action is InitiativeAction.GREET
+
+
+def test_pending_greeting_blocks_duplicate_until_completion() -> None:
+    service, _, speech = coordinator()
+    service.inject_presence(present=True, presence_key="presence:one")
+    service.evaluate_and_act(presence_key="presence:one")
+    assert service.evaluate(presence_key="presence:one").reason == "greeting_pending"
+    assert speech.active
+
+
+def test_cancelled_or_failed_tts_does_not_confirm_greeting() -> None:
+    service, _, speech = coordinator()
+    service.inject_presence(present=True, presence_key="presence:one")
+    service.evaluate_and_act(presence_key="presence:one")
+    service.stop("stop")
+    assert service.memory.confirmed_greetings == ()
+    assert service.memory.pending_greetings == frozenset()
+    assert not speech.active
+
+
+def test_greeting_memory_expires_and_is_pruned() -> None:
+    service, clock, _ = coordinator()
+    service.memory = InteractionMemory(
+        greeting_memory_ttl_seconds=5.0,
+        maximum_remembered_presences=2,
+    )
+    for key in ("a", "b", "c"):
+        service.inject_presence(present=True, presence_key=key)
+        service.evaluate_and_act(presence_key=key)
+        service.finish_speech()
+        clock.advance(30.0)
+    assert len(service.memory.confirmed_greetings) <= 2
+    clock.advance(6.0)
+    assert service.memory.prune(clock.now()).confirmed_greetings == ()
+
+
+def test_social_greeting_does_not_require_arm_capability() -> None:
+    service, _, speech = coordinator()
+    service.inject_presence(present=True, presence_key="anonymous_presence")
+    assert service.evaluate_and_act().action is InitiativeAction.GREET
+    service.finish_speech()
+    assert speech.spoken_texts == [service.GREETING_TEXT]
