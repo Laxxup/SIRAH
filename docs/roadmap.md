@@ -17,6 +17,11 @@ La SIRAH Laboratory Console y el `SystemSnapshot` completan la demostración
 textual de esta pre-alpha. La consola sigue siendo una herramienta de
 laboratorio, no un producto final.
 
+El circuito vertical situado añade percepción simulada, consumo de
+`WorldState`, iniciativa determinista, TTS falso y parada local prioritaria.
+Estas piezas están implementadas únicamente para demostración y no constituyen
+autonomía general ni percepción física.
+
 ## Trabajo activo
 
 El único artefacto ejecutable recuperado es el saludo Velxio experimental con
@@ -35,10 +40,10 @@ creará solo al existir una implementación comprobable.
 | Completada | Integración simulada SIRAH–Cortex | `robot.home` y `robot.stop` atraviesan Cortex y un adaptador simulado |
 | Completada | Gemini por texto | Decisión estructurada opcional, sin autoridad mecánica directa |
 | Completada | Contexto de sesión inicial | Estado reciente acotado, separado de `WorldState` y sin persistencia |
-| Siguiente | Un servo real y Serial | Movimiento limitado, alimentado y detenido de forma segura, con evidencia en hardware |
-| Planeada | Contexto avanzado | Resumen y políticas de privacidad comprobables |
-| Planeada | Voz | Experimento medible de entrada y salida de audio |
-| Planeada | Visión | Adquisición y observación reproducibles antes de reconocimiento persistente |
+| Siguiente | Percepción y voz reales | STT/TTS reales con contratos pequeños y degradación segura |
+| Después | Visión real | Adquisición y observación reproducibles antes de reconocimiento persistente |
+| Después | Contexto avanzado | Resumen y políticas de privacidad comprobables |
+| Planeada | Hardware físico | Servo real, Serial y validación de alimentación, límites y paro |
 | Planeada | Integración multimodal | Coordinación comprobable de texto, voz, visión y capacidades robóticas |
 | Planeada | Robustecimiento | Manejo de fallos, seguridad, privacidad, observabilidad y validación prolongada |
 

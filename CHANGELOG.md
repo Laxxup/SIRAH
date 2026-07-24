@@ -40,6 +40,11 @@ funcional.
   capacidades habilitadas y snapshot operativo de lectura.
 - Comandos locales para estado, componentes, capacidades, contexto, eventos,
   limpieza y cierre.
+- Percepción de presencia simulada integrada mediante eventos públicos y
+  `WorldState` de Cortex.
+- Memoria de interacción, iniciativa de saludo determinista, cooldown, modo
+  silencio, autonomía y TTS simulado cancelable.
+- Router local prioritario para `stop`, `para` y `detente`.
 - Historia del proyecto y reglas para recuperar conocimiento heredado.
 
 ### Changed

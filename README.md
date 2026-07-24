@@ -32,6 +32,9 @@ La distribución `sirah`, importable como `sirah`, demuestra actualmente:
 - catálogo y política local de capacidades;
 - ejecución real a través de SIRAH Cortex `0.1.0a1`;
 - un `RobotPort` simulado, determinista y sin hardware.
+- percepción de presencia simulada a través de eventos públicos de Cortex;
+- iniciativa de saludo determinista y TTS simulado cancelable;
+- router local prioritario para órdenes exactas de parada.
 
 `robot.home` y `robot.stop` son las capacidades garantizadas. `arm.greet` está
 implementada de forma provisional reutilizando el plan mecánico existente en
@@ -72,8 +75,11 @@ propuesta, validación y ejecución:
 ```
 
 Comandos locales: `/ayuda`, `/estado`, `/componentes`, `/capacidades`,
-`/contexto`, `/eventos`, `/limpiar` y `/salir`. No llegan al proveedor de
-inteligencia ni controlan hardware directamente.
+`/contexto`, `/eventos`, `/limpiar`, `/presencia [clave]`, `/ausencia`,
+`/evaluar`, `/silencio [on|off]`, `/autonomia [on|off]`, `/detener`,
+`/voz-fin` y `/salir`. Las órdenes exactas `stop`, `para` y `detente` también
+se resuelven localmente antes de la inteligencia. No llegan al proveedor ni
+controlan hardware directamente.
 
 La demostración actual reconoce un cuerpo simulado y señala cámara,
 micrófono, altavoz, memoria persistente y hardware físico como no configurados.
@@ -105,6 +111,9 @@ reglas de recuperación de conocimiento se documentan en
 | Contexto de sesión | Implementado | Memoria temporal acotada | `src/sirah/context.py` |
 | Cortex | Implementado | API real `sirah-cortex==0.1.0a1` | `src/sirah/cortex_integration.py` |
 | Robot simulado | Implementado | `RobotPort` y eventos observables | `src/sirah/simulated_robot.py` |
+| Percepción simulada | Simulado | Evento público y WorldState de Cortex | `SimulatedPerception` |
+| Iniciativa de saludo | Implementado, determinista | Política local con cooldown | `evaluate_initiative` |
+| TTS | Simulado | Registra texto, sin audio real | `FakeSpeechOutput` |
 | Brazo simulado | Provisional | Solo con `--enable-greet` | `arm.greet` |
 | Cámara | No configurada | Sin implementación | `perception.camera` |
 | Micrófono | No configurado | Sin implementación | `input.microphone` |

@@ -50,6 +50,32 @@ estructuras de Cortex; `SafetySupervisor` valida; `ActionExecutor` entrega por
 
 Un LLM nunca controla directamente GPIO, PWM, PCA9685 ni servos.
 
+## Percepción, WorldState e iniciativa
+
+La percepción simulada de SIRAH solo publica eventos estructurados de Cortex.
+`Runtime` y el reducer público de Cortex actualizan `WorldState`; SIRAH nunca
+lo muta ni mantiene una segunda copia. Las observaciones vencen según los
+tiempos definidos por Cortex.
+
+La memoria de interacción de SIRAH conserva únicamente conceptos de producto:
+presencias ya saludadas, cooldown, modo silencio, autonomía, iniciativa y TTS.
+La política de iniciativa es determinista y consulta el `WorldState` de Cortex.
+Gemini no decide reglas obvias de saludo.
+
+## Voz simulada
+
+`SpeechPort` y `FakeSpeechOutput` pertenecen a SIRAH. TTS no es movimiento
+mecánico y no se fuerza dentro de `RobotPort`. El fake registra texto, permite
+cancelación y no usa subprocess, audio, threads ni red. Piper y TTS real están
+fuera de alcance.
+
+## Funcionamiento degradado
+
+Sin cámara, micrófono, altavoz, memoria persistente o cuerpo físico, SIRAH
+declara el componente como no configurado y continúa por texto con el robot
+simulado. No inventa observaciones de sensores ausentes. Sin Gemini utiliza el
+fake; un fallo de inteligencia produce cero movimiento.
+
 ## Consola de laboratorio y futuro panel local
 
 La SIRAH Laboratory Console consume `ConversationOrchestrator` y
