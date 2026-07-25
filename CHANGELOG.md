@@ -8,15 +8,18 @@ la etapa del prototipo experimental.
 
 ### Added
 
-- Ningún cambio todavía.
+- Adaptador TTS local experimental para Piper CLI y reproductor administrados,
+  con cancelación, timeouts, WAV efímero, polling correlacionado y degradación.
+- Comandos de consola para estado y cancelación de voz, guía operativa, ADR y
+  smoke Piper opt-in.
 
 ### Changed
 
 - El circuito situacional se dividió en interacción, simulación, voz, comandos
   locales y composición de runtime. La memoria social ahora expira, se poda y
   confirma saludos al finalizar el TTS simulado.
-
-- Ningún cambio todavía.
+- El contrato de voz separa estado operacional de resultado terminal y usa
+  `operation_id`; `PendingSpeech` ya no conserva el texto hablado.
 
 ### Planned
 

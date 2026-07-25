@@ -61,7 +61,8 @@ reloj inyectado, TTL de 600 segundos y máximo de 128 entradas.
 
 El código se divide por razones de cambio en `interaction.py`, `speech.py`,
 `simulation.py`, `local_commands.py` y `situational_runtime.py`; `situational.py`
-solo conserva reexports. Piper, Vosk e identidad persistente siguen fuera de
+solo conserva reexports. Este párrafo describe el hito original: Piper fue
+incorporado después por ADR-005; Vosk e identidad persistente siguen fuera de
 alcance.
 
 Las invariantes del ciclo exigen TTL y límite positivos, cooldown no negativo,

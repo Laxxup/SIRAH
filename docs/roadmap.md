@@ -22,6 +22,10 @@ El circuito vertical situado añade percepción simulada, consumo de
 Estas piezas están implementadas únicamente para demostración y no constituyen
 autonomía general ni percepción física.
 
+Piper CLI constituye el primer adaptador TTS local experimental. Su ciclo,
+cancelación y degradación están probados sin audio real; falta validación física
+de modelo, reproductor y altavoz. Vosk, STT y escucha permanecen planificados.
+
 ## Trabajo activo
 
 El único artefacto ejecutable recuperado es el saludo Velxio experimental con
@@ -40,7 +44,8 @@ creará solo al existir una implementación comprobable.
 | Completada | Integración simulada SIRAH–Cortex | `robot.home` y `robot.stop` atraviesan Cortex y un adaptador simulado |
 | Completada | Gemini por texto | Decisión estructurada opcional, sin autoridad mecánica directa |
 | Completada | Contexto de sesión inicial | Estado reciente acotado, separado de `WorldState` y sin persistencia |
-| Siguiente | Percepción y voz reales | STT/TTS reales con contratos pequeños y degradación segura |
+| En desarrollo | Voz local | Piper TTS implementado experimentalmente; validación física pendiente |
+| Siguiente | Entrada de voz | STT push-to-talk con privacidad y degradación segura |
 | Después | Visión real | Adquisición y observación reproducibles antes de reconocimiento persistente |
 | Después | Contexto avanzado | Resumen y políticas de privacidad comprobables |
 | Planeada | Hardware físico | Servo real, Serial y validación de alimentación, límites y paro |
@@ -54,7 +59,5 @@ puertos o adaptadores.
 
 La promoción desde `experiments/` exige objetivo, procedimiento, resultado,
 decisión y evidencia de simulación o hardware.
-La siguiente estabilización mantiene la percepción simulada y separa el módulo
-situacional antes de integrar Piper. Piper deberá incluir cancelación, limpieza
-de WAV temporal y pruebas sin audio. Vosk se mantiene posterior y será
-push-to-talk, no escucha permanente.
+La siguiente estabilización validará Piper en hardware local sin incluir
+modelos. Vosk se mantiene posterior y será push-to-talk, no escucha permanente.

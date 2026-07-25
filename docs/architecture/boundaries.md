@@ -15,10 +15,10 @@ los proveedores concretos y la traducción a contratos de Cortex. También posee
 el adaptador robótico simulado porque demuestra la composición del sistema
 completo, no una responsabilidad nueva del núcleo determinista.
 
-También pertenecen a SIRAH los futuros puertos internos de cámara, voz, LLM y
-memoria, sus adaptadores concretos, la persistencia SQLite, MQTT o Serial, y la
-composición mediante CLI, GUI o daemon. No se crean todavía porque no existe
-código real que los justifique.
+También pertenecen a SIRAH los puertos internos de cámara, voz, LLM y memoria,
+sus adaptadores concretos, la persistencia SQLite, MQTT o Serial, y la
+composición mediante CLI, GUI o daemon. Solo se crean cuando existe código real:
+voz y LLM ya tienen contratos; cámara y persistencia siguen planificadas.
 
 Cortex no importa código de SIRAH. SIRAH depende de la distribución
 `sirah-cortex==0.1.0a1` y usa preferentemente su fachada pública. `arm.greet`
@@ -62,12 +62,13 @@ presencias ya saludadas, cooldown, modo silencio, autonomía, iniciativa y TTS.
 La política de iniciativa es determinista y consulta el `WorldState` de Cortex.
 Gemini no decide reglas obvias de saludo.
 
-## Voz simulada
+## Voz
 
-`SpeechPort` y `FakeSpeechOutput` pertenecen a SIRAH. TTS no es movimiento
-mecánico y no se fuerza dentro de `RobotPort`. El fake registra texto, permite
-cancelación y no usa subprocess, audio, threads ni red. Piper y TTS real están
-fuera de alcance.
+`SpeechOutputPort`, `FakeSpeechOutput` y el adaptador Piper pertenecen a SIRAH.
+TTS no es movimiento mecánico y no se fuerza dentro de `RobotPort`. El fake no
+usa subprocess, audio, threads ni red. Piper y el reproductor son procesos
+directos externos administrados; el worker nunca modifica `InteractionMemory`.
+STT, Vosk, escucha permanente y streaming están fuera de alcance.
 
 ## Funcionamiento degradado
 
@@ -95,8 +96,8 @@ de 600 segundos y máximo de 128 entradas. Una clave de simulación como
 
 `PresentSystem` es una proyección de lectura de `InteractionMemory`. El saludo
 hablado (`interaction.greet`) no requiere `arm.greet`, que representa un gesto
-mecánico opcional. Piper y Vosk siguen planificados; no forman parte de esta
-integración.
+mecánico opcional. Piper está implementado experimentalmente sin validación
+física; Vosk sigue planificado.
 
 La memoria valida TTL y capacidad positivos, y el cooldown no puede ser
 negativo. La poda se persiste antes de evaluar iniciativas. Una reproducción

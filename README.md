@@ -34,6 +34,7 @@ La distribución `sirah`, importable como `sirah`, demuestra actualmente:
 - un `RobotPort` simulado, determinista y sin hardware.
 - percepción de presencia simulada a través de eventos públicos de Cortex;
 - iniciativa de saludo determinista y TTS simulado cancelable;
+- TTS local Piper experimental, opcional y degradable, mediante subprocess;
 - router local prioritario para órdenes exactas de parada.
 
 `robot.home` y `robot.stop` son las capacidades garantizadas. `arm.greet` está
@@ -74,10 +75,15 @@ propuesta, validación y ejecución:
 .venv/bin/python examples/interactive_conversation.py --enable-greet
 ```
 
+Piper es opt-in; el fake continúa como default. La configuración y el smoke
+local están en [la guía de Piper](docs/piper.md). SIRAH no descarga ni empaqueta
+modelos.
+
 Comandos locales: `/ayuda`, `/estado`, `/componentes`, `/capacidades`,
 `/contexto`, `/eventos`, `/limpiar`, `/presencia [clave]`, `/ausencia`,
 `/evaluar`, `/silencio [on|off]`, `/autonomia [on|off]`, `/detener`,
-`/voz-fin` y `/salir`. Las órdenes exactas `stop`, `para` y `detente` también
+`/voz-fin`, `/voz-estado`, `/voz-detener` y `/salir`. Las órdenes exactas
+`stop`, `para` y `detente` también
 se resuelven localmente antes de la inteligencia. No llegan al proveedor ni
 controlan hardware directamente.
 
@@ -106,8 +112,9 @@ reglas de recuperación de conocimiento se documentan en
 La iniciativa situacional usa presencia efímera: `presence_key` identifica una
 observación simulada, no una persona. La memoria social mantiene saludos
 pendientes y confirmados con TTL de 600 segundos y un máximo de 128 entradas.
-El saludo se confirma únicamente cuando termina el TTS simulado. `PresentSystem`
-proyecta `InteractionMemory`; no mantiene otra fuente de verdad.
+El saludo se confirma únicamente cuando el proveedor de TTS informa reproducción
+completada. `PresentSystem` proyecta `InteractionMemory`; no mantiene otra
+fuente de verdad.
 
 `interaction.greet` es interacción vocal; `arm.greet` es un gesto mecánico
 opcional y no se ejecuta implícitamente.
@@ -122,7 +129,8 @@ opcional y no se ejecuta implícitamente.
 | Robot simulado | Implementado | `RobotPort` y eventos observables | `src/sirah/simulated_robot.py` |
 | Percepción simulada | Simulado | Evento público y WorldState de Cortex | `SimulatedPerception` |
 | Iniciativa de saludo | Implementado, determinista | Política local con cooldown | `evaluate_initiative` |
-| TTS | Simulado | Registra texto, sin audio real | `FakeSpeechOutput` |
+| TTS fake | Simulado | Determinista, sin audio real | `FakeSpeechOutput` |
+| Piper TTS | Experimental | Subprocess probado con dobles; audio físico no validado | `PiperSpeechOutput` |
 | Brazo simulado | Provisional | Solo con `--enable-greet` | `arm.greet` |
 | Cámara | No configurada | Sin implementación | `perception.camera` |
 | Micrófono | No configurado | Sin implementación | `input.microphone` |
@@ -132,7 +140,7 @@ opcional y no se ejecuta implícitamente.
 | Saludo Velxio con un servo | Experimental | Validado en simulación | `experiments/velxio/greet_person_preview/` |
 | Controlador facial ESP32/PCA9685 | Planeado | No validado | Inventario proporcionado por el equipo |
 | ESP32-CAM | Planeado | No validado | Sin implementación local encontrada |
-| Conversación (STT/LLM/TTS) | Planeado | No validado | Sin implementación local encontrada |
+| Entrada de voz (STT) | Planeado | No validado | Sin implementación local |
 | Visión y percepción | Planeado | No validado | Sin implementación local encontrada |
 
 El experimento Velxio procede del commit de Cortex
@@ -142,8 +150,9 @@ seis artefactos ejecutables y de simulación coinciden por SHA-256; el README de
 esta copia es deliberadamente más completo y constituye su documentación
 autoritativa.
 
-No existe firmware estable para siete servos, Vosk, Piper, cámara, MQTT o
-Serial concreto. Gemini existe únicamente como integración textual opcional;
+No existe firmware estable para siete servos, Vosk, cámara, MQTT o Serial
+concreto. Piper existe como adaptador CLI experimental sin modelo incluido ni
+validación física. Gemini existe únicamente como integración textual opcional;
 no se presentan voz, visión o hardware real como implementados.
 
 ## Hardware conocido
@@ -164,8 +173,8 @@ No existe evidencia local de validación física ni calibraciones.
 - `experiments/`: prototipos sin promover a integración estable.
 - `docs/roadmap.md`: trabajo activo y criterios de promoción.
 
-No existen todavía paquetes de voz, visión, firmware, GUI ni hardware porque
-no hay implementaciones que demuestren esas responsabilidades.
+No existen todavía paquetes de STT, visión, firmware, GUI ni hardware. TTS
+cuenta con el contrato, fake y adaptador Piper experimentales descritos arriba.
 
 ## Decisiones abiertas
 
