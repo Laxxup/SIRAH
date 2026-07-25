@@ -5,12 +5,12 @@ from sirah_cortex import Event, EventType, RobotPort, WorldState
 from sirah_cortex.adapters.events.in_memory import InMemoryEventInbox
 from sirah_cortex.services.runtime import Runtime
 from .cortex_integration import CapabilityRunner
-from .errors import SituationalError
+from .errors import SpeechError
 from .interaction import InitiativeAction, InitiativeDecision, InteractionMemory, evaluate_initiative
 from .local_commands import LocalStopRouter, StopResult
 from .simulated_robot import SimulatedRobotAdapter
 from .simulation import SimulatedPerception
-from .speech import SpeechOutputPort
+from .speech import SpeechOutcome, SpeechOutputPort
 from .system import ComponentRegistry
 
 class Clock(Protocol):
@@ -49,23 +49,45 @@ class SituationalCoordinator:
         decision = self.evaluate(presence_key=presence_key)
         if decision.action is not InitiativeAction.GREET:
             return decision
-        self.memory = self.memory.with_speech(decision.presence_key, self.GREETING_TEXT)
         try:
-            self.speech.start(self.GREETING_TEXT)
-        except SituationalError as error:
-            self.memory = self.memory.cancel_pending(decision.presence_key)._replace(last_reason="tts_error")
-            return InitiativeDecision(InitiativeAction.WAIT, f"tts_error:{error}", decision.presence_key)
+            operation_id = self.speech.start(self.GREETING_TEXT)
+        except SpeechError:
+            self.memory = self.memory._replace(last_reason="tts_error")
+            return InitiativeDecision(InitiativeAction.WAIT, "tts_error", decision.presence_key)
+        try:
+            self.memory = self.memory.pending(operation_id, decision.presence_key)
+        except Exception:
+            self.speech.stop(operation_id)
+            raise
         self.memory = self.memory._replace(last_reason=decision.reason)
         return decision
-    def finish_speech(self, *, success: bool = True) -> None:
+
+    def sync_speech(self) -> None:
+        completion = self.speech.poll()
+        if completion is None:
+            return
         operation = self.memory.active_speech
-        self.speech.complete()
-        if operation is None:
-            self.memory = self.memory._replace(last_reason="speech_not_active")
-        elif success:
+        if operation is None or completion.operation_id != operation.operation_id:
+            return
+        if completion.outcome is SpeechOutcome.COMPLETED:
             self.memory = self.memory.confirm(operation.presence_key, self.clock.now())
+            self.memory = self.memory._replace(last_reason="tts_completed")
         else:
-            self.memory = self.memory.cancel_pending(operation.presence_key)._replace(last_reason="tts_cancelled")
+            self.memory = self.memory.cancel_pending(operation.presence_key)._replace(
+                last_reason=f"tts_{completion.outcome.value}"
+            )
+
+    def finish_speech(self, *, success: bool = True) -> None:
+        complete = getattr(self.speech, "complete", None)
+        fail = getattr(self.speech, "fail", None)
+        if not callable(complete):
+            self.memory = self.memory._replace(last_reason="speech_not_fake")
+            return
+        if success:
+            complete()
+        elif callable(fail):
+            fail()
+        self.sync_speech()
     def set_silent(self, active: bool) -> None:
         self.memory = self.memory._replace(silent_mode=active, last_reason="silent_mode_enabled" if active else "silent_mode_disabled")
     def set_autonomy(self, active: bool) -> None:

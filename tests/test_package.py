@@ -58,6 +58,7 @@ def test_concrete_adapters_and_sdk_are_not_exported() -> None:
     excluded = {
         "FakeIntelligenceAdapter",
         "GeminiIntelligenceAdapter",
+        "PiperSpeechOutput",
         "SimulatedRobotAdapter",
         "genai",
         "pydantic",
@@ -98,3 +99,9 @@ def test_gemini_adapter_has_no_robot_port_access() -> None:
     }
     assert "RobotPort" not in imported_names
     assert "RobotCommand" not in imported_names
+
+
+def test_base_import_does_not_require_piper_or_audio_packages() -> None:
+    source = Path(sirah.__file__).read_text(encoding="utf-8")
+    assert "piper_speech" not in source
+    assert "subprocess" not in source

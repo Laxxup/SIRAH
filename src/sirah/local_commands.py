@@ -20,11 +20,10 @@ class LocalStopRouter:
     def route(self, text: str, *, speech: SpeechOutputPort, runner: CapabilityRunner, request_id: str) -> StopResult:
         if not self.matches(text):
             return StopResult(False, False, None, "not_local_stop")
-        active = speech.active
-        speech.stop()
+        cancelled = speech.stop()
         result = None
         try:
             result = runner.run(CapabilityRequest(request_id, "robot.stop"))
         except CapabilityRejectedError:
             pass
-        return StopResult(True, active, result, "local_stop")
+        return StopResult(True, cancelled, result, "local_stop")

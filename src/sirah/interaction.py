@@ -11,8 +11,8 @@ class GreetingRecord:
 
 @dataclass(frozen=True, slots=True)
 class PendingSpeech:
+    operation_id: str
     presence_key: str
-    text: str
 
 class InitiativeAction(str, Enum):
     GREET = "greet"
@@ -62,15 +62,10 @@ class InteractionMemory:
         )
         return self._replace(confirmed_greetings=records)
 
-    def pending(self, key: str) -> "InteractionMemory":
+    def pending(self, operation_id: str, key: str) -> "InteractionMemory":
         if self.active_speech is not None:
             raise ValueError("Ya existe una operación de voz activa.")
-        return self._replace(active_speech=PendingSpeech(key, ""))
-
-    def with_speech(self, key: str, text: str) -> "InteractionMemory":
-        if self.active_speech is not None:
-            raise ValueError("Ya existe una operación de voz activa.")
-        return self._replace(active_speech=PendingSpeech(key, text))
+        return self._replace(active_speech=PendingSpeech(operation_id, key))
 
     def confirm(self, key: str, now: float) -> "InteractionMemory":
         current = self.prune(now)

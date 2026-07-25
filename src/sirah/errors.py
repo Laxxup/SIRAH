@@ -9,6 +9,18 @@ class SituationalError(SirahApplicationError):
     """Error controlado del circuito situado."""
 
 
+class SpeechError(SituationalError):
+    """Error controlado del contrato de voz."""
+
+
+class SpeechBusyError(SpeechError):
+    """El proveedor de voz ya tiene una operación activa."""
+
+
+class SpeechUnavailableError(SpeechError):
+    """El proveedor de voz no acepta operaciones."""
+
+
 class CapabilityRejectedError(SirahApplicationError):
     """La política local rechazó una solicitud de capacidad."""
 

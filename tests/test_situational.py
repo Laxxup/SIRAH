@@ -13,7 +13,7 @@ from sirah import create_default_catalog
 from sirah.local_commands import LocalStopRouter
 from sirah.simulation import FakeClock, FakeSpeechOutput, SimulatedPerception
 from sirah.situational_runtime import SituationalCoordinator, build_situational_runtime
-from sirah.speech import SpeechFailure
+from sirah.speech import SpeechCompletion, SpeechFailure, SpeechOutcome, SpeechState
 from sirah.intelligence import (
     DecisionType,
     IntelligenceDecision,
@@ -284,7 +284,9 @@ def test_active_speech_is_explicit_and_finish_without_operation_is_safe() -> Non
     assert service.memory.active_speech is None
     service.inject_presence(present=True, presence_key="presence:one")
     service.evaluate_and_act(presence_key="presence:one")
-    assert service.memory.active_speech == PendingSpeech("presence:one", service.GREETING_TEXT)
+    assert service.memory.active_speech == PendingSpeech(
+        "fake-speech-1", "presence:one"
+    )
     service.finish_speech()
     assert service.memory.active_speech is None
 
@@ -295,3 +297,101 @@ def test_same_timestamp_events_have_distinct_ids() -> None:
     second = perception.presence_event(present=True, observed_at=0.0, expires_at=1.0, presence_key="a")
     third = perception.presence_event(present=True, observed_at=0.0, expires_at=1.0, presence_key="b")
     assert len({first.event_id, second.event_id, third.event_id}) == 3
+
+
+def test_fake_contract_delivers_each_terminal_once() -> None:
+    speech = FakeSpeechOutput()
+    operation_id = speech.start("private")
+    assert speech.state is SpeechState.PLAYING
+    speech.complete()
+    completion = speech.poll()
+    assert completion == SpeechCompletion(
+        operation_id, SpeechOutcome.COMPLETED, "playback_completed", None
+    )
+    assert speech.poll() is None
+    assert not speech.active
+    speech.close()
+    speech.close()
+    assert speech.state is SpeechState.CLOSED
+
+
+@pytest.mark.parametrize(
+    ("terminal", "outcome"),
+    [
+        ("fail", SpeechOutcome.FAILED),
+        ("timeout", SpeechOutcome.TIMEOUT),
+        ("stop", SpeechOutcome.CANCELLED),
+    ],
+)
+def test_non_successful_completion_never_confirms(
+    terminal: str, outcome: SpeechOutcome
+) -> None:
+    service, _, speech = coordinator()
+    service.inject_presence(present=True, presence_key="presence:one")
+    service.evaluate_and_act(presence_key="presence:one")
+    getattr(speech, terminal)()
+    service.sync_speech()
+    assert service.memory.confirmed_greetings == ()
+    assert service.memory.active_speech is None
+    assert service.memory.tts_active is False
+    assert service.memory.last_reason == f"tts_{outcome.value}"
+
+
+def test_stale_completion_does_not_modify_interaction_memory() -> None:
+    service, _, speech = coordinator()
+    service.inject_presence(present=True, presence_key="presence:one")
+    service.evaluate_and_act(presence_key="presence:one")
+    active = service.memory.active_speech
+    assert active
+    speech._completion = SpeechCompletion(
+        "stale-operation", SpeechOutcome.COMPLETED, "playback_completed", None
+    )
+    before = service.memory
+    service.sync_speech()
+    assert service.memory is before
+    assert service.memory.active_speech == active
+
+
+def test_old_stop_cannot_cancel_new_operation() -> None:
+    speech = FakeSpeechOutput()
+    old = speech.start("old")
+    speech.complete()
+    speech.poll()
+    new = speech.start("new")
+    assert not speech.stop(old)
+    assert speech.active
+    assert speech.stop(new)
+
+
+def test_pending_speech_contains_no_text() -> None:
+    pending = PendingSpeech("operation", "presence")
+    assert set(pending.__dataclass_fields__) == {"operation_id", "presence_key"}
+    assert "private greeting" not in repr(pending)
+
+
+def test_registration_failure_cancels_exact_accepted_operation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, _, speech = coordinator()
+    service.inject_presence(present=True, presence_key="presence:one")
+    stopped: list[str | None] = []
+    original_stop = FakeSpeechOutput.stop
+
+    def record_stop(
+        self: FakeSpeechOutput, expected_operation_id: str | None = None
+    ) -> bool:
+        stopped.append(expected_operation_id)
+        return original_stop(self, expected_operation_id)
+
+    monkeypatch.setattr(FakeSpeechOutput, "stop", record_stop)
+    monkeypatch.setattr(
+        InteractionMemory,
+        "pending",
+        lambda self, operation_id, key: (_ for _ in ()).throw(
+            RuntimeError("registration failed")
+        ),
+    )
+    with pytest.raises(RuntimeError, match="registration failed"):
+        service.evaluate_and_act(presence_key="presence:one")
+    assert stopped == ["fake-speech-1"]
+    assert not speech.active
