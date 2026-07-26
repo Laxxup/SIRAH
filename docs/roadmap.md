@@ -23,8 +23,10 @@ Estas piezas están implementadas únicamente para demostración y no constituye
 autonomía general ni percepción física.
 
 Piper CLI constituye el primer adaptador TTS local experimental. Su ciclo,
-cancelación y degradación están probados sin audio real; falta validación física
-de modelo, reproductor y altavoz. Vosk, STT y escucha permanecen planificados.
+cancelación y degradación están probados con dobles; además, la síntesis, la
+reproducción, el smoke y la limpieza se validaron con audio real en una
+configuración Debian 13/PipeWire. Esto no demuestra compatibilidad universal.
+Vosk, STT y escucha permanecen planificados.
 
 ## Trabajo activo
 
@@ -44,7 +46,8 @@ creará solo al existir una implementación comprobable.
 | Completada | Integración simulada SIRAH–Cortex | `robot.home` y `robot.stop` atraviesan Cortex y un adaptador simulado |
 | Completada | Gemini por texto | Decisión estructurada opcional, sin autoridad mecánica directa |
 | Completada | Contexto de sesión inicial | Estado reciente acotado, separado de `WorldState` y sin persistencia |
-| En desarrollo | Voz local | Piper TTS implementado experimentalmente; validación física pendiente |
+| Completada | Primera validación Piper local | Síntesis, reproducción y smoke comprobados en Debian 13/PipeWire |
+| En desarrollo | Voz local | Cancelación física durante reproducción y compatibilidad adicional pendientes |
 | Siguiente | Entrada de voz | STT push-to-talk con privacidad y degradación segura |
 | Después | Visión real | Adquisición y observación reproducibles antes de reconocimiento persistente |
 | Después | Contexto avanzado | Resumen y políticas de privacidad comprobables |
@@ -59,5 +62,7 @@ puertos o adaptadores.
 
 La promoción desde `experiments/` exige objetivo, procedimiento, resultado,
 decisión y evidencia de simulación o hardware.
-La siguiente estabilización validará Piper en hardware local sin incluir
-modelos. Vosk se mantiene posterior y será push-to-talk, no escucha permanente.
+La siguiente estabilización de voz validará la cancelación durante reproducción
+física sin incluir modelos. Vosk se mantiene posterior y será push-to-talk, no
+escucha permanente. Semidúplex, visión y hardware robótico real también
+permanecen pendientes.

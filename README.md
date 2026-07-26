@@ -75,9 +75,12 @@ propuesta, validación y ejecución:
 .venv/bin/python examples/interactive_conversation.py --enable-greet
 ```
 
-Piper es opt-in; el fake continúa como default. La configuración y el smoke
-local están en [la guía de Piper](docs/piper.md). SIRAH no descarga ni empaqueta
-modelos.
+Piper está implementado como integración experimental opt-in; el fake continúa
+como default. Fue validado localmente con audio real en Debian 13, pero sigue
+siendo pre-alpha y no implica soporte universal. El ejecutable y el modelo son
+externos, no forman parte de la instalación base. La configuración, evidencia y
+smoke local están en [la guía de Piper](docs/piper.md). SIRAH no descarga ni
+empaqueta modelos.
 
 Comandos locales: `/ayuda`, `/estado`, `/componentes`, `/capacidades`,
 `/contexto`, `/eventos`, `/limpiar`, `/presencia [clave]`, `/ausencia`,
@@ -87,8 +90,9 @@ Comandos locales: `/ayuda`, `/estado`, `/componentes`, `/capacidades`,
 se resuelven localmente antes de la inteligencia. No llegan al proveedor ni
 controlan hardware directamente.
 
-La demostración actual reconoce un cuerpo simulado y señala cámara,
-micrófono, altavoz, memoria persistente y hardware físico como no configurados.
+La demostración actual reconoce un cuerpo simulado y señala cámara, micrófono,
+altavoz del robot, memoria persistente y hardware físico como no configurados.
+Esto no contradice la reproducción Piper opcional mediante audio local externo.
 La ausencia de esos componentes no impide conversar por texto ni ejecutar las
 capacidades permitidas sobre el robot simulado.
 
@@ -130,11 +134,11 @@ opcional y no se ejecuta implícitamente.
 | Percepción simulada | Simulado | Evento público y WorldState de Cortex | `SimulatedPerception` |
 | Iniciativa de saludo | Implementado, determinista | Política local con cooldown | `evaluate_initiative` |
 | TTS fake | Simulado | Determinista, sin audio real | `FakeSpeechOutput` |
-| Piper TTS | Experimental | Subprocess probado con dobles; audio físico no validado | `PiperSpeechOutput` |
+| Piper TTS | Implementado, experimental | Audio real validado localmente en Debian 13; no universal | `docs/piper.md` |
 | Brazo simulado | Provisional | Solo con `--enable-greet` | `arm.greet` |
 | Cámara | No configurada | Sin implementación | `perception.camera` |
 | Micrófono | No configurado | Sin implementación | `input.microphone` |
-| Altavoz | No configurado | Sin implementación | `output.speaker` |
+| Altavoz del robot | No configurado | La prueba Piper usó audio local externo | `output.speaker` |
 | Memoria persistente | No configurada | Sin SQLite ni archivos | `memory.persistent` |
 | Hardware real | No configurado | Sin firmware o transporte | `robot.physical` |
 | Saludo Velxio con un servo | Experimental | Validado en simulación | `experiments/velxio/greet_person_preview/` |
@@ -151,9 +155,11 @@ esta copia es deliberadamente más completo y constituye su documentación
 autoritativa.
 
 No existe firmware estable para siete servos, Vosk, cámara, MQTT o Serial
-concreto. Piper existe como adaptador CLI experimental sin modelo incluido ni
-validación física. Gemini existe únicamente como integración textual opcional;
-no se presentan voz, visión o hardware real como implementados.
+concreto. Piper existe como adaptador CLI experimental, sin modelo incluido, y
+su síntesis y reproducción se validaron en una configuración Debian 13 concreta.
+Gemini existe únicamente como integración textual opcional; no se presentan
+entrada de voz, conversación por voz completa, visión o hardware robótico real
+como implementados.
 
 ## Hardware conocido
 

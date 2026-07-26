@@ -1,7 +1,8 @@
 # Piper TTS local
 
-Estado: experimental, implementado como integración local; audio físico no
-validado.
+Estado: experimental e implementado como integración local. La síntesis y la
+reproducción reales se validaron en una configuración Debian concreta; esto no
+constituye compatibilidad universal ni soporte certificado.
 
 La consola conserva el fake como proveedor predeterminado. Piper se habilita
 explícitamente y degrada a conversación textual si falta el ejecutable, modelo,
@@ -44,3 +45,61 @@ SIRAH_AUDIO_PLAYER=pw-play \
 
 Usa una frase fija, aplica timeouts, cierra el adaptador y verifica que no quede
 un WAV. No descarga ni instala nada.
+
+## Validación local conocida
+
+Validación realizada el 2026-07-25:
+
+- Debian 13 (trixie), Python 3.13.5 del entorno del proyecto y
+  `piper-tts` 1.4.2;
+- instalación externa de Piper bajo
+  `~/.local/share/sirah-tools/piper/venv/`;
+- voz `es_MX-ald-medium`, con el modelo `es_MX-ald-medium.onnx` y su
+  configuración `es_MX-ald-medium.onnx.json`, ambos externos al repositorio;
+- `/usr/bin/pw-play` como reproductor de SIRAH, con PipeWire y WirePlumber
+  activos;
+- `/usr/bin/aplay` comprobado también como reproductor manual alternativo.
+
+### Prueba manual
+
+Piper recibió texto mediante stdin y produjo un archivo RIFF/WAVE PCM de 16
+bits, mono, 22050 Hz y tamaño mayor que cero. El mismo WAV se reprodujo
+correctamente con `/usr/bin/pw-play` y `/usr/bin/aplay`.
+
+### Smoke de SIRAH
+
+Se ejecutó el smoke opt-in con el ejecutable, modelo y configuración externos:
+
+```bash
+SIRAH_RUN_PIPER_SMOKE=1 \
+SIRAH_PIPER_BIN=<ejecutable-externo> \
+SIRAH_PIPER_MODEL=<modelo-externo> \
+SIRAH_PIPER_CONFIG=<configuracion-externa> \
+SIRAH_AUDIO_PLAYER=/usr/bin/pw-play \
+.venv/bin/python examples/piper_smoke.py
+```
+
+La salida terminal fue `TERMINAL: completed; playback_completed` y el código de
+salida fue 0. Tras el smoke no quedaron WAV del proceso en `/tmp`, ni WAV, PCM
+o modelos ONNX dentro del repositorio. Tampoco quedaron procesos `piper`,
+`pw-play` o `aplay`, y la consola cerró normalmente.
+
+La consola se inició con el proveedor Piper real. `/voz-estado` informó
+`VOZ: disponible=True; activo=False; estado=idle`; `/voz-detener` sin una
+operación activa informó `Voz detenida: False.`. El cierre fue normal y no dejó
+procesos residuales.
+
+### Alcance y limitaciones
+
+Esta evidencia comprueba en esa máquina la síntesis local real, la reproducción
+local real, el smoke integrado de SIRAH, la limpieza del WAV temporal, el cierre
+sin procesos residuales y la configuración Debian/PipeWire descrita. La
+implementación del runtime y esta compatibilidad local comprobada son hechos
+distintos de ofrecer compatibilidad universal.
+
+No se validaron otros sistemas operativos, Raspberry Pi, otras voces ni todo
+hardware de audio. Tampoco se comprobaron cancelación física durante la
+reproducción, control de descendientes arbitrarios, streaming, múltiples voces
+concurrentes, Vosk ni STT. Piper, su entorno, la voz y el reproductor continúan
+siendo dependencias externas opcionales: no forman parte de la instalación base
+de SIRAH y ningún modelo se guarda en Git.

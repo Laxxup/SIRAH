@@ -15,6 +15,10 @@ la etapa del prototipo experimental.
 
 ### Changed
 
+- Validación local real de Piper 1.4.2 en Debian 13 con la voz
+  `es_MX-ald-medium`, reproducción mediante PipeWire, smoke de integración
+  completado y limpieza sin WAV ni procesos residuales; la evidencia no implica
+  compatibilidad universal.
 - El circuito situacional se dividió en interacción, simulación, voz, comandos
   locales y composición de runtime. La memoria social ahora expira, se poda y
   confirma saludos al finalizar el TTS simulado.
