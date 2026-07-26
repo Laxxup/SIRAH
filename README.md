@@ -32,6 +32,10 @@ La distribución `sirah`, importable como `sirah`, demuestra actualmente:
 - catálogo y política local de capacidades;
 - ejecución real a través de SIRAH Cortex `0.1.0a1`;
 - un `RobotPort` simulado, determinista y sin hardware.
+- percepción de presencia simulada a través de eventos públicos de Cortex;
+- iniciativa de saludo determinista y TTS simulado cancelable;
+- TTS local Piper experimental, opcional y degradable, mediante subprocess;
+- router local prioritario para órdenes exactas de parada.
 
 `robot.home` y `robot.stop` son las capacidades garantizadas. `arm.greet` está
 implementada de forma provisional reutilizando el plan mecánico existente en
@@ -71,12 +75,24 @@ propuesta, validación y ejecución:
 .venv/bin/python examples/interactive_conversation.py --enable-greet
 ```
 
-Comandos locales: `/ayuda`, `/estado`, `/componentes`, `/capacidades`,
-`/contexto`, `/eventos`, `/limpiar` y `/salir`. No llegan al proveedor de
-inteligencia ni controlan hardware directamente.
+Piper está implementado como integración experimental opt-in; el fake continúa
+como default. Fue validado localmente con audio real en Debian 13, pero sigue
+siendo pre-alpha y no implica soporte universal. El ejecutable y el modelo son
+externos, no forman parte de la instalación base. La configuración, evidencia y
+smoke local están en [la guía de Piper](docs/piper.md). SIRAH no descarga ni
+empaqueta modelos.
 
-La demostración actual reconoce un cuerpo simulado y señala cámara,
-micrófono, altavoz, memoria persistente y hardware físico como no configurados.
+Comandos locales: `/ayuda`, `/estado`, `/componentes`, `/capacidades`,
+`/contexto`, `/eventos`, `/limpiar`, `/presencia [clave]`, `/ausencia`,
+`/evaluar`, `/silencio [on|off]`, `/autonomia [on|off]`, `/detener`,
+`/voz-fin`, `/voz-estado`, `/voz-detener` y `/salir`. Las órdenes exactas
+`stop`, `para` y `detente` también
+se resuelven localmente antes de la inteligencia. No llegan al proveedor ni
+controlan hardware directamente.
+
+La demostración actual reconoce un cuerpo simulado y señala cámara, micrófono,
+altavoz del robot, memoria persistente y hardware físico como no configurados.
+Esto no contradice la reproducción Piper opcional mediante audio local externo.
 La ausencia de esos componentes no impide conversar por texto ni ejecutar las
 capacidades permitidas sobre el robot simulado.
 
@@ -97,6 +113,16 @@ reglas de recuperación de conocimiento se documentan en
 
 ## Estado actual
 
+La iniciativa situacional usa presencia efímera: `presence_key` identifica una
+observación simulada, no una persona. La memoria social mantiene saludos
+pendientes y confirmados con TTL de 600 segundos y un máximo de 128 entradas.
+El saludo se confirma únicamente cuando el proveedor de TTS informa reproducción
+completada. `PresentSystem` proyecta `InteractionMemory`; no mantiene otra
+fuente de verdad.
+
+`interaction.greet` es interacción vocal; `arm.greet` es un gesto mecánico
+opcional y no se ejecuta implícitamente.
+
 | Área | Estado | Validación | Evidencia local |
 |---|---|---|---|
 | Texto, contexto y Cortex simulado | Implementado en pre-alpha | Validado sin red | `src/sirah/`, `tests/`, `examples/` |
@@ -105,16 +131,20 @@ reglas de recuperación de conocimiento se documentan en
 | Contexto de sesión | Implementado | Memoria temporal acotada | `src/sirah/context.py` |
 | Cortex | Implementado | API real `sirah-cortex==0.1.0a1` | `src/sirah/cortex_integration.py` |
 | Robot simulado | Implementado | `RobotPort` y eventos observables | `src/sirah/simulated_robot.py` |
+| Percepción simulada | Simulado | Evento público y WorldState de Cortex | `SimulatedPerception` |
+| Iniciativa de saludo | Implementado, determinista | Política local con cooldown | `evaluate_initiative` |
+| TTS fake | Simulado | Determinista, sin audio real | `FakeSpeechOutput` |
+| Piper TTS | Implementado, experimental | Audio real validado localmente en Debian 13; no universal | `docs/piper.md` |
 | Brazo simulado | Provisional | Solo con `--enable-greet` | `arm.greet` |
 | Cámara | No configurada | Sin implementación | `perception.camera` |
 | Micrófono | No configurado | Sin implementación | `input.microphone` |
-| Altavoz | No configurado | Sin implementación | `output.speaker` |
+| Altavoz del robot | No configurado | La prueba Piper usó audio local externo | `output.speaker` |
 | Memoria persistente | No configurada | Sin SQLite ni archivos | `memory.persistent` |
 | Hardware real | No configurado | Sin firmware o transporte | `robot.physical` |
 | Saludo Velxio con un servo | Experimental | Validado en simulación | `experiments/velxio/greet_person_preview/` |
 | Controlador facial ESP32/PCA9685 | Planeado | No validado | Inventario proporcionado por el equipo |
 | ESP32-CAM | Planeado | No validado | Sin implementación local encontrada |
-| Conversación (STT/LLM/TTS) | Planeado | No validado | Sin implementación local encontrada |
+| Entrada de voz (STT) | Planeado | No validado | Sin implementación local |
 | Visión y percepción | Planeado | No validado | Sin implementación local encontrada |
 
 El experimento Velxio procede del commit de Cortex
@@ -124,9 +154,12 @@ seis artefactos ejecutables y de simulación coinciden por SHA-256; el README de
 esta copia es deliberadamente más completo y constituye su documentación
 autoritativa.
 
-No existe firmware estable para siete servos, Vosk, Piper, cámara, MQTT o
-Serial concreto. Gemini existe únicamente como integración textual opcional;
-no se presentan voz, visión o hardware real como implementados.
+No existe firmware estable para siete servos, Vosk, cámara, MQTT o Serial
+concreto. Piper existe como adaptador CLI experimental, sin modelo incluido, y
+su síntesis y reproducción se validaron en una configuración Debian 13 concreta.
+Gemini existe únicamente como integración textual opcional; no se presentan
+entrada de voz, conversación por voz completa, visión o hardware robótico real
+como implementados.
 
 ## Hardware conocido
 
@@ -146,8 +179,8 @@ No existe evidencia local de validación física ni calibraciones.
 - `experiments/`: prototipos sin promover a integración estable.
 - `docs/roadmap.md`: trabajo activo y criterios de promoción.
 
-No existen todavía paquetes de voz, visión, firmware, GUI ni hardware porque
-no hay implementaciones que demuestren esas responsabilidades.
+No existen todavía paquetes de STT, visión, firmware, GUI ni hardware. TTS
+cuenta con el contrato, fake y adaptador Piper experimentales descritos arriba.
 
 ## Decisiones abiertas
 

@@ -25,6 +25,12 @@ from sirah.system import (
     ComponentStatus,
     PresentSystem,
 )
+from sirah.situational import (
+    SituationalCoordinator,
+)
+from sirah.simulation import FakeClock, FakeSpeechOutput, SimulatedPerception
+from sirah.piper_speech import PiperSpeechConfig, PiperSpeechOutput
+from sirah.situational_runtime import build_situational_runtime
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,10 +41,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--provider", choices=("fake", "gemini"), default="fake")
     parser.add_argument("--enable-greet", action="store_true")
     parser.add_argument("--session-id", default="laboratory")
+    parser.add_argument("--speech-provider", choices=("fake", "piper"), default="fake")
+    parser.add_argument("--piper-bin")
+    parser.add_argument("--piper-model")
+    parser.add_argument("--piper-config")
+    parser.add_argument("--audio-player")
     return parser
 
 
-def build_components(*, provider: str, enable_greet: bool) -> ComponentRegistry:
+def build_components(
+    *,
+    provider: str,
+    enable_greet: bool,
+    speech_provider: str = "fake",
+    speech_available: bool = True,
+    speech_reason: str | None = None,
+) -> ComponentRegistry:
     components = [
         ComponentState(
             ComponentId(f"intelligence.{provider}"),
@@ -69,6 +87,25 @@ def build_components(*, provider: str, enable_greet: bool) -> ComponentRegistry:
             description="RobotPort local sin hardware.",
             capabilities=("robot.home", "robot.stop"),
         ),
+        ComponentState(
+            ComponentId(f"output.speech.{speech_provider}"),
+            ComponentKind.OUTPUT,
+            ComponentStatus.SIMULATED
+            if speech_provider == "fake"
+            else (
+                ComponentStatus.AVAILABLE
+                if speech_available
+                else ComponentStatus.DEGRADED
+            ),
+            simulated=speech_provider == "fake",
+            description=(
+                "TTS fake determinista."
+                if speech_provider == "fake"
+                else "Piper CLI experimental; hardware de audio no validado."
+            ),
+            capabilities=("interaction.greet",),
+            last_error=speech_reason,
+        ),
     ]
     if enable_greet:
         components.append(
@@ -92,7 +129,7 @@ def build_components(*, provider: str, enable_greet: bool) -> ComponentRegistry:
         for identifier, kind, description in (
             ("perception.camera", ComponentKind.PERCEPTION, "Cámara no configurada."),
             ("input.microphone", ComponentKind.INPUT, "Micrófono no configurado."),
-            ("output.speaker", ComponentKind.OUTPUT, "Altavoz no configurado."),
+            ("output.speaker", ComponentKind.OUTPUT, "Hardware de audio no validado."),
             ("memory.persistent", ComponentKind.MEMORY, "Memoria persistente no configurada."),
             ("robot.physical", ComponentKind.ROBOT, "Cuerpo físico no configurado."),
         )
@@ -123,19 +160,27 @@ def _print_snapshot(system: PresentSystem, session_id: str, output: TextIO) -> N
     print(f"- mensajes recientes: {snapshot.recent_message_count}", file=output)
     print(f"- comandos recientes: {list(snapshot.recent_commands)}", file=output)
     print(f"- errores seguros: {list(snapshot.safe_errors)}", file=output)
+    print(f"- silencio: {snapshot.silent_mode}", file=output)
+    print(f"- autonomía: {snapshot.autonomy_active}", file=output)
+    print(f"- TTS activo: {snapshot.tts_active}", file=output)
+    print(
+        f"- razón de iniciativa: {snapshot.last_initiative_reason or 'ninguna'}",
+        file=output,
+    )
 
 
 def _local_command(
     command: str,
     *,
     system: PresentSystem,
+    coordinator: SituationalCoordinator,
     session_id: str,
     output: TextIO,
 ) -> bool:
     if command == "/ayuda":
         print(
             "Comandos: /ayuda /estado /componentes /capacidades /contexto "
-            "/eventos /limpiar /salir",
+            "/eventos /limpiar /voz-estado /voz-detener /salir",
             file=output,
         )
     elif command == "/estado":
@@ -160,6 +205,62 @@ def _local_command(
     elif command == "/limpiar":
         system.contexts.clear(session_id)
         print("Contexto temporal reiniciado.", file=output)
+    elif command.startswith("/presencia"):
+        parts = command.split()
+        key = parts[1] if len(parts) > 1 else "presence:current"
+        coordinator.inject_presence(present=True, presence_key=key)
+        decision = coordinator.evaluate_and_act(presence_key=key)
+        system.record_interaction_state(coordinator.memory)
+        print(f"Presencia simulada: {key}; iniciativa={decision.action.value}; razón={decision.reason}", file=output)
+    elif command == "/ausencia":
+        coordinator.inject_presence(present=False)
+        system.record_interaction_state(coordinator.memory)
+        print("Ausencia simulada procesada.", file=output)
+    elif command == "/evaluar":
+        decision = coordinator.evaluate_and_act()
+        system.record_interaction_state(coordinator.memory)
+        print(f"Iniciativa={decision.action.value}; razón={decision.reason}", file=output)
+    elif command.startswith("/silencio"):
+        parts = command.split()
+        active = len(parts) == 1 or parts[1].casefold() in {"on", "activar", "sí", "si"}
+        coordinator.set_silent(active)
+        system.record_interaction_state(coordinator.memory)
+        print(f"Modo silencio: {'activo' if active else 'inactivo'}.", file=output)
+    elif command.startswith("/autonomia"):
+        parts = command.split()
+        active = len(parts) == 1 or parts[1].casefold() in {"on", "activar", "sí", "si"}
+        coordinator.set_autonomy(active)
+        system.record_interaction_state(coordinator.memory)
+        print(f"Autonomía: {'activa' if active else 'pausada'}.", file=output)
+    elif command in {"/detener", "/stop"}:
+        stop_result = coordinator.stop("stop", request_id=f"{session_id}:local-stop")
+        system.record_interaction_state(coordinator.memory)
+        print(
+            f"Stop local: matched={stop_result.matched}; "
+            f"tts_cancelled={stop_result.tts_cancelled}; "
+            "robot_action=stop; "
+            f"robot_ok={bool(stop_result.robot_result and stop_result.robot_result.succeeded)}",
+            file=output,
+        )
+    elif command == "/voz-estado":
+        print(
+            f"VOZ: disponible={coordinator.speech.available}; "
+            f"activo={coordinator.speech.active}; "
+            f"estado={coordinator.speech.state.value}",
+            file=output,
+        )
+    elif command == "/voz-detener":
+        cancelled = coordinator.speech.stop()
+        coordinator.sync_speech()
+        system.record_interaction_state(coordinator.memory)
+        print(f"Voz detenida: {cancelled}.", file=output)
+    elif command == "/voz-fin":
+        if isinstance(coordinator.speech, FakeSpeechOutput):
+            coordinator.finish_speech()
+            system.record_interaction_state(coordinator.memory)
+            print("TTS simulado finalizado.", file=output)
+        else:
+            print("/voz-fin solo está disponible para el proveedor fake.", file=output)
     elif command == "/salir":
         print("SIRAH Laboratory Console finalizada.", file=output)
         return True
@@ -224,9 +325,26 @@ def run(
     robot.connect()
     robot.read_events()
     contexts = SessionContextStore()
+    if args.speech_provider == "piper":
+        from pathlib import Path
+
+        speech = PiperSpeechOutput(
+            PiperSpeechConfig.from_environment(
+                piper_executable=args.piper_bin,
+                model_path=Path(args.piper_model) if args.piper_model else None,
+                config_path=Path(args.piper_config) if args.piper_config else None,
+                player_argv=(args.audio_player,) if args.audio_player else None,
+            )
+        )
+    else:
+        speech = FakeSpeechOutput()
     system = PresentSystem(
         components=build_components(
-            provider=provider_name, enable_greet=args.enable_greet
+            provider=provider_name,
+            enable_greet=args.enable_greet,
+            speech_provider=args.speech_provider,
+            speech_available=speech.available,
+            speech_reason=getattr(speech, "unavailable_reason", None),
         ),
         catalog=catalog,
         contexts=contexts,
@@ -239,9 +357,22 @@ def run(
         runner=CapabilityRunner(catalog, robot),
         contexts=contexts,
     )
+    runtime, inbox, _ = build_situational_runtime(robot=robot, at=0.0)
+    coordinator = SituationalCoordinator(
+        runtime=runtime,
+        inbox=inbox,
+        perception=SimulatedPerception(),
+        speech=speech,
+        runner=CapabilityRunner(catalog, robot),
+        components=system.components,
+        clock=FakeClock(0.0),
+    )
+    system.record_interaction_state(coordinator.memory)
     print("SIRAH Laboratory Console — escribe /ayuda para comenzar.", file=output_stream)
     try:
         for raw_line in input_stream:
+            coordinator.sync_speech()
+            system.record_interaction_state(coordinator.memory)
             message = raw_line.strip()
             if not message:
                 continue
@@ -249,10 +380,22 @@ def run(
                 if _local_command(
                     message,
                     system=system,
+                    coordinator=coordinator,
                     session_id=args.session_id,
                     output=output_stream,
                 ):
                     break
+                coordinator.sync_speech()
+                system.record_interaction_state(coordinator.memory)
+                continue
+            if coordinator.stop_router.matches(message):
+                _local_command(
+                    "/detener",
+                    system=system,
+                    coordinator=coordinator,
+                    session_id=args.session_id,
+                    output=output_stream,
+                )
                 continue
             try:
                 result = orchestrator.handle(args.session_id, message)
@@ -261,9 +404,12 @@ def run(
                 continue
             system.record_result(result)
             _print_result(result, system, args.session_id, output_stream)
+            coordinator.sync_speech()
+            system.record_interaction_state(coordinator.memory)
     except KeyboardInterrupt:
         print("\nSIRAH Laboratory Console finalizada.", file=output_stream)
     finally:
+        speech.close()
         robot.close()
     return 0
 

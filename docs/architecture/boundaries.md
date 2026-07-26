@@ -15,10 +15,10 @@ los proveedores concretos y la traducción a contratos de Cortex. También posee
 el adaptador robótico simulado porque demuestra la composición del sistema
 completo, no una responsabilidad nueva del núcleo determinista.
 
-También pertenecen a SIRAH los futuros puertos internos de cámara, voz, LLM y
-memoria, sus adaptadores concretos, la persistencia SQLite, MQTT o Serial, y la
-composición mediante CLI, GUI o daemon. No se crean todavía porque no existe
-código real que los justifique.
+También pertenecen a SIRAH los puertos internos de cámara, voz, LLM y memoria,
+sus adaptadores concretos, la persistencia SQLite, MQTT o Serial, y la
+composición mediante CLI, GUI o daemon. Solo se crean cuando existe código real:
+voz y LLM ya tienen contratos; cámara y persistencia siguen planificadas.
 
 Cortex no importa código de SIRAH. SIRAH depende de la distribución
 `sirah-cortex==0.1.0a1` y usa preferentemente su fachada pública. `arm.greet`
@@ -50,6 +50,33 @@ estructuras de Cortex; `SafetySupervisor` valida; `ActionExecutor` entrega por
 
 Un LLM nunca controla directamente GPIO, PWM, PCA9685 ni servos.
 
+## Percepción, WorldState e iniciativa
+
+La percepción simulada de SIRAH solo publica eventos estructurados de Cortex.
+`Runtime` y el reducer público de Cortex actualizan `WorldState`; SIRAH nunca
+lo muta ni mantiene una segunda copia. Las observaciones vencen según los
+tiempos definidos por Cortex.
+
+La memoria de interacción de SIRAH conserva únicamente conceptos de producto:
+presencias ya saludadas, cooldown, modo silencio, autonomía, iniciativa y TTS.
+La política de iniciativa es determinista y consulta el `WorldState` de Cortex.
+Gemini no decide reglas obvias de saludo.
+
+## Voz
+
+`SpeechOutputPort`, `FakeSpeechOutput` y el adaptador Piper pertenecen a SIRAH.
+TTS no es movimiento mecánico y no se fuerza dentro de `RobotPort`. El fake no
+usa subprocess, audio, threads ni red. Piper y el reproductor son procesos
+directos externos administrados; el worker nunca modifica `InteractionMemory`.
+STT, Vosk, escucha permanente y streaming están fuera de alcance.
+
+## Funcionamiento degradado
+
+Sin cámara, micrófono, altavoz, memoria persistente o cuerpo físico, SIRAH
+declara el componente como no configurado y continúa por texto con el robot
+simulado. No inventa observaciones de sensores ausentes. Sin Gemini utiliza el
+fake; un fallo de inteligencia produce cero movimiento.
+
 ## Consola de laboratorio y futuro panel local
 
 La SIRAH Laboratory Console consume `ConversationOrchestrator` y
@@ -60,3 +87,21 @@ eventos y resultados, pero no contiene políticas, no llama directamente a
 Un panel local futuro deberá consumir los mismos servicios públicos y solicitar
 acciones mediante `CapabilityPolicy` y Cortex. No se implementan todavía
 FastAPI, Flask, WebSocket, HTML, JavaScript, GTK ni Qt.
+### Memoria social e iniciativa
+
+`WorldState` de Cortex conserva presencia y expiración genéricas. SIRAH conserva
+por separado `presence_key` efímeras, saludos pendientes y confirmados, con TTL
+de 600 segundos y máximo de 128 entradas. Una clave de simulación como
+`person:one` no es identidad humana.
+
+`PresentSystem` es una proyección de lectura de `InteractionMemory`. El saludo
+hablado (`interaction.greet`) no requiere `arm.greet`, que representa un gesto
+mecánico opcional. Piper está implementado experimentalmente sin validación
+física; Vosk sigue planificado.
+
+La memoria valida TTL y capacidad positivos, y el cooldown no puede ser
+negativo. La poda se persiste antes de evaluar iniciativas. Una reproducción
+activa se representa mediante una única operación `PendingSpeech` asociada a
+`presence_key`; finalizar sin operación no confirma ninguna presencia. Los
+eventos simulados usan identificadores deterministas con secuencia, fuente y
+clave operacional.

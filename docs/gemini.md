@@ -35,7 +35,8 @@ sin convertirla en un fallo de pytest.
 
 ## Límites
 
-El contexto se mantiene solo durante la vida del proceso. No hay voz, visión,
-hardware real ni memoria persistente. Un error de proveedor, timeout, cuota,
+El contexto se mantiene solo durante la vida del proceso. Gemini no recibe voz
+ni visión; Piper TTS es una salida local separada. No hay hardware real ni
+memoria persistente. Un error de proveedor, timeout, cuota,
 JSON o esquema produce cero movimiento. Las protecciones de contenido
 predeterminadas de Gemini no se reducen y no sustituyen la seguridad mecánica.

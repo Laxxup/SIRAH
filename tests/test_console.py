@@ -27,6 +27,7 @@ def run_console(text: str, args: list[str] | None = None) -> str:
 def test_help_parser_and_help_command() -> None:
     parser = console.build_parser()
     assert "--provider" in parser.format_help()
+    assert "--speech-provider" in parser.format_help()
     output = run_console("/ayuda\n/salir\n")
     assert "/componentes" in output
 
@@ -86,3 +87,33 @@ def test_exit_closes_robot(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(console, "SimulatedRobotAdapter", SpyRobot)
     assert console.run([], input_stream=StringIO("/salir\n")) == 0
     assert instances and not instances[0].is_connected
+
+
+def test_fake_voice_status_and_manual_completion() -> None:
+    output = run_console(
+        "/presencia person:test\n/voz-estado\n/voz-fin\n/estado\n/salir\n"
+    )
+    assert "output.speech.fake" not in output
+    assert "estado=playing" in output
+    assert "TTS simulado finalizado." in output
+    assert "TTS activo: False" in output
+
+
+def test_piper_degraded_keeps_text_console_running() -> None:
+    output = run_console(
+        "/componentes\n/voz-estado\n/voz-fin\nhola\n/salir\n",
+        [
+            "--speech-provider",
+            "piper",
+            "--piper-bin",
+            "definitely-missing-piper",
+            "--piper-model",
+            "definitely-missing-model",
+            "--audio-player",
+            "definitely-missing-player",
+        ],
+    )
+    assert "output.speech.piper: degraded" in output
+    assert "disponible=False" in output
+    assert "solo está disponible para el proveedor fake" in output
+    assert "Puedo conversar por texto" in output

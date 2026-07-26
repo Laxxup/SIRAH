@@ -10,6 +10,10 @@ from sirah_cortex import RobotPort
 
 from .capabilities import CapabilityCatalog
 from .context import PresentContext, SessionContextStore
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .interaction import InteractionMemory
 
 
 class ComponentKind(str, Enum):
@@ -96,6 +100,10 @@ class SystemSnapshot:
     recent_commands: tuple[str, ...]
     recent_events: tuple[str, ...]
     safe_errors: tuple[str, ...]
+    silent_mode: bool = False
+    autonomy_active: bool = True
+    tts_active: bool = False
+    last_initiative_reason: str | None = None
 
 
 class PresentSystem:
@@ -118,6 +126,7 @@ class PresentSystem:
         self._recent_commands: list[str] = []
         self._recent_events: list[str] = []
         self._safe_errors: list[str] = []
+        self._interaction_memory: InteractionMemory | None = None
 
     def record_result(self, result: object) -> None:
         """Registra solo campos resumidos de un ConversationResult."""
@@ -138,8 +147,14 @@ class PresentSystem:
         self._recent_events = self._recent_events[-8:]
         self._safe_errors = self._safe_errors[-4:]
 
+    def record_interaction_state(self, memory: "InteractionMemory") -> None:
+        """Copia únicamente el estado resumido específico de SIRAH."""
+
+        self._interaction_memory = memory
+
     def snapshot(self, session_id: str) -> SystemSnapshot:
         context: PresentContext = self.contexts.get(session_id)
+        memory = self._interaction_memory
         return SystemSnapshot(
             session_id=session_id,
             intelligence_provider=self.intelligence_provider,
@@ -155,4 +170,8 @@ class PresentSystem:
             recent_commands=tuple(self._recent_commands),
             recent_events=tuple(self._recent_events),
             safe_errors=tuple(self._safe_errors),
+            silent_mode=bool(getattr(memory, "silent_mode", False)),
+            autonomy_active=bool(getattr(memory, "autonomy_active", True)),
+            tts_active=bool(getattr(memory, "tts_active", False)),
+            last_initiative_reason=getattr(memory, "last_reason", None),
         )

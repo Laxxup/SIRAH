@@ -17,6 +17,17 @@ La SIRAH Laboratory Console y el `SystemSnapshot` completan la demostración
 textual de esta pre-alpha. La consola sigue siendo una herramienta de
 laboratorio, no un producto final.
 
+El circuito vertical situado añade percepción simulada, consumo de
+`WorldState`, iniciativa determinista, TTS falso y parada local prioritaria.
+Estas piezas están implementadas únicamente para demostración y no constituyen
+autonomía general ni percepción física.
+
+Piper CLI constituye el primer adaptador TTS local experimental. Su ciclo,
+cancelación y degradación están probados con dobles; además, la síntesis, la
+reproducción, el smoke y la limpieza se validaron con audio real en una
+configuración Debian 13/PipeWire. Esto no demuestra compatibilidad universal.
+Vosk, STT y escucha permanecen planificados.
+
 ## Trabajo activo
 
 El único artefacto ejecutable recuperado es el saludo Velxio experimental con
@@ -35,10 +46,12 @@ creará solo al existir una implementación comprobable.
 | Completada | Integración simulada SIRAH–Cortex | `robot.home` y `robot.stop` atraviesan Cortex y un adaptador simulado |
 | Completada | Gemini por texto | Decisión estructurada opcional, sin autoridad mecánica directa |
 | Completada | Contexto de sesión inicial | Estado reciente acotado, separado de `WorldState` y sin persistencia |
-| Siguiente | Un servo real y Serial | Movimiento limitado, alimentado y detenido de forma segura, con evidencia en hardware |
-| Planeada | Contexto avanzado | Resumen y políticas de privacidad comprobables |
-| Planeada | Voz | Experimento medible de entrada y salida de audio |
-| Planeada | Visión | Adquisición y observación reproducibles antes de reconocimiento persistente |
+| Completada | Primera validación Piper local | Síntesis, reproducción y smoke comprobados en Debian 13/PipeWire |
+| En desarrollo | Voz local | Cancelación física durante reproducción y compatibilidad adicional pendientes |
+| Siguiente | Entrada de voz | STT push-to-talk con privacidad y degradación segura |
+| Después | Visión real | Adquisición y observación reproducibles antes de reconocimiento persistente |
+| Después | Contexto avanzado | Resumen y políticas de privacidad comprobables |
+| Planeada | Hardware físico | Servo real, Serial y validación de alimentación, límites y paro |
 | Planeada | Integración multimodal | Coordinación comprobable de texto, voz, visión y capacidades robóticas |
 | Planeada | Robustecimiento | Manejo de fallos, seguridad, privacidad, observabilidad y validación prolongada |
 
@@ -49,3 +62,7 @@ puertos o adaptadores.
 
 La promoción desde `experiments/` exige objetivo, procedimiento, resultado,
 decisión y evidencia de simulación o hardware.
+La siguiente estabilización de voz validará la cancelación durante reproducción
+física sin incluir modelos. Vosk se mantiene posterior y será push-to-talk, no
+escucha permanente. Semidúplex, visión y hardware robótico real también
+permanecen pendientes.

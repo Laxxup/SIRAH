@@ -8,11 +8,22 @@ la etapa del prototipo experimental.
 
 ### Added
 
-- Ningún cambio todavía.
+- Adaptador TTS local experimental para Piper CLI y reproductor administrados,
+  con cancelación, timeouts, WAV efímero, polling correlacionado y degradación.
+- Comandos de consola para estado y cancelación de voz, guía operativa, ADR y
+  smoke Piper opt-in.
 
 ### Changed
 
-- Ningún cambio todavía.
+- Validación local real de Piper 1.4.2 en Debian 13 con la voz
+  `es_MX-ald-medium`, reproducción mediante PipeWire, smoke de integración
+  completado y limpieza sin WAV ni procesos residuales; la evidencia no implica
+  compatibilidad universal.
+- El circuito situacional se dividió en interacción, simulación, voz, comandos
+  locales y composición de runtime. La memoria social ahora expira, se poda y
+  confirma saludos al finalizar el TTS simulado.
+- El contrato de voz separa estado operacional de resultado terminal y usa
+  `operation_id`; `PendingSpeech` ya no conserva el texto hablado.
 
 ### Planned
 
@@ -40,6 +51,11 @@ funcional.
   capacidades habilitadas y snapshot operativo de lectura.
 - Comandos locales para estado, componentes, capacidades, contexto, eventos,
   limpieza y cierre.
+- Percepción de presencia simulada integrada mediante eventos públicos y
+  `WorldState` de Cortex.
+- Memoria de interacción, iniciativa de saludo determinista, cooldown, modo
+  silencio, autonomía y TTS simulado cancelable.
+- Router local prioritario para `stop`, `para` y `detente`.
 - Historia del proyecto y reglas para recuperar conocimiento heredado.
 
 ### Changed

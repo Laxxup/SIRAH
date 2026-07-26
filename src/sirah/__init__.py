@@ -39,6 +39,9 @@ from .system import (
     PresentSystem,
     SystemSnapshot,
 )
+from .interaction import InitiativeAction, InitiativeDecision, InteractionMemory, evaluate_initiative
+from .situational_runtime import SituationalCoordinator
+from .speech import SpeechOutputPort
 
 __all__ = [
     "CapabilityCatalog",
@@ -66,11 +69,17 @@ __all__ = [
     "IntelligenceTimeoutError",
     "IntelligenceUnavailableError",
     "InvalidIntelligenceResponseError",
+    "InitiativeAction",
+    "InitiativeDecision",
+    "InteractionMemory",
     "ParameterDefinition",
     "PresentContext",
     "PresentSystem",
     "SessionContextStore",
+    "SituationalCoordinator",
+    "SpeechOutputPort",
     "SirahApplicationError",
     "SystemSnapshot",
+    "evaluate_initiative",
     "create_default_catalog",
 ]
