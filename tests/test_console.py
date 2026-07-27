@@ -2,10 +2,13 @@
 
 from importlib.util import module_from_spec, spec_from_file_location
 from io import StringIO
+import os
 from pathlib import Path
+import threading
 
 import pytest
 from sirah.simulated_robot import SimulatedRobotAdapter
+from sirah.speech_input import SpeechRecognitionEvent, SpeechRecognitionEventKind
 
 
 CONSOLE_PATH = Path(__file__).parents[1] / "examples" / "interactive_conversation.py"
@@ -117,3 +120,145 @@ def test_piper_degraded_keeps_text_console_running() -> None:
     assert "disponible=False" in output
     assert "solo está disponible para el proveedor fake" in output
     assert "Puedo conversar por texto" in output
+
+
+def test_posix_console_drains_stt_without_another_input_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created = threading.Event()
+    started = threading.Event()
+    publish = threading.Event()
+    delivered = threading.Event()
+
+    class ControlledRuntime:
+        available = True
+        active = False
+        state = type("State", (), {"value": "idle"})()
+
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            self.operation_id = "stt-controlled"
+            self.sent = False
+            created.set()
+
+        def start(self) -> str:
+            self.active = True
+            started.set()
+            return self.operation_id
+
+        def poll(self) -> SpeechRecognitionEvent | None:
+            if publish.is_set() and not self.sent:
+                self.sent = True
+                self.active = False
+                delivered.set()
+                return SpeechRecognitionEvent(
+                    self.operation_id,
+                    SpeechRecognitionEventKind.FINAL,
+                    text="hola",
+                )
+            return None
+
+        def finalize(self, expected_operation_id: str | None = None) -> bool:
+            return False
+
+        def cancel(self, expected_operation_id: str | None = None) -> bool:
+            return False
+
+        def close(self) -> None:
+            self.active = False
+
+    monkeypatch.setattr(console, "SpeechInputRuntime", ControlledRuntime)
+    read_fd, write_fd = os.pipe()
+    input_stream = os.fdopen(read_fd, "r", encoding="utf-8")
+    output = StringIO()
+    result: list[int] = []
+    thread = threading.Thread(
+        target=lambda: result.append(
+            console.run(
+                ["--speech-input-provider", "fake"],
+                input_stream=input_stream,
+                output_stream=output,
+            )
+        )
+    )
+    thread.start()
+    assert created.wait(1)
+    os.write(write_fd, b"/escuchar\n")
+    assert started.wait(1)
+    publish.set()
+    assert delivered.wait(1)
+    os.close(write_fd)
+    thread.join(1)
+    assert not thread.is_alive()
+    input_stream.close()
+    assert result == [0]
+    text = output.getvalue()
+    assert text.count("Entrada terminal: final.") == 1
+    assert text.count("Puedo conversar por texto") == 1
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["/escuchar", "/escuchar-finalizar", "/escuchar-cancelar", "/escucha-estado"],
+)
+def test_ptt_commands_degrade_with_provider_none(command: str) -> None:
+    output = run_console(f"{command}\n/salir\n")
+    assert "Traceback" not in output
+
+
+def test_vosk_missing_model_degrades_to_text() -> None:
+    output = run_console(
+        "hola\n/salir\n", ["--speech-input-provider", "vosk"]
+    )
+    assert "Vosk sin modelo" in output
+    assert "Puedo conversar por texto" in output
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["--sample-rate", "0", "--vosk-model", "missing"],
+        ["--sample-rate", "-1", "--vosk-model", "missing"],
+        ["--sample-rate", "texto", "--vosk-model", "missing"],
+        ["--arecord-bin", "", "--vosk-model", "missing"],
+        ["--arecord-bin", "definitely-missing-arecord", "--vosk-model", "missing"],
+        ["--audio-input-device", "", "--vosk-model", "missing"],
+        ["--audio-input-device", "hw:0;other", "--vosk-model", "missing"],
+        ["--vosk-model", "definitely/missing/model"],
+    ],
+)
+def test_invalid_vosk_console_configuration_degrades_to_text(
+    arguments: list[str],
+) -> None:
+    output = run_console(
+        "hola\n/salir\n",
+        ["--speech-input-provider", "vosk", *arguments],
+    )
+    assert "Configuración Vosk inválida; continúa el modo texto." in output
+    assert "Puedo conversar por texto" in output
+    assert "Traceback" not in output
+
+
+def test_all_ptt_commands_with_fake_provider_close_orderly() -> None:
+    output = run_console(
+        "/escucha-estado\n/escuchar\n/escuchar-finalizar\n"
+        "/escuchar-cancelar\n/escucha-estado\n/salir\n",
+        ["--speech-input-provider", "fake"],
+    )
+    assert "Escucha iniciada:" in output
+    assert "Finalización solicitada:" in output
+    assert "Cancelación solicitada:" in output
+    assert output.count("Entrada terminal:") <= 1
+    assert "Traceback" not in output
+
+
+def test_stringio_no_fileno_path_reads_terminal_line_without_newline() -> None:
+    output = run_console("/escucha-estado", ["--speech-input-provider", "none"])
+    assert "ENTRADA: proveedor=none." in output
+    assert "Traceback" not in output
+
+
+def test_console_source_has_no_sleep_or_busy_spin_contract() -> None:
+    source = CONSOLE_PATH.read_text(encoding="utf-8")
+    assert "time.sleep" not in source
+    assert "sleep(" not in source
+    assert "selector.select(self._timeout)" in source
