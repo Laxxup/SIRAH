@@ -1,13 +1,13 @@
 # Changelog
 
-La evolución anterior a este repositorio se resume en
-[`docs/history.md`](docs/history.md). No se asignan versiones retrospectivas a
-la etapa del prototipo experimental.
-
 ## [Unreleased]
 
 ### Added
 
+- Entrada local Vosk push-to-talk con captura PCM `arecord` cancelable,
+  importación tardía, límites defensivos y smoke opt-in.
+- Turnos semidúplex INPUT/OUTPUT mediante lease correlacionado y polling no
+  bloqueante en la consola.
 - Adaptador TTS local experimental para Piper CLI y reproductor administrados,
   con cancelación, timeouts, WAV efímero, polling correlacionado y degradación.
 - Comandos de consola para estado y cancelación de voz, guía operativa, ADR y
@@ -15,6 +15,11 @@ la etapa del prototipo experimental.
 
 ### Changed
 
+- Piper conserva atómicamente la primera causa terminal y la captura arecord
+  mantiene cleanup acotado incluso ante fallos de procesos, selector o streams.
+- La captura arecord traduce fallos de `poll()` y la consola conserva el modo
+  texto ante argumentos o recursos Vosk inválidos.
+- Ownership único y esperas acotadas para cleanup de STT, arecord y Piper.
 - Validación local real de Piper 1.4.2 en Debian 13 con la voz
   `es_MX-ald-medium`, reproducción mediante PipeWire, smoke de integración
   completado y limpieza sin WAV ni procesos residuales; la evidencia no implica
@@ -24,6 +29,8 @@ la etapa del prototipo experimental.
   confirma saludos al finalizar el TTS simulado.
 - El contrato de voz separa estado operacional de resultado terminal y usa
   `operation_id`; `PendingSpeech` ya no conserva el texto hablado.
+- Matrices adversariales repetibles cubren first-cause-wins, cleanup excepcional,
+  stop vocal integrado, semidúplex y degradación de consola sin esperas reales.
 
 ### Planned
 

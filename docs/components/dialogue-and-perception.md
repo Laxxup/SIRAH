@@ -1,7 +1,7 @@
 # Conversación, visión y percepción
 
 - Estado: En desarrollo
-- Validación: TTS validado con dobles; audio físico no validado
+- Validación: TTS y Vosk PTT validados con dobles; micrófono no validado
 
 ## Propósito y alcance
 
@@ -16,10 +16,10 @@ eventos estructurados. Ninguna interfaz ni proveedor está adoptado.
 
 ## Hardware, software y dependencias
 
-Gemini textual y Piper CLI tienen adaptadores concretos. Piper usa un modelo y
-reproductor externos; no incluye voces ni valida altavoz físico. No existe
-implementación local de Vosk, STT, cámara u OpenCV. Los eventos genéricos de
-Cortex no demuestran esas capacidades.
+Gemini textual, Piper CLI y Vosk PTT tienen adaptadores concretos. Piper usa un
+modelo y reproductor externos; Vosk usa modelo y `arecord` externos. No se
+incluyen modelos ni se validan altavoz o micrófono físicos. No existe
+implementación local de cámara u OpenCV.
 
 ## Seguridad y pruebas
 
@@ -29,5 +29,5 @@ reproducibles.
 
 ## Próximos pasos
 
-Validar Piper en audio local. Para entrada de voz, elegir después un caso de uso
-push-to-talk medible; no añadir escucha permanente.
+Validar Vosk con micrófono local mediante el smoke opt-in. No añadir escucha
+permanente, wake word ni AEC sin requisitos y pruebas separados.

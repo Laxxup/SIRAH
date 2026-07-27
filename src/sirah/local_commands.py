@@ -16,7 +16,10 @@ class StopResult:
 class LocalStopRouter:
     _STOP_WORDS = frozenset({"stop", "para", "detente", "detén"})
     def matches(self, text: str) -> bool:
-        return text.strip().casefold().rstrip(".!?") in self._STOP_WORDS
+        normalized = text.strip().casefold()
+        if normalized[-1:] in ".!?":
+            normalized = normalized[:-1]
+        return normalized in self._STOP_WORDS
     def route(self, text: str, *, speech: SpeechOutputPort, runner: CapabilityRunner, request_id: str) -> StopResult:
         if not self.matches(text):
             return StopResult(False, False, None, "not_local_stop")

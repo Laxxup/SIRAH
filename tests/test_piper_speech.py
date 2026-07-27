@@ -9,7 +9,13 @@ from typing import Any
 
 import pytest
 
+from sirah.audio_turn import (
+    AudioTurnCoordinator,
+    AudioTurnLease,
+    AudioTurnState,
+)
 from sirah.errors import SpeechBusyError, SpeechUnavailableError
+from sirah.guarded_speech import GuardedSpeechOutput
 from sirah.piper_speech import PiperSpeechConfig, PiperSpeechOutput
 from sirah.speech import SpeechOutcome, SpeechState
 
@@ -449,3 +455,349 @@ def test_close_waits_until_worker_has_finished(
     worker = adapter._worker
     assert worker is not None and not worker.is_alive()
     assert adapter.state is SpeechState.CLOSED
+
+
+def test_concurrent_cancel_and_close_have_one_cleanup_and_terminal_callback(
+    configured: PiperSpeechConfig,
+) -> None:
+    process = FakeProcess(None, ignore_terminate=True)
+    terminal_ids: list[str] = []
+    adapter = PiperSpeechOutput(
+        configured,
+        process_factory=Factory(process),
+        on_terminal=terminal_ids.append,
+    )
+    operation_id = adapter.start("hello")
+    barrier = threading.Barrier(3)
+
+    def cancel() -> None:
+        barrier.wait()
+        adapter.stop(operation_id)
+
+    def close() -> None:
+        barrier.wait()
+        adapter.close()
+
+    threads = [threading.Thread(target=cancel), threading.Thread(target=close)]
+    for thread in threads:
+        thread.start()
+    barrier.wait()
+    for thread in threads:
+        thread.join(1)
+        assert not thread.is_alive()
+    join(adapter)
+    assert process.calls == ["terminate", "wait", "kill", "wait"]
+    assert terminal_ids == [operation_id]
+    completion = adapter.poll()
+    assert completion and completion.outcome is SpeechOutcome.CANCELLED
+
+
+class GatedPollProcess(FakeProcess):
+    def __init__(self, returncode: int) -> None:
+        super().__init__(None)
+        self.result = returncode
+        self.poll_entered = threading.Event()
+        self.allow_poll = threading.Event()
+
+    def poll(self) -> int | None:
+        self.poll_entered.set()
+        assert self.allow_poll.wait(1)
+        self.returncode = self.result
+        self.done.set()
+        return self.returncode
+
+
+@pytest.mark.parametrize(
+    ("returncode", "outcome"),
+    [(0, SpeechOutcome.COMPLETED), (7, SpeechOutcome.FAILED)],
+)
+def test_physical_terminal_claimed_before_late_cancel_wins_atomically(
+    configured: PiperSpeechConfig,
+    returncode: int,
+    outcome: SpeechOutcome,
+) -> None:
+    process = GatedPollProcess(returncode)
+    terminal: list[str] = []
+
+    class GatedFactory(Factory):
+        def __call__(self, argv: list[str], **kwargs: Any) -> FakeProcess:
+            result = super().__call__(argv, **kwargs)
+            if len(self.calls) == 1 and "--output_file" in argv:
+                Path(argv[argv.index("--output_file") + 1]).write_bytes(b"wav")
+            return result
+
+    adapter = PiperSpeechOutput(
+        configured,
+        process_factory=GatedFactory(
+            process, *([FakeProcess(0)] if returncode == 0 else [])
+        ),
+        on_terminal=terminal.append,
+    )
+    operation_id = adapter.start("hello")
+    assert process.poll_entered.wait(1)
+    process.allow_poll.set()
+    join(adapter)
+    assert not adapter.stop(operation_id)
+    completion = adapter.poll()
+    assert completion and completion.outcome is outcome
+    assert adapter.poll() is None
+    assert terminal == [operation_id]
+
+
+def test_cancel_claimed_before_physical_terminal_wins_atomically(
+    configured: PiperSpeechConfig,
+) -> None:
+    process = GatedPollProcess(0)
+    adapter = PiperSpeechOutput(configured, process_factory=Factory(process))
+    operation_id = adapter.start("hello")
+    assert process.poll_entered.wait(1)
+    assert adapter.stop(operation_id)
+    process.allow_poll.set()
+    join(adapter)
+    completion = adapter.poll()
+    assert completion and completion.outcome is SpeechOutcome.CANCELLED
+    assert adapter.poll() is None
+
+
+def test_timeout_claimed_before_late_cancel_is_stable(
+    configured: PiperSpeechConfig,
+) -> None:
+    values = iter((0.0, 2.0, 3.0))
+    adapter = PiperSpeechOutput(
+        configured,
+        process_factory=Factory(FakeProcess(None)),
+        clock=lambda: next(values, 3.0),
+    )
+    operation_id = adapter.start("hello")
+    join(adapter)
+    assert not adapter.stop(operation_id)
+    completion = adapter.poll()
+    assert completion
+    assert completion.outcome is SpeechOutcome.TIMEOUT
+    assert completion.safe_reason == "synthesis_timeout"
+    assert adapter.poll() is None
+
+
+class CountingAudioTurnCoordinator(AudioTurnCoordinator):
+    def __init__(self) -> None:
+        super().__init__()
+        self.releases = 0
+
+    def release(self, lease: AudioTurnLease) -> bool:
+        released = super().release(lease)
+        self.releases += int(released)
+        return released
+
+
+class ObservingGuardedSpeechOutput(GuardedSpeechOutput):
+    def __init__(
+        self,
+        driver: PiperSpeechOutput,
+        turns: AudioTurnCoordinator,
+    ) -> None:
+        self.terminal: list[str] = []
+        self.terminal_committed = threading.Event()
+        super().__init__(driver, turns)
+
+    def _on_terminal(self, operation_id: str) -> None:
+        self.terminal.append(operation_id)
+        super()._on_terminal(operation_id)
+        self.terminal_committed.set()
+
+
+class ExceptionalCleanupProcess(FakeProcess):
+    def __init__(self, fault: str) -> None:
+        super().__init__(None, ignore_terminate=True)
+        self.fault = fault
+        self.wait_count = 0
+        self.poll_entered = threading.Event()
+        self.allow_poll = threading.Event()
+
+    def poll(self) -> int | None:
+        self.poll_entered.set()
+        assert self.allow_poll.wait(1)
+        if self.fault == "poll":
+            raise RuntimeError("private")
+        return super().poll()
+
+    def terminate(self) -> None:
+        self.calls.append("terminate")
+        if self.fault == "terminate":
+            raise RuntimeError("private")
+
+    def wait(self, timeout: float | None = None) -> int:
+        self.calls.append("wait")
+        self.wait_count += 1
+        if self.fault == "wait" and self.wait_count == 1:
+            raise RuntimeError("private")
+        if self.fault == "wait_final" and self.wait_count >= 2:
+            raise RuntimeError("private")
+        if self.returncode is None:
+            raise subprocess.TimeoutExpired("fake", timeout or 0.0)
+        return self.returncode
+
+    def kill(self) -> None:
+        self.calls.append("kill")
+        if self.fault == "kill":
+            raise RuntimeError("private")
+        self.returncode = -9
+        self.done.set()
+
+
+def guarded_piper(
+    configured: PiperSpeechConfig,
+    process: ExceptionalCleanupProcess,
+) -> tuple[
+    PiperSpeechOutput,
+    ObservingGuardedSpeechOutput,
+    CountingAudioTurnCoordinator,
+]:
+    adapter = PiperSpeechOutput(
+        configured,
+        process_factory=Factory(process),
+    )
+    turns = CountingAudioTurnCoordinator()
+    guarded = ObservingGuardedSpeechOutput(adapter, turns)
+    return adapter, guarded, turns
+
+
+def assert_one_terminal_and_no_output_lease(
+    adapter: PiperSpeechOutput,
+    guarded: ObservingGuardedSpeechOutput,
+    turns: CountingAudioTurnCoordinator,
+    operation_id: str,
+    expected_outcome: SpeechOutcome,
+    expected_reason: str,
+) -> None:
+    completion = guarded.poll()
+    assert completion and completion.operation_id == operation_id
+    assert completion.outcome is expected_outcome
+    assert completion.safe_reason == expected_reason
+    assert guarded.poll() is None
+    assert guarded.terminal == [operation_id]
+    assert turns.releases == 1
+    assert turns.snapshot().state is AudioTurnState.IDLE
+    assert turns.snapshot().lease is None
+    assert adapter._process is None
+
+
+def test_poll_failure_wins_before_late_cancel(
+    configured: PiperSpeechConfig,
+) -> None:
+    process = ExceptionalCleanupProcess("poll")
+    adapter, guarded, turns = guarded_piper(configured, process)
+    operation_id = guarded.start("private")
+    assert process.poll_entered.wait(1)
+    process.allow_poll.set()
+    assert guarded.terminal_committed.wait(1)
+    assert not guarded.stop(operation_id)
+    join(adapter)
+    assert_one_terminal_and_no_output_lease(
+        adapter,
+        guarded,
+        turns,
+        operation_id,
+        SpeechOutcome.FAILED,
+        "synthesis_poll_failed",
+    )
+
+
+def test_cancel_wins_before_poll_failure(
+    configured: PiperSpeechConfig,
+) -> None:
+    process = ExceptionalCleanupProcess("poll")
+    adapter, guarded, turns = guarded_piper(configured, process)
+    operation_id = guarded.start("private")
+    assert process.poll_entered.wait(1)
+    assert guarded.stop(operation_id)
+    process.allow_poll.set()
+    assert guarded.terminal_committed.wait(1)
+    join(adapter)
+    assert_one_terminal_and_no_output_lease(
+        adapter,
+        guarded,
+        turns,
+        operation_id,
+        SpeechOutcome.CANCELLED,
+        "cancelled",
+    )
+
+
+@pytest.mark.parametrize(
+    "fault", ["terminate", "wait", "kill", "wait_final"]
+)
+def test_cleanup_exception_matrix_is_translated_and_terminal_once(
+    configured: PiperSpeechConfig, fault: str
+) -> None:
+    process = ExceptionalCleanupProcess(fault)
+    adapter, guarded, turns = guarded_piper(configured, process)
+    operation_id = guarded.start("private")
+    assert process.poll_entered.wait(1)
+    assert guarded.stop(operation_id)
+    process.allow_poll.set()
+    assert guarded.terminal_committed.wait(1)
+    join(adapter)
+    assert_one_terminal_and_no_output_lease(
+        adapter,
+        guarded,
+        turns,
+        operation_id,
+        SpeechOutcome.CANCELLED,
+        "cancelled",
+    )
+    assert process.calls.count("terminate") <= 1
+    assert process.calls.count("kill") <= 1
+
+
+def test_wav_unlink_failure_does_not_replace_natural_terminal(
+    configured: PiperSpeechConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_unlink = Path.unlink
+
+    def fail_wav_unlink(self: Path, missing_ok: bool = False) -> None:
+        if self.suffix == ".wav":
+            raise OSError("private")
+        original_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", fail_wav_unlink)
+    terminal: list[str] = []
+    adapter = PiperSpeechOutput(
+        configured,
+        process_factory=Factory(FakeProcess(0), FakeProcess(0)),
+        on_terminal=terminal.append,
+    )
+    operation_id = adapter.start("private")
+    join(adapter)
+    completion = adapter.poll()
+    assert completion and completion.outcome is SpeechOutcome.COMPLETED
+    assert completion.safe_reason == "playback_completed"
+    assert adapter.poll() is None
+    assert terminal == [operation_id]
+
+
+def test_late_finish_a_cannot_change_active_b_or_duplicate_callback(
+    configured: PiperSpeechConfig,
+) -> None:
+    terminal: list[str] = []
+    second = FakeProcess(None)
+    adapter = PiperSpeechOutput(
+        configured,
+        process_factory=Factory(FakeProcess(0), FakeProcess(0), second),
+        on_terminal=terminal.append,
+    )
+    operation_a = adapter.start("A")
+    join(adapter)
+    assert adapter.poll() is not None
+    operation_b = adapter.start("B")
+    assert operation_a != operation_b
+    assert adapter.active
+    adapter._finish(operation_a, SpeechOutcome.COMPLETED, "stale")
+    assert adapter.active
+    assert adapter._operation_id == operation_b
+    assert adapter.poll() is None
+    assert adapter.stop(operation_b)
+    join(adapter)
+    completion = adapter.poll()
+    assert completion and completion.operation_id == operation_b
+    assert completion.outcome is SpeechOutcome.CANCELLED
+    assert terminal == [operation_a, operation_b]

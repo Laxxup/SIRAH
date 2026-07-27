@@ -42,6 +42,23 @@ from .system import (
 from .interaction import InitiativeAction, InitiativeDecision, InteractionMemory, evaluate_initiative
 from .situational_runtime import SituationalCoordinator
 from .speech import SpeechOutputPort
+from .audio_turn import (
+    AudioTurnCoordinator,
+    AudioTurnDirection,
+    AudioTurnLease,
+    AudioTurnState,
+)
+from .speech_input import (
+    PcmCapturePort,
+    PcmReadKind,
+    PcmReadResult,
+    RecognitionUpdate,
+    RecognitionUpdateKind,
+    SpeechInputState,
+    SpeechRecognitionEvent,
+    SpeechRecognitionEventKind,
+    SpeechRecognizerPort,
+)
 
 __all__ = [
     "CapabilityCatalog",
@@ -78,6 +95,19 @@ __all__ = [
     "SessionContextStore",
     "SituationalCoordinator",
     "SpeechOutputPort",
+    "AudioTurnCoordinator",
+    "AudioTurnDirection",
+    "AudioTurnLease",
+    "AudioTurnState",
+    "PcmCapturePort",
+    "PcmReadKind",
+    "PcmReadResult",
+    "RecognitionUpdate",
+    "RecognitionUpdateKind",
+    "SpeechInputState",
+    "SpeechRecognitionEvent",
+    "SpeechRecognitionEventKind",
+    "SpeechRecognizerPort",
     "SirahApplicationError",
     "SystemSnapshot",
     "evaluate_initiative",

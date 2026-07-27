@@ -14,6 +14,7 @@ dependencies = ["sirah-cortex==0.1.0a1"]
 
 [project.optional-dependencies]
 gemini = ["google-genai", "pydantic"]
+stt-vosk = ["vosk>=0.3.45,<0.4"]
 dev = ["build", "google-genai", "mypy", "pydantic", "pytest", "ruff"]
 
 [tool.setuptools.packages.find]

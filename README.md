@@ -35,6 +35,7 @@ La distribución `sirah`, importable como `sirah`, demuestra actualmente:
 - percepción de presencia simulada a través de eventos públicos de Cortex;
 - iniciativa de saludo determinista y TTS simulado cancelable;
 - TTS local Piper experimental, opcional y degradable, mediante subprocess;
+- entrada local Vosk PTT experimental, opcional y degradable, mediante `arecord`;
 - router local prioritario para órdenes exactas de parada.
 
 `robot.home` y `robot.stop` son las capacidades garantizadas. `arm.greet` está
@@ -82,10 +83,18 @@ externos, no forman parte de la instalación base. La configuración, evidencia 
 smoke local están en [la guía de Piper](docs/piper.md). SIRAH no descarga ni
 empaqueta modelos.
 
+La entrada Vosk es opt-in mediante el extra `stt-vosk`; texto continúa como
+predeterminado y disponible ante cualquier degradación. Usa PTT semidúplex,
+modelo externo y no persiste audio. Consulta [la guía de Vosk](docs/vosk.md).
+
 Comandos locales: `/ayuda`, `/estado`, `/componentes`, `/capacidades`,
 `/contexto`, `/eventos`, `/limpiar`, `/presencia [clave]`, `/ausencia`,
 `/evaluar`, `/silencio [on|off]`, `/autonomia [on|off]`, `/detener`,
-`/voz-fin`, `/voz-estado`, `/voz-detener` y `/salir`. Las órdenes exactas
+`/voz-fin`, `/voz-estado`, `/voz-detener`, `/escuchar`,
+`/escuchar-finalizar`, `/escuchar-cancelar`, `/escucha-estado` y `/salir`.
+La entrada de voz es únicamente push-to-talk semidúplex: `none` es el proveedor
+predeterminado y Vosk es experimental, sin validación física del micrófono.
+No implementa wake word, AEC, manos libres ni escucha continua. Las órdenes exactas
 `stop`, `para` y `detente` también
 se resuelven localmente antes de la inteligencia. No llegan al proveedor ni
 controlan hardware directamente.
@@ -137,14 +146,14 @@ opcional y no se ejecuta implícitamente.
 | Piper TTS | Implementado, experimental | Audio real validado localmente en Debian 13; no universal | `docs/piper.md` |
 | Brazo simulado | Provisional | Solo con `--enable-greet` | `arm.greet` |
 | Cámara | No configurada | Sin implementación | `perception.camera` |
-| Micrófono | No configurado | Sin implementación | `input.microphone` |
+| Micrófono | No configurado | Runtime Vosk probado con dobles; captura física no validada | `docs/vosk.md` |
 | Altavoz del robot | No configurado | La prueba Piper usó audio local externo | `output.speaker` |
 | Memoria persistente | No configurada | Sin SQLite ni archivos | `memory.persistent` |
 | Hardware real | No configurado | Sin firmware o transporte | `robot.physical` |
 | Saludo Velxio con un servo | Experimental | Validado en simulación | `experiments/velxio/greet_person_preview/` |
 | Controlador facial ESP32/PCA9685 | Planeado | No validado | Inventario proporcionado por el equipo |
 | ESP32-CAM | Planeado | No validado | Sin implementación local encontrada |
-| Entrada de voz (STT) | Planeado | No validado | Sin implementación local |
+| Entrada de voz (STT) | Implementado, experimental | Vosk PTT semidúplex validado en simulación; micrófono no validado | `docs/vosk.md` |
 | Visión y percepción | Planeado | No validado | Sin implementación local encontrada |
 
 El experimento Velxio procede del commit de Cortex
@@ -154,12 +163,13 @@ seis artefactos ejecutables y de simulación coinciden por SHA-256; el README de
 esta copia es deliberadamente más completo y constituye su documentación
 autoritativa.
 
-No existe firmware estable para siete servos, Vosk, cámara, MQTT o Serial
-concreto. Piper existe como adaptador CLI experimental, sin modelo incluido, y
+No existe firmware estable para siete servos, cámara, MQTT o Serial concreto.
+Vosk existe como adaptador PTT experimental sin modelo incluido; Piper existe
+como adaptador CLI experimental, sin modelo incluido, y
 su síntesis y reproducción se validaron en una configuración Debian 13 concreta.
-Gemini existe únicamente como integración textual opcional; no se presentan
-entrada de voz, conversación por voz completa, visión o hardware robótico real
-como implementados.
+Gemini existe únicamente como integración textual opcional. La entrada Vosk
+implementada no constituye conversación manos libres ni valida micrófono,
+visión o hardware robótico real.
 
 ## Hardware conocido
 
@@ -179,8 +189,9 @@ No existe evidencia local de validación física ni calibraciones.
 - `experiments/`: prototipos sin promover a integración estable.
 - `docs/roadmap.md`: trabajo activo y criterios de promoción.
 
-No existen todavía paquetes de STT, visión, firmware, GUI ni hardware. TTS
-cuenta con el contrato, fake y adaptador Piper experimentales descritos arriba.
+No existen todavía wake word, AEC, escucha continua, visión, firmware estable,
+GUI ni hardware validado. STT cuenta con runtime Vosk PTT experimental y TTS
+con contrato, fake y adaptador Piper.
 
 ## Decisiones abiertas
 

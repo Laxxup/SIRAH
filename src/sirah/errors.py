@@ -21,6 +21,18 @@ class SpeechUnavailableError(SpeechError):
     """El proveedor de voz no acepta operaciones."""
 
 
+class AudioTurnBusyError(SpeechBusyError):
+    """La otra dirección posee el turno local de audio."""
+
+
+class SpeechStartError(SpeechError):
+    """Una operación de voz no pudo completar su inicio atómico."""
+
+
+class SpeechInputError(SpeechError):
+    """Error seguro del runtime de entrada de voz."""
+
+
 class CapabilityRejectedError(SirahApplicationError):
     """La política local rechazó una solicitud de capacidad."""
 

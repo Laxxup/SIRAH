@@ -1,0 +1,3 @@
+include docs/vosk.md
+include docs/architecture/ADR-006-vosk-ptt-audio-turns.md
+include docs/architecture/boundaries.md

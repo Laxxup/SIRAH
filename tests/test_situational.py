@@ -157,6 +157,37 @@ def test_stop_router_is_conservative() -> None:
     assert not router.matches("¿Qué significa detener?")
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "stop",
+        "para",
+        "detente",
+        "detén",
+        " STOP ",
+        "DetÉn!",
+        " para. ",
+    ],
+)
+def test_stop_router_accepts_only_complete_normalized_orders(text: str) -> None:
+    assert LocalStopRouter().matches(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "stop...",
+        "no te detengas",
+        "puedes parar",
+        "para para",
+        "detente ahora",
+        "st",
+    ],
+)
+def test_stop_router_rejects_non_exact_or_partial_phrases(text: str) -> None:
+    assert not LocalStopRouter().matches(text)
+
+
 class CountingIntelligence:
     def __init__(self) -> None:
         self.calls = 0

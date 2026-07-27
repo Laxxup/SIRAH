@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from itertools import count
 from time import monotonic
+from collections.abc import Callable
 
 from sirah_cortex import Event, EventType
 from sirah_cortex.domain.world_state import KnowledgeKind
@@ -43,6 +44,22 @@ class FakeSpeechOutput:
     _operation_id: str | None = None
     _completion: SpeechCompletion | None = None
     _ids: count = field(default_factory=lambda: count(1), repr=False)
+    _on_operation_accepted: Callable[[str], None] = field(
+        default=lambda _operation_id: None, repr=False
+    )
+    _on_terminal: Callable[[str], None] = field(
+        default=lambda _operation_id: None, repr=False
+    )
+
+    def set_lifecycle_hooks(
+        self,
+        on_operation_accepted: Callable[[str], None],
+        on_terminal: Callable[[str], None],
+    ) -> None:
+        if self.active:
+            raise SpeechBusyError("No se pueden cambiar hooks con TTS activo.")
+        self._on_operation_accepted = on_operation_accepted
+        self._on_terminal = on_terminal
 
     @property
     def state(self) -> SpeechState:
@@ -66,9 +83,15 @@ class FakeSpeechOutput:
         if self.active or self._completion is not None:
             raise SpeechBusyError("TTS ya está activo.")
         operation_id = f"fake-speech-{next(self._ids)}"
-        self.spoken_texts.append(text)
         self._operation_id = operation_id
         self._state = SpeechState.PLAYING
+        try:
+            self._on_operation_accepted(operation_id)
+        except Exception:
+            self._operation_id = None
+            self._state = SpeechState.IDLE
+            raise
+        self.spoken_texts.append(text)
         return operation_id
 
     def stop(self, expected_operation_id: str | None = None) -> bool:
@@ -85,8 +108,11 @@ class FakeSpeechOutput:
         self._finish(SpeechOutcome.CANCELLED, "cancelled")
         return True
 
-    def complete(self) -> None:
+    def complete(self) -> bool:
+        if not self.active:
+            return False
         self._finish(SpeechOutcome.COMPLETED, "playback_completed")
+        return True
 
     def fail(self) -> None:
         self._finish(SpeechOutcome.FAILED, "simulated_failure")
@@ -97,12 +123,14 @@ class FakeSpeechOutput:
     def _finish(self, outcome: SpeechOutcome, reason: str) -> None:
         if self._operation_id is None:
             return
+        operation_id = self._operation_id
         self._completion = SpeechCompletion(
-            self._operation_id, outcome, reason, None
+            operation_id, outcome, reason, None
         )
         self._operation_id = None
         if self._state is not SpeechState.CLOSED:
             self._state = SpeechState.IDLE
+        self._on_terminal(operation_id)
 
     def poll(self) -> SpeechCompletion | None:
         completion = self._completion
