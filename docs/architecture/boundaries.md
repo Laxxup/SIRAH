@@ -65,10 +65,14 @@ Gemini no decide reglas obvias de saludo.
 ## Voz
 
 `SpeechOutputPort`, `FakeSpeechOutput` y el adaptador Piper pertenecen a SIRAH.
+La adquisición PCM, el reconocimiento local y el runtime PTT son puertos
+separados de SIRAH. Todos los turnos INPUT/OUTPUT usan leases correlacionados;
+Cortex no se modifica ni recibe PCM.
 TTS no es movimiento mecánico y no se fuerza dentro de `RobotPort`. El fake no
 usa subprocess, audio, threads ni red. Piper y el reproductor son procesos
 directos externos administrados; el worker nunca modifica `InteractionMemory`.
-STT, Vosk, escucha permanente y streaming están fuera de alcance.
+Vosk PTT y captura arecord están implementados experimentalmente. Escucha
+permanente, wake word, AEC y streaming están fuera de alcance.
 
 ## Funcionamiento degradado
 
@@ -96,8 +100,8 @@ de 600 segundos y máximo de 128 entradas. Una clave de simulación como
 
 `PresentSystem` es una proyección de lectura de `InteractionMemory`. El saludo
 hablado (`interaction.greet`) no requiere `arm.greet`, que representa un gesto
-mecánico opcional. Piper está implementado experimentalmente sin validación
-física; Vosk sigue planificado.
+mecánico opcional. Piper y Vosk PTT están implementados experimentalmente; el
+micrófono Vosk no se ha validado físicamente.
 
 La memoria valida TTL y capacidad positivos, y el cooldown no puede ser
 negativo. La poda se persiste antes de evaluar iniciativas. Una reproducción

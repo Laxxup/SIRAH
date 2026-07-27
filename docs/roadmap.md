@@ -26,7 +26,8 @@ Piper CLI constituye el primer adaptador TTS local experimental. Su ciclo,
 cancelación y degradación están probados con dobles; además, la síntesis, la
 reproducción, el smoke y la limpieza se validaron con audio real en una
 configuración Debian 13/PipeWire. Esto no demuestra compatibilidad universal.
-Vosk, STT y escucha permanecen planificados.
+Vosk PTT y el semidúplex software están implementados experimentalmente con
+pruebas simuladas; la validación física del micrófono permanece pendiente.
 
 ## Trabajo activo
 
@@ -47,8 +48,8 @@ creará solo al existir una implementación comprobable.
 | Completada | Gemini por texto | Decisión estructurada opcional, sin autoridad mecánica directa |
 | Completada | Contexto de sesión inicial | Estado reciente acotado, separado de `WorldState` y sin persistencia |
 | Completada | Primera validación Piper local | Síntesis, reproducción y smoke comprobados en Debian 13/PipeWire |
-| En desarrollo | Voz local | Cancelación física durante reproducción y compatibilidad adicional pendientes |
-| Siguiente | Entrada de voz | STT push-to-talk con privacidad y degradación segura |
+| En desarrollo | Voz local | Validación física de captura Vosk y cancelación Piper durante reproducción pendientes |
+| Completada experimental | Entrada de voz | STT Vosk push-to-talk, privacidad efímera y degradación segura |
 | Después | Visión real | Adquisición y observación reproducibles antes de reconocimiento persistente |
 | Después | Contexto avanzado | Resumen y políticas de privacidad comprobables |
 | Planeada | Hardware físico | Servo real, Serial y validación de alimentación, límites y paro |
@@ -62,7 +63,11 @@ puertos o adaptadores.
 
 La promoción desde `experiments/` exige objetivo, procedimiento, resultado,
 decisión y evidencia de simulación o hardware.
-La siguiente estabilización de voz validará la cancelación durante reproducción
-física sin incluir modelos. Vosk se mantiene posterior y será push-to-talk, no
-escucha permanente. Semidúplex, visión y hardware robótico real también
-permanecen pendientes.
+La siguiente estabilización de voz validará captura real y cancelación durante
+reproducción física sin incluir modelos. El semidúplex software ya está
+implementado; escucha permanente, wake word, AEC, visión y hardware robótico
+real permanecen pendientes.
+# Entrada de voz local
+
+Vosk PTT semidúplex está en estado experimental y validado solo en simulación.
+Quedan fuera escucha continua, wake word, AEC e identificación de hablante.
