@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import selectors
 import os
 import sys
 from typing import TextIO
 
 from sirah import (
+    AudioTurnCoordinator,
     CapabilityRunner,
     ConversationOrchestrator,
     SessionContextStore,
@@ -30,6 +32,20 @@ from sirah.situational import (
 )
 from sirah.simulation import FakeClock, FakeSpeechOutput, SimulatedPerception
 from sirah.piper_speech import PiperSpeechConfig, PiperSpeechOutput
+from sirah.arecord_capture import ArecordPcmCapture, ArecordPcmConfig
+from sirah.guarded_speech import (
+    FakeSpeechOutputLabControl,
+    GuardedSpeechOutput,
+    SpeechOutputLabControlPort,
+)
+from sirah.speech_fakes import FakePcmCapture, FakeSpeechRecognizer
+from sirah.speech_input import (
+    RecognitionUpdate,
+    RecognitionUpdateKind,
+    SpeechInputRuntime,
+)
+from sirah.speech_input_coordinator import SpeechInputCoordinator
+from sirah.vosk_recognizer import VoskRecognizerConfig, VoskSpeechRecognizer
 from sirah.situational_runtime import build_situational_runtime
 
 
@@ -46,6 +62,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--piper-model")
     parser.add_argument("--piper-config")
     parser.add_argument("--audio-player")
+    parser.add_argument(
+        "--speech-input-provider", choices=("none", "fake", "vosk"), default="none"
+    )
+    parser.add_argument("--vosk-model")
+    parser.add_argument("--audio-input-device")
+    parser.add_argument("--sample-rate", default="16000")
+    parser.add_argument("--arecord-bin", default="arecord")
     return parser
 
 
@@ -174,13 +197,16 @@ def _local_command(
     *,
     system: PresentSystem,
     coordinator: SituationalCoordinator,
+    lab_control: SpeechOutputLabControlPort | None = None,
+    speech_input: SpeechInputCoordinator | None = None,
     session_id: str,
     output: TextIO,
 ) -> bool:
     if command == "/ayuda":
         print(
             "Comandos: /ayuda /estado /componentes /capacidades /contexto "
-            "/eventos /limpiar /voz-estado /voz-detener /salir",
+            "/eventos /limpiar /voz-estado /voz-detener /voz-fin "
+            "/escuchar /escuchar-finalizar /escuchar-cancelar /escucha-estado /salir",
             file=output,
         )
     elif command == "/estado":
@@ -255,12 +281,37 @@ def _local_command(
         system.record_interaction_state(coordinator.memory)
         print(f"Voz detenida: {cancelled}.", file=output)
     elif command == "/voz-fin":
-        if isinstance(coordinator.speech, FakeSpeechOutput):
-            coordinator.finish_speech()
+        if lab_control is not None:
+            lab_control.complete_active()
+            coordinator.sync_speech()
             system.record_interaction_state(coordinator.memory)
             print("TTS simulado finalizado.", file=output)
         else:
             print("/voz-fin solo está disponible para el proveedor fake.", file=output)
+    elif command == "/escuchar":
+        if speech_input is None:
+            print("Entrada de voz no configurada; texto disponible.", file=output)
+        else:
+            try:
+                print(f"Escucha iniciada: {speech_input.start()}.", file=output)
+            except Exception as error:
+                print(f"Escucha rechazada: {type(error).__name__}.", file=output)
+    elif command == "/escuchar-finalizar":
+        accepted = speech_input is not None and speech_input.input.finalize()
+        print(f"Finalización solicitada: {accepted}.", file=output)
+    elif command == "/escuchar-cancelar":
+        accepted = speech_input is not None and speech_input.input.cancel()
+        print(f"Cancelación solicitada: {accepted}.", file=output)
+    elif command == "/escucha-estado":
+        if speech_input is None:
+            print("ENTRADA: proveedor=none.", file=output)
+        else:
+            print(
+                f"ENTRADA: disponible={speech_input.input.available}; "
+                f"activo={speech_input.input.active}; "
+                f"estado={speech_input.input.state.value}.",
+                file=output,
+            )
     elif command == "/salir":
         print("SIRAH Laboratory Console finalizada.", file=output)
         return True
@@ -299,6 +350,57 @@ def _print_result(result: object, system: PresentSystem, session_id: str, output
     _print_snapshot(system, session_id, output)
 
 
+def _drain_speech_input(
+    speech_input: SpeechInputCoordinator | None,
+    *,
+    system: PresentSystem,
+    session_id: str,
+    output: TextIO,
+) -> None:
+    if speech_input is None:
+        return
+    while True:
+        dispatch = speech_input.poll()
+        if dispatch is None:
+            return
+        event = dispatch.event
+        if event.kind.value == "partial":
+            continue
+        print(f"Entrada terminal: {event.kind.value}.", file=output)
+        if dispatch.conversation is not None:
+            system.record_result(dispatch.conversation)
+            _print_result(dispatch.conversation, system, session_id, output)
+        elif dispatch.stop is not None:
+            print("Stop vocal local procesado.", file=output)
+
+
+class _ConsoleInput:
+    """Lectura seleccionable en POSIX y determinista para streams de pruebas."""
+
+    def __init__(self, stream: TextIO, *, timeout_seconds: float = 0.05) -> None:
+        self._stream = stream
+        self._selector: selectors.BaseSelector | None = None
+        try:
+            descriptor = stream.fileno()
+            selector = selectors.DefaultSelector()
+            selector.register(descriptor, selectors.EVENT_READ)
+            self._selector = selector
+        except (AttributeError, OSError, TypeError, ValueError):
+            if "selector" in locals():
+                selector.close()
+        self._timeout = timeout_seconds
+
+    def read(self) -> tuple[bool, str | None]:
+        if self._selector is not None and not self._selector.select(self._timeout):
+            return False, None
+        line = self._stream.readline()
+        return True, line if line else None
+
+    def close(self) -> None:
+        if self._selector is not None:
+            self._selector.close()
+
+
 def run(
     argv: list[str] | None = None,
     *,
@@ -325,10 +427,12 @@ def run(
     robot.connect()
     robot.read_events()
     contexts = SessionContextStore()
+    turns = AudioTurnCoordinator()
+    lab_control: SpeechOutputLabControlPort | None = None
     if args.speech_provider == "piper":
         from pathlib import Path
 
-        speech = PiperSpeechOutput(
+        concrete_speech = PiperSpeechOutput(
             PiperSpeechConfig.from_environment(
                 piper_executable=args.piper_bin,
                 model_path=Path(args.piper_model) if args.piper_model else None,
@@ -337,7 +441,52 @@ def run(
             )
         )
     else:
-        speech = FakeSpeechOutput()
+        concrete_speech = FakeSpeechOutput()
+        lab_control = FakeSpeechOutputLabControl(concrete_speech.complete)
+    speech = GuardedSpeechOutput(concrete_speech, turns)
+    speech_runtime: SpeechInputRuntime | None = None
+    if args.speech_input_provider == "fake":
+        speech_runtime = SpeechInputRuntime(
+            FakePcmCapture(),
+            FakeSpeechRecognizer(
+                final=RecognitionUpdate(RecognitionUpdateKind.NO_SPEECH)
+            ),
+            turns,
+        )
+    elif args.speech_input_provider == "vosk":
+        if not args.vosk_model:
+            print("Vosk sin modelo; continúa el modo texto.", file=output_stream)
+        else:
+            from pathlib import Path
+
+            try:
+                sample_rate = int(args.sample_rate)
+                if not 8000 <= sample_rate <= 48000:
+                    raise ValueError("sample_rate_out_of_range")
+                capture = ArecordPcmCapture(
+                    ArecordPcmConfig(
+                        executable=args.arecord_bin,
+                        device=args.audio_input_device,
+                        sample_rate=sample_rate,
+                    )
+                )
+                recognizer = VoskSpeechRecognizer(
+                    VoskRecognizerConfig(Path(args.vosk_model), sample_rate)
+                )
+                if not capture.available or not recognizer.available:
+                    capture.close()
+                    recognizer.close()
+                    raise ValueError("speech_input_unavailable")
+                speech_runtime = SpeechInputRuntime(
+                    capture,
+                    recognizer,
+                    turns,
+                )
+            except (OSError, ValueError):
+                print(
+                    "Configuración Vosk inválida; continúa el modo texto.",
+                    file=output_stream,
+                )
     system = PresentSystem(
         components=build_components(
             provider=provider_name,
@@ -367,12 +516,42 @@ def run(
         components=system.components,
         clock=FakeClock(0.0),
     )
+    speech_input = (
+        SpeechInputCoordinator(
+            speech_runtime,
+            stop_router=coordinator.stop_router,
+            speech_output=speech,
+            runner=coordinator.runner,
+            conversation=orchestrator,
+            session_id=args.session_id,
+        )
+        if speech_runtime is not None
+        else None
+    )
     system.record_interaction_state(coordinator.memory)
     print("SIRAH Laboratory Console — escribe /ayuda para comenzar.", file=output_stream)
+    console_input = _ConsoleInput(input_stream)
     try:
-        for raw_line in input_stream:
+        while True:
+            _drain_speech_input(
+                speech_input,
+                system=system,
+                session_id=args.session_id,
+                output=output_stream,
+            )
             coordinator.sync_speech()
             system.record_interaction_state(coordinator.memory)
+            ready, raw_line = console_input.read()
+            if not ready:
+                continue
+            if raw_line is None:
+                _drain_speech_input(
+                    speech_input,
+                    system=system,
+                    session_id=args.session_id,
+                    output=output_stream,
+                )
+                break
             message = raw_line.strip()
             if not message:
                 continue
@@ -381,11 +560,19 @@ def run(
                     message,
                     system=system,
                     coordinator=coordinator,
+                    lab_control=lab_control,
+                    speech_input=speech_input,
                     session_id=args.session_id,
                     output=output_stream,
                 ):
                     break
                 coordinator.sync_speech()
+                _drain_speech_input(
+                    speech_input,
+                    system=system,
+                    session_id=args.session_id,
+                    output=output_stream,
+                )
                 system.record_interaction_state(coordinator.memory)
                 continue
             if coordinator.stop_router.matches(message):
@@ -409,6 +596,9 @@ def run(
     except KeyboardInterrupt:
         print("\nSIRAH Laboratory Console finalizada.", file=output_stream)
     finally:
+        console_input.close()
+        if speech_runtime is not None:
+            speech_runtime.close()
         speech.close()
         robot.close()
     return 0

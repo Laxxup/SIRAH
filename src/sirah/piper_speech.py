@@ -13,6 +13,7 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import IO, Protocol
 
@@ -37,6 +38,23 @@ class ManagedProcess(Protocol):
 ProcessFactory = Callable[..., ManagedProcess]
 
 
+class _TerminalCause(str, Enum):
+    NATURAL_SUCCESS = "natural_success"
+    NATURAL_FAILURE = "natural_failure"
+    TIMEOUT = "timeout"
+    CANCELLED = "cancelled"
+    CLOSED = "closed"
+
+
+@dataclass(slots=True)
+class _Operation:
+    operation_id: str
+    cause: _TerminalCause | None = None
+    outcome: SpeechOutcome | None = None
+    safe_reason: str | None = None
+    terminal_committed: bool = False
+
+
 @dataclass(frozen=True, slots=True)
 class PiperSpeechConfig:
     piper_executable: str
@@ -46,6 +64,7 @@ class PiperSpeechConfig:
     synthesis_timeout_seconds: float = 30.0
     playback_timeout_seconds: float = 30.0
     termination_grace_seconds: float = 1.0
+    close_join_timeout_seconds: float = 2.0
     temporary_directory: Path | None = None
 
     def __post_init__(self) -> None:
@@ -53,6 +72,7 @@ class PiperSpeechConfig:
             "synthesis_timeout_seconds",
             "playback_timeout_seconds",
             "termination_grace_seconds",
+            "close_join_timeout_seconds",
         ):
             value = getattr(self, name)
             if (
@@ -110,18 +130,35 @@ class PiperSpeechOutput:
         *,
         process_factory: ProcessFactory = subprocess.Popen,
         clock: Callable[[], float] = time.monotonic,
+        on_operation_accepted: Callable[[str], None] | None = None,
+        on_terminal: Callable[[str], None] | None = None,
     ) -> None:
         self._config = config
         self._process_factory = process_factory
         self._clock = clock
+        self._on_operation_accepted = on_operation_accepted or (lambda _id: None)
+        self._on_terminal = on_terminal or (lambda _id: None)
         self._lock = threading.Lock()
         self._cancel = threading.Event()
         self._state = SpeechState.IDLE
         self._operation_id: str | None = None
+        self._operation: _Operation | None = None
         self._completion: SpeechCompletion | None = None
         self._worker: threading.Thread | None = None
         self._process: ManagedProcess | None = None
+        self._cleaned_processes: list[ManagedProcess] = []
         self._available, self._unavailable_reason = self._check_availability()
+
+    def set_lifecycle_hooks(
+        self,
+        on_operation_accepted: Callable[[str], None],
+        on_terminal: Callable[[str], None],
+    ) -> None:
+        with self._lock:
+            if self._operation_id is not None:
+                raise SpeechBusyError("No se pueden cambiar hooks con TTS activo.")
+            self._on_operation_accepted = on_operation_accepted
+            self._on_terminal = on_terminal
 
     @property
     def available(self) -> bool:
@@ -156,6 +193,7 @@ class PiperSpeechOutput:
                 raise SpeechBusyError("TTS ya tiene una operación activa.")
             operation_id = uuid.uuid4().hex
             self._operation_id = operation_id
+            self._operation = _Operation(operation_id)
             self._state = SpeechState.SYNTHESIZING
             self._cancel.clear()
             worker = threading.Thread(
@@ -165,8 +203,17 @@ class PiperSpeechOutput:
                 daemon=False,
             )
             self._worker = worker
+        try:
+            self._on_operation_accepted(operation_id)
             worker.start()
-            return operation_id
+        except Exception:
+            with self._lock:
+                self._operation_id = None
+                self._operation = None
+                self._worker = None
+                self._state = SpeechState.IDLE
+            raise
+        return operation_id
 
     def stop(self, expected_operation_id: str | None = None) -> bool:
         with self._lock:
@@ -175,11 +222,15 @@ class PiperSpeechOutput:
                 return False
             if expected_operation_id is not None and expected_operation_id != operation_id:
                 return False
+            if not self._claim_cause_locked(
+                operation_id,
+                _TerminalCause.CANCELLED,
+                SpeechOutcome.CANCELLED,
+                "cancelled",
+            ):
+                return False
             self._state = SpeechState.CANCELLING
             self._cancel.set()
-            process = self._process
-        if process is not None:
-            self._terminate_process(process)
         return True
 
     def poll(self) -> SpeechCompletion | None:
@@ -194,16 +245,23 @@ class PiperSpeechOutput:
                 return
             operation_id = self._operation_id
         if operation_id is not None:
-            self.stop(operation_id)
+            with self._lock:
+                claimed = self._claim_cause_locked(
+                    operation_id,
+                    _TerminalCause.CLOSED,
+                    SpeechOutcome.CANCELLED,
+                    "closed",
+                )
+                if claimed:
+                    self._state = SpeechState.CANCELLING
+                    self._cancel.set()
         with self._lock:
             worker = self._worker
         if worker is not None and worker is not threading.current_thread():
-            worker.join()
+            worker.join(self._config.close_join_timeout_seconds)
         with self._lock:
             self._state = SpeechState.CLOSED
             self._available = False
-            self._operation_id = None
-            self._process = None
 
     def _check_availability(self) -> tuple[bool, str | None]:
         if self._resolve_executable(self._config.piper_executable) is None:
@@ -278,7 +336,7 @@ class PiperSpeechOutput:
                 try:
                     wav_path.unlink(missing_ok=True)
                 except OSError:
-                    outcome, reason = SpeechOutcome.FAILED, "temporary_wav_cleanup_failed"
+                    pass
             self._finish(operation_id, outcome, reason)
 
     def _synthesize(
@@ -309,17 +367,15 @@ class PiperSpeechOutput:
                 "synthesis",
             )
         finally:
-            if process.poll() is None:
-                self._terminate_process(process)
-            else:
-                process.wait()
+            self._cleanup_process(process)
             self._clear_process(process)
 
     def _play(
         self, operation_id: str, wav_path: Path
     ) -> tuple[SpeechOutcome, str]:
-        if self._cancel.is_set():
-            return SpeechOutcome.CANCELLED, "cancelled"
+        decided = self._decided_result(operation_id)
+        if decided is not None:
+            return decided
         self._set_state(operation_id, SpeechState.PLAYING)
         try:
             process = self._spawn([*self._config.player_argv, str(wav_path)])
@@ -333,6 +389,7 @@ class PiperSpeechOutput:
                 "playback",
             )
         finally:
+            self._cleanup_process(process)
             self._clear_process(process)
 
     def _spawn(self, argv: list[str], **kwargs: object) -> ManagedProcess:
@@ -357,46 +414,146 @@ class PiperSpeechOutput:
         phase: str,
     ) -> tuple[SpeechOutcome, str]:
         while True:
-            return_code = process.poll()
+            try:
+                return_code = process.poll()
+            except Exception:
+                self._cleanup_process(process)
+                return self._claim_or_decided(
+                    operation_id,
+                    _TerminalCause.NATURAL_FAILURE,
+                    SpeechOutcome.FAILED,
+                    f"{phase}_poll_failed",
+                )
             if return_code is not None:
-                process.wait()
-                if self._cancel.is_set():
-                    return SpeechOutcome.CANCELLED, "cancelled"
-                if return_code == 0:
-                    return SpeechOutcome.COMPLETED, f"{phase}_completed"
-                return SpeechOutcome.FAILED, f"{phase}_failed"
+                outcome = (
+                    SpeechOutcome.COMPLETED
+                    if return_code == 0
+                    else SpeechOutcome.FAILED
+                )
+                reason = (
+                    f"{phase}_completed"
+                    if return_code == 0
+                    else f"{phase}_failed"
+                )
+                if return_code == 0 and phase == "synthesis":
+                    decided = (outcome, reason)
+                else:
+                    decided = self._claim_or_decided(
+                        operation_id,
+                        _TerminalCause.NATURAL_SUCCESS
+                        if return_code == 0
+                        else _TerminalCause.NATURAL_FAILURE,
+                        outcome,
+                        reason,
+                    )
+                self._cleanup_process(process)
+                return decided
             if self._cancel.is_set():
-                self._terminate_process(process)
-                return SpeechOutcome.CANCELLED, "cancelled"
+                self._cleanup_process(process)
+                cancel_result = self._decided_result(operation_id)
+                return cancel_result or (SpeechOutcome.CANCELLED, "cancelled")
             remaining = deadline - self._clock()
             if remaining <= 0:
-                self._terminate_process(process)
-                if self._cancel.is_set():
-                    return SpeechOutcome.CANCELLED, "cancelled"
-                return SpeechOutcome.TIMEOUT, f"{phase}_timeout"
+                decided = self._claim_or_decided(
+                    operation_id,
+                    _TerminalCause.TIMEOUT,
+                    SpeechOutcome.TIMEOUT,
+                    f"{phase}_timeout",
+                )
+                self._cleanup_process(process)
+                return decided
             self._cancel.wait(min(remaining, 0.05))
             with self._lock:
                 if self._operation_id != operation_id:
                     return SpeechOutcome.CANCELLED, "cancelled"
 
-    def _terminate_process(self, process: ManagedProcess) -> None:
-        if process.poll() is not None:
-            process.wait()
+    def _claim_or_decided(
+        self,
+        operation_id: str,
+        cause: _TerminalCause,
+        outcome: SpeechOutcome,
+        safe_reason: str,
+    ) -> tuple[SpeechOutcome, str]:
+        with self._lock:
+            self._claim_cause_locked(
+                operation_id, cause, outcome, safe_reason
+            )
+            operation = self._operation
+            if operation is None or operation.operation_id != operation_id:
+                return outcome, safe_reason
+            assert operation.outcome is not None
+            assert operation.safe_reason is not None
+            return operation.outcome, operation.safe_reason
+
+    def _decided_result(
+        self, operation_id: str
+    ) -> tuple[SpeechOutcome, str] | None:
+        with self._lock:
+            operation = self._operation
+            if (
+                operation is None
+                or operation.operation_id != operation_id
+                or operation.cause is None
+            ):
+                return None
+            assert operation.outcome is not None
+            assert operation.safe_reason is not None
+            return operation.outcome, operation.safe_reason
+
+    def _claim_cause_locked(
+        self,
+        operation_id: str,
+        cause: _TerminalCause,
+        outcome: SpeechOutcome,
+        safe_reason: str,
+    ) -> bool:
+        operation = self._operation
+        if (
+            operation is None
+            or operation.operation_id != operation_id
+            or operation.terminal_committed
+        ):
+            return False
+        if operation.cause is None:
+            operation.cause = cause
+            operation.outcome = outcome
+            operation.safe_reason = safe_reason
+        return operation.cause is cause
+
+    def _cleanup_process(self, process: ManagedProcess) -> None:
+        with self._lock:
+            if any(cleaned is process for cleaned in self._cleaned_processes):
+                return
+            self._cleaned_processes.append(process)
+        try:
+            running = process.poll() is None
+        except Exception:
+            running = True
+        if not running:
+            try:
+                process.wait(timeout=self._config.termination_grace_seconds)
+            except Exception:
+                pass
             return
         try:
             process.terminate()
-        except OSError:
+        except Exception:
             pass
         try:
             process.wait(timeout=self._config.termination_grace_seconds)
             return
         except subprocess.TimeoutExpired:
             pass
+        except Exception:
+            pass
         try:
             process.kill()
-        except OSError:
+        except Exception:
             pass
-        process.wait()
+        try:
+            process.wait(timeout=self._config.termination_grace_seconds)
+        except Exception:
+            pass
 
     def _clear_process(self, process: ManagedProcess) -> None:
         with self._lock:
@@ -415,11 +572,35 @@ class PiperSpeechOutput:
             operation_id, outcome, reason, self._clock()
         )
         with self._lock:
-            if self._operation_id != operation_id:
+            operation = self._operation
+            if (
+                self._operation_id != operation_id
+                or operation is None
+                or operation.operation_id != operation_id
+                or operation.terminal_committed
+            ):
                 return
+            if operation.cause is None:
+                cause = (
+                    _TerminalCause.NATURAL_SUCCESS
+                    if outcome is SpeechOutcome.COMPLETED
+                    else _TerminalCause.NATURAL_FAILURE
+                )
+                self._claim_cause_locked(operation_id, cause, outcome, reason)
+            assert operation.outcome is not None
+            assert operation.safe_reason is not None
+            operation.terminal_committed = True
+            completion = SpeechCompletion(
+                operation_id,
+                operation.outcome,
+                operation.safe_reason,
+                self._clock(),
+            )
             if self._completion is None:
                 self._completion = completion
             self._operation_id = None
+            self._operation = None
             self._process = None
             if self._state is not SpeechState.CLOSED:
                 self._state = SpeechState.IDLE
+        self._on_terminal(operation_id)
