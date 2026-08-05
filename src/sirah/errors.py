@@ -1,61 +1,121 @@
-"""Errores propios de la aplicación SIRAH."""
+"""SIRAH typed error hierarchy."""
+
+from __future__ import annotations
+
+__all__ = [
+    "SirahError",
+    "SirahFatalError",
+    "SirahRecoverableError",
+    "BridgeError",
+    "BridgeConnectionError",
+    "BridgeTimeoutError",
+    "IntelligenceError",
+    "IntelligenceUnavailableError",
+    "IntelligenceTimeoutError",
+    "IntelligenceRateLimitError",
+    "InvalidIntelligenceResponseError",
+    "PerceptionError",
+    "PerceptionUnavailableError",
+    "SpeechError",
+    "SpeechBusyError",
+    "SpeechUnavailableError",
+    "SpeechInputError",
+    "AudioTurnBusyError",
+    "ActionError",
+    "CapabilityRejectedError",
+    "CapabilityExecutionError",
+    "CapabilityNotFoundError",
+    "SituationalError",
+]
 
 
-class SirahApplicationError(Exception):
-    """Error base controlado por SIRAH."""
+class SirahError(Exception):
+    """Base for all SIRAH exceptions."""
 
 
-class SituationalError(SirahApplicationError):
-    """Error controlado del circuito situado."""
+class SirahFatalError(SirahError):
+    """Non-recoverable error that should halt the system."""
 
 
-class SpeechError(SituationalError):
-    """Error controlado del contrato de voz."""
+class SirahRecoverableError(SirahError):
+    """Error that may be retried or degraded gracefully."""
 
 
-class SpeechBusyError(SpeechError):
-    """El proveedor de voz ya tiene una operación activa."""
+class BridgeError(SirahError):
+    """Communication error between laptop and edge device."""
 
 
-class SpeechUnavailableError(SpeechError):
-    """El proveedor de voz no acepta operaciones."""
+class BridgeConnectionError(BridgeError):
+    """Cannot establish or maintain connection to edge."""
 
 
-class AudioTurnBusyError(SpeechBusyError):
-    """La otra dirección posee el turno local de audio."""
+class BridgeTimeoutError(BridgeError):
+    """Edge operation timed out."""
 
 
-class SpeechStartError(SpeechError):
-    """Una operación de voz no pudo completar su inicio atómico."""
-
-
-class SpeechInputError(SpeechError):
-    """Error seguro del runtime de entrada de voz."""
-
-
-class CapabilityRejectedError(SirahApplicationError):
-    """La política local rechazó una solicitud de capacidad."""
-
-
-class CapabilityExecutionError(SirahApplicationError):
-    """Cortex o el adaptador no pudo ejecutar una capacidad autorizada."""
-
-
-class IntelligenceError(SirahApplicationError):
-    """Error base del proveedor o de su respuesta."""
+class IntelligenceError(SirahRecoverableError):
+    """LLM reasoning failure."""
 
 
 class IntelligenceUnavailableError(IntelligenceError):
-    """El proveedor, modelo o configuración no está disponible."""
+    """LLM service is unreachable."""
 
 
 class IntelligenceTimeoutError(IntelligenceError):
-    """El proveedor excedió el tiempo permitido."""
+    """LLM request exceeded deadline."""
 
 
 class IntelligenceRateLimitError(IntelligenceError):
-    """El proveedor rechazó la solicitud por cuota o frecuencia."""
+    """LLM rate limit hit."""
 
 
 class InvalidIntelligenceResponseError(IntelligenceError):
-    """La respuesta del proveedor no satisface el contrato de SIRAH."""
+    """LLM returned malformed or unparseable output."""
+
+
+class PerceptionError(SirahRecoverableError):
+    """Perception pipeline failure."""
+
+
+class PerceptionUnavailableError(PerceptionError):
+    """Camera or sensor unavailable."""
+
+
+class SpeechError(SirahRecoverableError):
+    """TTS or STT operation failure."""
+
+
+class SpeechBusyError(SpeechError):
+    """Speech output is in use and cannot accept a new request."""
+
+
+class SpeechUnavailableError(SpeechError):
+    """Speech subsystem is not available."""
+
+
+class SpeechInputError(SpeechError):
+    """STT capture or recognition failure."""
+
+
+class AudioTurnBusyError(SpeechError):
+    """Audio turn lease is held by another party."""
+
+
+class ActionError(SirahRecoverableError):
+    """Robot action pipeline failure."""
+
+
+class CapabilityRejectedError(ActionError):
+    """Policy denied the requested capability."""
+
+
+class CapabilityExecutionError(ActionError):
+    """Capability execution failed in Cortex or RobotPort."""
+
+
+class CapabilityNotFoundError(ActionError):
+    """Requested capability is not registered."""
+
+
+class SituationalError(SirahError):
+    """Situational coordinator error."""

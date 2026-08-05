@@ -1,3 +1,10 @@
-include docs/vosk.md
-include docs/architecture/ADR-006-vosk-ptt-audio-turns.md
-include docs/architecture/boundaries.md
+include LICENSE
+include README.md
+include CHANGELOG.md
+include CONTRIBUTING.md
+include AGENTS.md
+graft docs
+graft hardware
+graft scripts
+exclude experiments
+prune experiments

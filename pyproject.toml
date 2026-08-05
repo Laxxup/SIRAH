@@ -4,18 +4,40 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sirah"
-version = "0.1.0.dev0"
-description = "Safe conversational orchestration for the SIRAH robotic system"
+version = "0.2.0.dev0"
+description = "Conversational robotic agent with webcam face detection, async voice, and Groq/Ollama intelligence"
 readme = "README.md"
 requires-python = ">=3.13"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-dependencies = ["sirah-cortex==0.1.0a1"]
+dependencies = []
 
 [project.optional-dependencies]
-gemini = ["google-genai", "pydantic"]
-stt-vosk = ["vosk>=0.3.45,<0.4"]
-dev = ["build", "google-genai", "mypy", "pydantic", "pytest", "ruff"]
+groq = ["aiohttp>=3.9"]
+ollama = ["aiohttp>=3.9"]
+perception = ["opencv-python>=4.8", "mediapipe>=0.10", "numpy>=1.24"]
+voice-stt = ["faster-whisper>=1.0"]
+voice-tts = ["gtts>=2.5"]
+voice-full = ["faster-whisper>=1.0", "gtts>=2.5"]
+cortex = ["sirah-cortex==0.1.0a1"]
+full = [
+    "aiohttp>=3.9",
+    "opencv-python>=4.8",
+    "mediapipe>=0.10",
+    "numpy>=1.24",
+    "faster-whisper>=1.0",
+    "gtts>=2.5",
+]
+dev = [
+    "build",
+    "mypy",
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+]
+
+[project.scripts]
+sirah-console = "sirah.console:cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -24,6 +46,8 @@ include = ["sirah*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+asyncio_mode = "auto"
+addopts = ["--tb=short", "-q"]
 
 [tool.mypy]
 python_version = "3.13"
@@ -34,3 +58,7 @@ namespace_packages = true
 [tool.ruff]
 line-length = 88
 target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
+ignore = ["E501"]

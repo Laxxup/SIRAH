@@ -1,47 +1,49 @@
-"""Pruebas del contexto presente en memoria."""
+"""Test ConversationContext."""
 
-from sirah.context import ConversationMessage, SessionContextStore
+from __future__ import annotations
 
-
-def test_context_keeps_recent_messages() -> None:
-    store = SessionContextStore(max_messages=2)
-    for text in ("uno", "dos", "tres"):
-        store.append("session", ConversationMessage("user", text))
-    assert [message.text for message in store.get("session").messages] == [
-        "dos",
-        "tres",
-    ]
+from sirah.core.context import ConversationContext
+from sirah.types import ConversationMessage, PresentContext
 
 
-def test_context_discards_old_messages_by_character_budget() -> None:
-    store = SessionContextStore(max_characters=5)
-    store.append("session", ConversationMessage("user", "abc"))
-    store.append("session", ConversationMessage("assistant", "def"))
-    assert [message.text for message in store.get("session").messages] == ["def"]
+def test_context_add_message() -> None:
+    ctx = ConversationContext(max_messages=8)
+    ctx.add(ConversationMessage(role="user", content="hola"))
+    assert len(ctx.messages) == 1
+    assert ctx.last_user_text == "hola"
 
 
-def test_sessions_do_not_mix() -> None:
-    store = SessionContextStore()
-    store.append("a", ConversationMessage("user", "solo a"))
-    assert store.get("b").messages == ()
+def test_context_trim_messages() -> None:
+    ctx = ConversationContext(max_messages=3)
+    for i in range(5):
+        ctx.add(ConversationMessage(role="user", content=f"msg{i}"))
+    assert len(ctx.messages) == 3
 
 
-def test_last_action_is_updated() -> None:
-    store = SessionContextStore()
-    context = store.update_action(
-        "session", capability="robot.home", result="succeeded"
-    )
-    assert context.last_requested_capability == "robot.home"
-    assert context.last_capability_result == "succeeded"
+def test_context_last_user_finds_latest() -> None:
+    ctx = ConversationContext()
+    ctx.add(ConversationMessage(role="user", content="primero"))
+    ctx.add(ConversationMessage(role="assistant", content="respuesta"))
+    ctx.add(ConversationMessage(role="user", content="segundo"))
+    assert ctx.last_user_text == "segundo"
 
 
-def test_context_does_not_persist_between_instances() -> None:
-    first = SessionContextStore()
-    first.append("session", ConversationMessage("user", "temporal"))
-    assert SessionContextStore().get("session").messages == ()
+def test_context_is_empty() -> None:
+    ctx = ConversationContext()
+    assert ctx.is_empty
+    ctx.add(ConversationMessage(role="user", content="x"))
+    assert not ctx.is_empty
 
 
-def test_safety_state_is_explicit() -> None:
-    store = SessionContextStore()
-    assert store.set_safety_state("session", "emergency").safety_state == "emergency"
+def test_context_clear() -> None:
+    ctx = ConversationContext()
+    ctx.add(ConversationMessage(role="user", content="x"))
+    ctx.clear()
+    assert ctx.is_empty
 
+
+def test_context_present() -> None:
+    ctx = ConversationContext()
+    assert ctx.present.user_text is None
+    ctx.present = PresentContext(user_text="test", face_count=1)
+    assert ctx.present.face_count == 1

@@ -1,97 +1,92 @@
-"""Contrato y prompt de inteligencia."""
+"""Test intelligence port and adapters."""
+
+from __future__ import annotations
 
 import pytest
 
-from sirah.context import ConversationMessage, PresentContext
-from sirah.errors import InvalidIntelligenceResponseError
-from sirah.fake_intelligence import FakeIntelligenceAdapter
-from sirah.intelligence import (
-    DecisionType,
-    IntelligenceDecision,
+from sirah.intelligence.fake_adapter import FakeIntelligence
+from sirah.intelligence.demo_adapter import LaboratoryIntelligence
+from sirah.types import (
+    ConversationMessage,
     IntelligenceRequest,
-    IntelligenceResponse,
-    build_system_prompt,
+    IntelligenceDecision,
+    DecisionType,
 )
 
 
-def decision(**overrides: object) -> IntelligenceDecision:
-    values: dict[str, object] = {
-        "decision_type": "respond_only",
-        "response_text": "Hola.",
-        "capability": None,
-        "parameters": {},
-        "reason_code": None,
-    }
-    values.update(overrides)
-    return IntelligenceDecision.from_mapping(values)
+@pytest.mark.asyncio
+async def test_fake_intelligence_returns_scripted() -> None:
+    intel = FakeIntelligence(scripted=["respuesta 1", "respuesta 2"])
+    req = IntelligenceRequest(messages=())
+    r1 = await intel.decide(req)
+    r2 = await intel.decide(req)
+    assert r1.decision is not None
+    assert r1.decision.text_response == "respuesta 1"
+    assert r2.decision is not None
+    assert r2.decision.text_response == "respuesta 2"
 
 
-@pytest.mark.parametrize(
-    "decision_type",
-    [DecisionType.RESPOND_ONLY, DecisionType.CLARIFY, DecisionType.REJECT],
-)
-def test_non_mechanical_decisions_are_coherent(
-    decision_type: DecisionType,
-) -> None:
-    assert decision(decision_type=decision_type.value).capability is None
+@pytest.mark.asyncio
+async def test_fake_intelligence_repeats_last() -> None:
+    intel = FakeIntelligence(scripted=["única"])
+    req = IntelligenceRequest(messages=())
+    await intel.decide(req)
+    r2 = await intel.decide(req)
+    assert r2.decision is not None
+    assert r2.decision.text_response == "única"
 
 
-def test_request_capability_requires_capability() -> None:
-    with pytest.raises(InvalidIntelligenceResponseError, match="exige"):
-        decision(decision_type="request_capability")
+@pytest.mark.asyncio
+async def test_fake_intelligence_health() -> None:
+    intel = FakeIntelligence()
+    assert await intel.health() is True
 
 
-def test_non_request_rejects_capability() -> None:
-    with pytest.raises(InvalidIntelligenceResponseError, match="Solo"):
-        decision(capability="robot.home")
+@pytest.mark.asyncio
+async def test_fake_intelligence_reset() -> None:
+    intel = FakeIntelligence(scripted=["a", "b"])
+    req = IntelligenceRequest(messages=())
+    await intel.decide(req)
+    assert intel._index == 1
+    intel.reset()
+    assert intel._index == 0
 
 
-def test_additional_fields_are_rejected() -> None:
-    with pytest.raises(InvalidIntelligenceResponseError, match="adicionales"):
-        decision(unexpected=True)
+@pytest.mark.asyncio
+async def test_laboratory_greeting() -> None:
+    intel = LaboratoryIntelligence()
+    msgs = (ConversationMessage(role="user", content="Hola"),)
+    req = IntelligenceRequest(messages=msgs)
+    r = await intel.decide(req)
+    assert r.decision is not None
+    assert "Hola" in r.decision.text_response
 
 
-def test_empty_and_oversized_response_are_rejected() -> None:
-    with pytest.raises(InvalidIntelligenceResponseError, match="obligatorio"):
-        decision(response_text="")
-    with pytest.raises(InvalidIntelligenceResponseError, match="límite"):
-        decision(response_text="1234").validate(max_response_characters=3)
+@pytest.mark.asyncio
+async def test_laboratory_farewell() -> None:
+    intel = LaboratoryIntelligence()
+    msgs = (ConversationMessage(role="user", content="Adiós"),)
+    req = IntelligenceRequest(messages=msgs)
+    r = await intel.decide(req)
+    assert r.decision is not None
+    assert "luego" in r.decision.text_response.lower()
 
 
-def test_structurally_invalid_response_is_rejected() -> None:
-    with pytest.raises(InvalidIntelligenceResponseError, match="incompleta"):
-        IntelligenceDecision.from_mapping({"response_text": "hola"})
+@pytest.mark.asyncio
+async def test_laboratory_stop() -> None:
+    intel = LaboratoryIntelligence()
+    msgs = (ConversationMessage(role="user", content="para"),)
+    req = IntelligenceRequest(messages=msgs)
+    r = await intel.decide(req)
+    assert r.decision is not None
+    assert "Deteniéndome" in r.decision.text_response
 
 
-def test_fake_records_requests() -> None:
-    response = IntelligenceResponse(decision(), "fake", "scripted")
-    fake = FakeIntelligenceAdapter([response])
-    request = IntelligenceRequest("hola", PresentContext("s"), ())
-    assert fake.decide(request) is response
-    assert fake.requests == [request]
-
-
-def test_prompt_contains_safe_limited_context_not_secret() -> None:
-    context = PresentContext(
-        session_id="s",
-        messages=(ConversationMessage("user", "hola"),),
-        safety_state="normal",
-    )
-    prompt = build_system_prompt(
-        IntelligenceRequest(
-            "detente",
-            context,
-            (
-                {
-                    "name": "robot.stop",
-                    "description": "Detener.",
-                    "parameters": {},
-                },
-            ),
-        )
-    )
-    assert "robot.stop" in prompt
-    assert "detente" in prompt
-    assert "GEMINI_API_KEY" not in prompt
-    assert "GPIO" in prompt
-
+@pytest.mark.asyncio
+async def test_laboratory_default() -> None:
+    intel = LaboratoryIntelligence()
+    msgs = (ConversationMessage(role="user", content="xyz123"),)
+    req = IntelligenceRequest(messages=msgs)
+    r = await intel.decide(req)
+    assert r.decision is not None
+    assert len(r.decision.text_response) > 0
