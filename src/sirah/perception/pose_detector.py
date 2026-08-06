@@ -2,16 +2,11 @@
 
 from __future__ import annotations
 
-from __future__ import annotations
-
 import asyncio
 import logging
-from typing import TYPE_CHECKING
+from typing import Any
 
 from sirah.types import PoseEstimate
-
-if TYPE_CHECKING:
-    import numpy as np
 
 __all__ = ["PoseDetector"]
 
@@ -30,7 +25,7 @@ class PoseDetector:
         self._model_complexity = model_complexity
         self._min_detection_confidence = min_detection_confidence
         self._min_tracking_confidence = min_tracking_confidence
-        self._pose = None
+        self._pose: Any = None
         self._initialised = False
 
     async def start(self) -> None:
@@ -63,7 +58,8 @@ class PoseDetector:
             return None
 
         loop = asyncio.get_running_loop()
-        rgb = frame_bgr[..., ::-1]
+        frame: Any = frame_bgr
+        rgb: Any = frame[..., ::-1]
 
         def _run() -> PoseEstimate | None:
             results = self._pose.process(rgb)  # type: ignore[union-attr]

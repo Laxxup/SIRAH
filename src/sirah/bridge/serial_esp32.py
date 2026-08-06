@@ -29,7 +29,9 @@ class SerialESP32Bridge:
 
     async def connect(self) -> None:
         try:
-            self._reader, self._writer = await asyncio.open_serial_connection(
+            import serial_asyncio
+
+            self._reader, self._writer = await serial_asyncio.open_serial_connection(
                 url=self._port,
                 baudrate=self._baudrate,
             )

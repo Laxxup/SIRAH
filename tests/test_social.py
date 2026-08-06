@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from sirah.social.memory import InteractionMemory
 from sirah.social.initiative import evaluate_initiative
+from sirah.social.memory import InteractionMemory
 from sirah.types import (
-    InitiativeDecision,
+    FaceDetection,
     InitiativeAction,
     PerceptionFrame,
-    FaceDetection,
 )
 
 

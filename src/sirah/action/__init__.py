@@ -11,6 +11,6 @@ __all__ = [
 ]
 
 from sirah.action.capabilities import CapabilityCatalog, CapabilityPolicy
-from sirah.action.runner import ActionRunner
 from sirah.action.commands import LocalStopRouter
+from sirah.action.runner import ActionRunner
 from sirah.action.simulated import SimulatedRobot

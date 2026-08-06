@@ -7,16 +7,21 @@ import logging
 from time import monotonic
 from typing import Protocol
 
-from sirah.core.context import ConversationContext
-from sirah.core.registry import ComponentRegistry
-
-from sirah.intelligence.port import IntelligencePort
-from sirah.perception.port import PerceptionPort
-from sirah.voice.port import SpeechInputPort, SpeechOutputPort
 from sirah.action.capabilities import CapabilityCatalog, CapabilityPolicy
 from sirah.action.runner import ActionRunner
-
+from sirah.autonomy.mood_engine import MoodEngine, MoodState
+from sirah.core.context import ConversationContext
+from sirah.core.registry import ComponentRegistry
+from sirah.errors import (
+    ActionError,
+    IntelligenceError,
+    PerceptionError,
+    SpeechError,
+)
+from sirah.intelligence.port import IntelligencePort
+from sirah.perception.port import PerceptionPort
 from sirah.types import (
+    CapabilityExecutionResult,
     ComponentId,
     ComponentKind,
     ComponentStatus,
@@ -24,22 +29,13 @@ from sirah.types import (
     ConversationResult,
     IntelligenceDecision,
     IntelligenceRequest,
-    PresentContext,
-    CapabilityExecutionResult,
-    SystemSnapshot,
     PerceptionFrame,
+    PresentContext,
     SpeechCompletion,
     SpeechRecognitionEvent,
+    SystemSnapshot,
 )
-
-from sirah.errors import (
-    SirahError,
-    IntelligenceError,
-    PerceptionError,
-    SpeechError,
-    ActionError,
-    BridgeError,
-)
+from sirah.voice.port import SpeechInputPort, SpeechOutputPort
 
 __all__ = ["SirahOrchestrator"]
 
@@ -66,6 +62,7 @@ class SirahOrchestrator:
         cortex: CortexRuntime | None = None,
         context: ConversationContext | None = None,
         registry: ComponentRegistry | None = None,
+        mood: MoodEngine | None = None,
     ) -> None:
         self._intelligence = intelligence
         self._perception = perception
@@ -77,6 +74,7 @@ class SirahOrchestrator:
         self._cortex = cortex
         self._context = context or ConversationContext()
         self._registry = registry or ComponentRegistry()
+        self._mood = mood
 
         self._registry.register(ComponentKind.CORE, "orchestrator")
         self._registry.register(ComponentKind.INTELLIGENCE, "primary")
@@ -94,6 +92,14 @@ class SirahOrchestrator:
     @property
     def snapshot(self) -> SystemSnapshot:
         return self._registry.snapshot()
+
+    @property
+    def mood(self) -> MoodEngine | None:
+        return self._mood
+
+    def set_mood(self, state: MoodState) -> None:
+        if self._mood is not None:
+            self._mood._state = state
 
     async def start(self) -> None:
         self._running = True
@@ -125,7 +131,10 @@ class SirahOrchestrator:
             ConversationMessage(role="user", content=user_text, timestamp=t0)
         )
 
-        request = IntelligenceRequest(messages=self._context.messages)
+        request = IntelligenceRequest(
+            messages=self._context.messages,
+            system_prompt_override=self._mood.system_prompt if self._mood else None,
+        )
         try:
             response = await self._intelligence.decide(request)
             decision = response.decision
@@ -206,7 +215,7 @@ class SirahOrchestrator:
             return await asyncio.wait_for(
                 self._speech_input.listen(), timeout=timeout
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return SpeechRecognitionEvent(text="", is_final=False, confidence=0.0)
 
     async def perceive(self) -> PerceptionFrame:

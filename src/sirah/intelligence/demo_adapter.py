@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from time import monotonic
 
-from sirah.intelligence.port import IntelligencePort
 from sirah.types import (
+    DecisionType,
+    IntelligenceDecision,
     IntelligenceRequest,
     IntelligenceResponse,
-    IntelligenceDecision,
-    DecisionType,
 )
 
 __all__ = ["LaboratoryIntelligence"]

@@ -22,52 +22,57 @@ componentes disponibles, las capacidades habilitadas, el estado de Cortex y
 los resultados recientes. Esto no describe conciencia humana, sentiencia ni
 experiencia subjetiva.
 
-## Pre-alpha local 0.1.0.dev0
+## Pre-alpha local 0.2.0.dev0
 
 La distribución `sirah`, importable como `sirah`, demuestra actualmente:
 
 - conversación escrita con un proveedor de inteligencia intercambiable;
 - contexto presente limitado y no persistente;
-- decisiones estructuradas de Gemini mediante el SDK `google-genai`;
+- decisiones estructuradas mediante proveedores fake, laboratorio, Groq u
+  Ollama;
 - catálogo y política local de capacidades;
 - ejecución real a través de SIRAH Cortex `0.1.0a1`;
 - un `RobotPort` simulado, determinista y sin hardware.
 - percepción de presencia simulada a través de eventos públicos de Cortex;
 - iniciativa de saludo determinista y TTS simulado cancelable;
 - TTS local Piper experimental, opcional y degradable, mediante subprocess;
-- entrada local Vosk PTT experimental, opcional y degradable, mediante `arecord`;
+- entrada Whisper experimental desde el Web Lab y proveedores fake para tests;
+- percepción Haar experimental con cámara local y `SimulatedPerception`;
+- Web Lab Flask con diagnóstico de micrófono, autonomía visible y snapshot de
+  componentes;
 - router local prioritario para órdenes exactas de parada.
 
 `robot.home` y `robot.stop` son las capacidades garantizadas. `arm.greet` está
 implementada de forma provisional reutilizando el plan mecánico existente en
 Cortex; depende de API provisional y puede cambiar durante la serie pre-alpha.
-Gemini propone una capacidad nominal, pero nunca crea `RobotCommand`, accede a
-`RobotPort` ni decide grados, PWM, GPIO, canales o límites.
+Groq y Ollama proponen decisiones estructuradas, pero nunca crean
+`RobotCommand`, acceden a `RobotPort` ni deciden grados, PWM, GPIO, canales o
+límites.
 
-La versión base funciona sin Gemini:
+La versión base funciona sin un proveedor externo:
 
 ```bash
 python -m pip install .
-python examples/offline_conversation.py
+.venv/bin/python -m pytest -q
 ```
 
-Gemini es opcional:
+Groq es opcional:
 
 ```bash
-python -m pip install ".[gemini]"
-export GEMINI_API_KEY="valor-configurado-fuera-del-repositorio"
-export SIRAH_GEMINI_MODEL="gemini-3.6-flash"  # opcional
+python -m pip install ".[groq]"
+export GROQ_API_KEY="valor-configurado-fuera-del-repositorio"
+export SIRAH_GROQ_MODEL="llama-3.3-70b-versatile"  # opcional
 ```
 
-Si existen ambas claves, `GEMINI_API_KEY` tiene precedencia sobre
-`GOOGLE_API_KEY`. La disponibilidad, las cuotas y los modelos dependen del
-proyecto de Google. Consulta [la guía operativa de Gemini](docs/gemini.md).
+Ollama puede ejecutarse localmente con el extra `ollama`. La disponibilidad,
+las cuotas y los modelos dependen del proveedor. La suite de tests usa
+`laboratory` o `fake` y no accede a la red.
 
 ## SIRAH Laboratory Console
 
 La consola de laboratorio es una demostración interactiva textual, no una
 interfaz definitiva ni un servidor. Conserva una sesión en memoria, permite
-seleccionar el fake o Gemini y muestra la separación entre conversación,
+seleccionar el fake, laboratorio, Groq u Ollama y muestra la separación entre conversación,
 propuesta, validación y ejecución:
 
 ```bash
@@ -83,27 +88,61 @@ externos, no forman parte de la instalación base. La configuración, evidencia 
 smoke local están en [la guía de Piper](docs/piper.md). SIRAH no descarga ni
 empaqueta modelos.
 
-La entrada Vosk es opt-in mediante el extra `stt-vosk`; texto continúa como
-predeterminado y disponible ante cualquier degradación. Usa PTT semidúplex,
-modelo externo y no persiste audio. Consulta [la guía de Vosk](docs/vosk.md).
+La entrada de voz Whisper es opt-in desde el Web Lab; texto continúa como
+predeterminado y disponible ante cualquier degradación. Usa turnos semidúplex,
+un modelo externo y no persiste audio.
 
 Comandos locales: `/ayuda`, `/estado`, `/componentes`, `/capacidades`,
 `/contexto`, `/eventos`, `/limpiar`, `/presencia [clave]`, `/ausencia`,
 `/evaluar`, `/silencio [on|off]`, `/autonomia [on|off]`, `/detener`,
 `/voz-fin`, `/voz-estado`, `/voz-detener`, `/escuchar`,
 `/escuchar-finalizar`, `/escuchar-cancelar`, `/escucha-estado` y `/salir`.
-La entrada de voz es únicamente push-to-talk semidúplex: `none` es el proveedor
-predeterminado y Vosk es experimental, sin validación física del micrófono.
+La entrada de voz es únicamente push-to-talk semidúplex: el fake es el proveedor
+predeterminado y Whisper es experimental, sin validación física universal del
+micrófono.
 No implementa wake word, AEC, manos libres ni escucha continua. Las órdenes exactas
 `stop`, `para` y `detente` también
 se resuelven localmente antes de la inteligencia. No llegan al proveedor ni
 controlan hardware directamente.
 
-La demostración actual reconoce un cuerpo simulado y señala cámara, micrófono,
-altavoz del robot, memoria persistente y hardware físico como no configurados.
-Esto no contradice la reproducción Piper opcional mediante audio local externo.
-La ausencia de esos componentes no impide conversar por texto ni ejecutar las
-capacidades permitidas sobre el robot simulado.
+## SIRAH Web Lab
+
+El laboratorio web expone conversación, cámara en vivo, selección de estado de
+ánimo y grabación desde el navegador. Requiere el extra `full`, `ffmpeg` para
+convertir el audio WebM del navegador y un modelo local de `faster-whisper` para
+transcribir voz:
+
+```bash
+.venv/bin/sirah-web --intel=groq --tts=piper
+```
+
+Abre `http://localhost:5000`. La cámara del laptop usa el dispositivo local;
+el botón de cámara celular envía frames desde el navegador. El Web Lab no guarda
+audio, frames ni conversaciones fuera del contexto temporal de la sesión.
+La autonomía permanece activa en segundo plano y sus intervenciones aparecen en
+el historial de la página. En Firefox, si el micrófono fue bloqueado previamente,
+restablece el permiso desde el candado de `localhost`.
+
+El Web Lab incluye el modo **Mostrar mapeo**: el navegador dibuja sobre la cámara
+las cajas normalizadas de rostros y manos que produce MediaPipe, con color,
+expresión, lateralidad y dedos confirmados. El panel «Contexto enviado a Groq»
+muestra el texto que se inyecta en el chat. Las imágenes permanecen locales; el
+proveedor recibe contexto textual, no los frames.
+
+El contexto visual se refresca inmediatamente antes de responder a texto o voz.
+Las expresiones MediaPipe usan una zona muerta para no quedar bloqueadas por
+ruido del score, y el color de ropa usa una ROI de hombros, mediana y fallback
+cuando la persona está cerca del borde. `VisionLoop` permite ajustar la cadencia
+de rostros con `face_analyze_every`; laptop usa 1 y una Pi 4B puede comenzar con
+3 hasta completar su smoke de rendimiento.
+
+La demostración actual usa MediaPipe Tasks cuando encuentra sus modelos locales
+y cae a Haar cuando no están disponibles; conserva `SimulatedPerception` para
+pruebas sin hardware. El clasificador de ropa usa saturación y HSV para no
+confundir grises cálidos con verde; la sonrisa usa blendshapes e histéresis
+temporal y las manos aportan conteo de dedos. Cámara, altavoz del robot,
+memoria persistente y hardware físico siguen siendo experimentales o no
+configurados según el perfil.
 
 ## Historia del proyecto
 
@@ -134,27 +173,28 @@ opcional y no se ejecuta implícitamente.
 
 | Área | Estado | Validación | Evidencia local |
 |---|---|---|---|
-| Texto, contexto y Cortex simulado | Implementado en pre-alpha | Validado sin red | `src/sirah/`, `tests/`, `examples/` |
-| Gemini por texto | Implementado, opcional | Validado con dobles; smoke vivo opt-in | `src/sirah/gemini.py` |
-| Conversa por texto | Implementado | Fake determinista y consola | `examples/interactive_conversation.py` |
-| Contexto de sesión | Implementado | Memoria temporal acotada | `src/sirah/context.py` |
-| Cortex | Implementado | API real `sirah-cortex==0.1.0a1` | `src/sirah/cortex_integration.py` |
-| Robot simulado | Implementado | `RobotPort` y eventos observables | `src/sirah/simulated_robot.py` |
-| Percepción simulada | Simulado | Evento público y WorldState de Cortex | `SimulatedPerception` |
-| Iniciativa de saludo | Implementado, determinista | Política local con cooldown | `evaluate_initiative` |
+| Texto, contexto y Cortex simulado | Implementado en pre-alpha | Validado sin red | `src/sirah/core/`, `tests/` |
+| Inteligencia fake/laboratorio | Implementado | Dobles deterministas y suite offline | `src/sirah/intelligence/` |
+| Groq y Ollama por texto | Implementado, opcional | Adaptadores opt-in; no se usan en tests | `src/sirah/intelligence/` |
+| Conversación por texto | Implementado | Consola, Web Lab y fakes | `src/sirah/core/orchestrator.py` |
+| Contexto de sesión | Implementado | Memoria temporal acotada | `src/sirah/core/context.py` |
+| Contrato Cortex | Integración preparada | API pública aislada por protocolo | `src/sirah/core/orchestrator.py` |
+| Robot simulado | Implementado | `RobotPort` y políticas locales | `src/sirah/action/` |
+| Percepción simulada | Simulado | Frames deterministas sin hardware | `src/sirah/perception/simulated.py` |
+| Iniciativa y autonomía | Implementado, experimental | Política local y pruebas offline | `src/sirah/autonomy/` |
 | TTS fake | Simulado | Determinista, sin audio real | `FakeSpeechOutput` |
 | Piper TTS | Implementado, experimental | Audio real validado localmente en Debian 13; no universal | `docs/piper.md` |
 | Brazo simulado | Provisional | Solo con `--enable-greet` | `arm.greet` |
-| Cámara | No configurada | Sin implementación | `perception.camera` |
-| Micrófono | No configurado | Runtime Vosk probado con dobles; captura física no validada | `docs/vosk.md` |
+| Cámara laptop | Experimental implementada | Smoke local; MediaPipe Tasks opt-in y Haar fallback | `src/sirah/autonomy/vision_loop.py` |
+| Micrófono | Experimental | Diagnóstico `arecord`; navegador requiere permiso y `ffmpeg`/Whisper | `src/sirah/web_server.py` |
 | Altavoz del robot | No configurado | La prueba Piper usó audio local externo | `output.speaker` |
 | Memoria persistente | No configurada | Sin SQLite ni archivos | `memory.persistent` |
 | Hardware real | No configurado | Sin firmware o transporte | `robot.physical` |
 | Saludo Velxio con un servo | Experimental | Validado en simulación | `experiments/velxio/greet_person_preview/` |
 | Controlador facial ESP32/PCA9685 | Planeado | No validado | Inventario proporcionado por el equipo |
 | ESP32-CAM | Planeado | No validado | Sin implementación local encontrada |
-| Entrada de voz (STT) | Implementado, experimental | Vosk PTT semidúplex validado en simulación; micrófono no validado | `docs/vosk.md` |
-| Visión y percepción | Planeado | No validado | Sin implementación local encontrada |
+| Entrada de voz (STT) | Implementado, experimental | Whisper Web Lab; micrófono depende de permisos y dispositivos | `src/sirah/voice/stt_whisper.py` |
+| Visión y percepción | Experimental implementado | Simulación, MediaPipe Tasks/Haar y smoke local; color/sonrisa/manos | `src/sirah/perception/mediapipe_vision.py` |
 
 El experimento Velxio procede del commit de Cortex
 `ea10d96f3a58cb6b6ccde4ab01bc7ac7ac32c52f` y fue preservado en este
@@ -164,12 +204,12 @@ esta copia es deliberadamente más completo y constituye su documentación
 autoritativa.
 
 No existe firmware estable para siete servos, cámara, MQTT o Serial concreto.
-Vosk existe como adaptador PTT experimental sin modelo incluido; Piper existe
+Whisper existe como adaptador PTT experimental sin modelo incluido; Piper existe
 como adaptador CLI experimental, sin modelo incluido, y
 su síntesis y reproducción se validaron en una configuración Debian 13 concreta.
-Gemini existe únicamente como integración textual opcional. La entrada Vosk
-implementada no constituye conversación manos libres ni valida micrófono,
-visión o hardware robótico real.
+Groq y Ollama son integraciones textuales opcionales. La entrada Whisper no
+constituye conversación manos libres ni valida micrófono, visión o hardware
+robótico real.
 
 ## Hardware conocido
 
@@ -182,16 +222,22 @@ No existe evidencia local de validación física ni calibraciones.
 
 - `docs/architecture/`: decisiones y límites transversales.
 - `docs/components/`: inventario comprobable y estado de componentes.
+- `docs/research/awesome-ros2-adaptation.md`: patrones ROS 2 adaptados sin
+  introducir ROS 2 en el runtime.
+- `docs/research/vision-multiface.md`: evidencia y límites de la percepción
+  multirostro, color y expresión.
+- `docs/research/mediapipe-tasks-vision.md`: modelos locales, manos, blendshapes
+  y restricciones de despliegue en Raspberry Pi 4B.
 - `docs/history.md`: evolución desde el prototipo experimental.
 - `src/sirah/`: aplicación pre-alpha y sus límites de autoridad.
 - `tests/`: pruebas normales sin red.
-- `examples/`: demostración offline y smoke Gemini opt-in.
+- `scripts/`: comandos de demostración y despliegue locales.
 - `experiments/`: prototipos sin promover a integración estable.
 - `docs/roadmap.md`: trabajo activo y criterios de promoción.
 
-No existen todavía wake word, AEC, escucha continua, visión, firmware estable,
-GUI ni hardware validado. STT cuenta con runtime Vosk PTT experimental y TTS
-con contrato, fake y adaptador Piper.
+No existen todavía wake word, AEC, escucha continua, firmware estable, GUI
+definitiva ni hardware validado. STT cuenta con runtime Whisper PTT experimental
+y TTS con contrato, fake y adaptador Piper.
 
 ## Decisiones abiertas
 

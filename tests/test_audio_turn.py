@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+
 import pytest
 
+from sirah.errors import AudioTurnBusyError
 from sirah.voice.coordinator import (
     AudioTurnCoordinator,
     AudioTurnDirection,
 )
-from sirah.errors import AudioTurnBusyError
 
 
 @pytest.mark.asyncio

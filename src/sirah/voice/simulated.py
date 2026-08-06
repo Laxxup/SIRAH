@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from time import monotonic
 
-from sirah.types import SpeechRecognitionEvent, SpeechCompletion
+from sirah.types import SpeechCompletion, SpeechRecognitionEvent
 
 __all__ = ["FakeSpeechInput", "FakeSpeechOutput"]
 

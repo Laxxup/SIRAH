@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
+from sirah.action.capabilities import CapabilityCatalog, CapabilityPolicy
+from sirah.action.runner import ActionRunner
+from sirah.action.simulated import SimulatedRobot
 from sirah.core.orchestrator import SirahOrchestrator
 from sirah.intelligence.fake_adapter import FakeIntelligence
 from sirah.perception.simulated import SimulatedPerception
 from sirah.voice.simulated import FakeSpeechInput, FakeSpeechOutput
-from sirah.action.capabilities import CapabilityCatalog, CapabilityPolicy
-from sirah.action.runner import ActionRunner
-from sirah.action.simulated import SimulatedRobot
 
 
 @pytest.fixture
@@ -73,7 +73,7 @@ async def test_orchestrator_stop_cleans_up(orchestrator: SirahOrchestrator) -> N
 
 @pytest.mark.asyncio
 async def test_orchestrator_capability_decision(orchestrator: SirahOrchestrator) -> None:
-    from sirah.types import IntelligenceDecision, DecisionType
+    from sirah.types import DecisionType, IntelligenceDecision
 
     class CapabilityIntelligence:
         async def health(self) -> bool:

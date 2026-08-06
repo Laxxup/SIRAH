@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sirah.types import InitiativeDecision, InitiativeAction, PerceptionFrame
 from sirah.social.memory import InteractionMemory
+from sirah.types import InitiativeAction, InitiativeDecision, PerceptionFrame
 
 __all__ = ["evaluate_initiative"]
 

@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Protocol
 
-from sirah.types import CapabilityRequest, CapabilityExecutionResult
 from sirah.errors import CapabilityExecutionError
+from sirah.types import CapabilityExecutionResult, CapabilityRequest
 
 __all__ = ["ActionRunner", "RobotPort"]
 
@@ -32,10 +32,7 @@ class ActionRunner:
 
         if translator is not None:
             try:
-                if hasattr(translator, "__call__"):
-                    result = translator(request)
-                else:
-                    result = translator
+                result = translator(request) if callable(translator) else translator
             except Exception as exc:
                 raise CapabilityExecutionError(f"translator failed: {exc}") from exc
         else:

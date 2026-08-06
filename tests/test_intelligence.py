@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from sirah.intelligence.fake_adapter import FakeIntelligence
 from sirah.intelligence.demo_adapter import LaboratoryIntelligence
+from sirah.intelligence.fake_adapter import FakeIntelligence
 from sirah.types import (
     ConversationMessage,
     IntelligenceRequest,
-    IntelligenceDecision,
-    DecisionType,
 )
 
 

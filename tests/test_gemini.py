@@ -5,10 +5,6 @@ from __future__ import annotations
 import pytest
 
 from sirah.intelligence.groq_adapter import GroqIntelligence
-from sirah.errors import (
-    IntelligenceUnavailableError,
-    IntelligenceTimeoutError,
-)
 
 
 @pytest.mark.asyncio

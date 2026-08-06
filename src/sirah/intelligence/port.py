@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
+
 from sirah.types import IntelligenceRequest, IntelligenceResponse
 
 __all__ = ["IntelligencePort"]

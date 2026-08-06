@@ -14,5 +14,6 @@ __pycache__/
 *secret*
 *token*
 local-responses/
+models/*.task
 
 .env

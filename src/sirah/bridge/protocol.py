@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
-from enum import Enum, auto
+from enum import Enum
 from typing import Any
 
 __all__ = ["EdgeMessage", "MessageKind"]
@@ -38,11 +39,41 @@ class EdgeMessage:
     @classmethod
     def from_json(cls, data: str | bytes) -> EdgeMessage:
         if isinstance(data, bytes):
-            data = data.decode("utf-8")
-        obj = json.loads(data)
+            try:
+                data = data.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise ValueError("invalid edge message encoding") from exc
+        try:
+            obj = json.loads(data)
+        except json.JSONDecodeError as exc:
+            raise ValueError("invalid edge message JSON") from exc
+        if not isinstance(obj, dict):
+            raise ValueError("invalid edge message object")
+
+        msg_id = obj.get("msg_id")
+        kind_name = obj.get("kind")
+        payload = obj.get("payload", {})
+        timestamp = obj.get("timestamp", 0.0)
+        if not isinstance(msg_id, str) or not msg_id.strip():
+            raise ValueError("invalid edge message msg_id")
+        if not isinstance(kind_name, str):
+            raise ValueError("invalid edge message kind")
+        if not isinstance(payload, dict):
+            raise ValueError("invalid edge message payload")
+        if (
+            isinstance(timestamp, bool)
+            or not isinstance(timestamp, (int, float))
+            or not math.isfinite(float(timestamp))
+        ):
+            raise ValueError("invalid edge message timestamp")
+        try:
+            kind = MessageKind(kind_name)
+        except ValueError as exc:
+            raise ValueError("invalid edge message kind") from exc
+
         return cls(
-            msg_id=obj["msg_id"],
-            kind=MessageKind(obj["kind"]),
-            payload=obj.get("payload", {}),
-            timestamp=obj.get("timestamp", 0.0),
+            msg_id=msg_id,
+            kind=kind,
+            payload=payload,
+            timestamp=float(timestamp),
         )

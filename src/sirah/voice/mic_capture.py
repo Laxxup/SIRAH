@@ -100,7 +100,6 @@ class MicCapture:
         return self._raw_to_wav(raw)
 
     def _raw_to_wav(self, raw: bytes) -> bytes:
-        import struct
         import io
         import wave
 

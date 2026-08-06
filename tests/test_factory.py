@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-from sirah.factory import build_system, SystemProfile, SystemAssembly
+from sirah.factory import SystemAssembly, SystemProfile, build_system
 
 
 def test_build_system_dev_laptop() -> None:

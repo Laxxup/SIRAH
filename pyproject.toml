@@ -19,6 +19,7 @@ perception = ["opencv-python>=4.8", "mediapipe>=0.10", "numpy>=1.24"]
 voice-stt = ["faster-whisper>=1.0"]
 voice-tts = ["gtts>=2.5"]
 voice-full = ["faster-whisper>=1.0", "gtts>=2.5"]
+bridge-serial = ["pyserial-asyncio>=0.6"]
 cortex = ["sirah-cortex==0.1.0a1"]
 full = [
     "aiohttp>=3.9",
@@ -27,6 +28,7 @@ full = [
     "numpy>=1.24",
     "faster-whisper>=1.0",
     "gtts>=2.5",
+    "flask>=3.0",
 ]
 dev = [
     "build",
@@ -38,10 +40,14 @@ dev = [
 
 [project.scripts]
 sirah-console = "sirah.console:cli"
+sirah-web = "sirah.web_server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["sirah*"]
+
+[tool.setuptools.package-data]
+sirah = ["web/templates/*", "web/static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

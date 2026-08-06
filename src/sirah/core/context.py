@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import deque
+
 from sirah.types import ConversationMessage, PresentContext
 
 __all__ = ["ConversationContext"]

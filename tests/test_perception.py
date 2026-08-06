@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from sirah.perception.simulated import SimulatedPerception
-from sirah.types import FaceDetection, PerceptionFrame
 from sirah.errors import PerceptionUnavailableError
+from sirah.perception.simulated import SimulatedPerception
+from sirah.types import FaceDetection
 
 
 @pytest.mark.asyncio

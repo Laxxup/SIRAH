@@ -6,8 +6,9 @@ __all__ = [
     "InteractionMemory",
     "evaluate_initiative",
     "SituationalCoordinator",
+    "AutonomousCoordinator",
 ]
 
-from sirah.social.memory import InteractionMemory
 from sirah.social.initiative import evaluate_initiative
-from sirah.social.situational import SituationalCoordinator
+from sirah.social.memory import InteractionMemory
+from sirah.social.situational import AutonomousCoordinator, SituationalCoordinator

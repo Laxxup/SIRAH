@@ -6,5 +6,6 @@ include AGENTS.md
 graft docs
 graft hardware
 graft scripts
+graft src/sirah/web
 exclude experiments
 prune experiments

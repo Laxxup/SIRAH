@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from time import monotonic
+
 from sirah.types import (
     ComponentId,
     ComponentKind,
     ComponentState,
     ComponentStatus,
-    SystemSnapshot,
     ConversationResult,
+    SystemSnapshot,
 )
 
 __all__ = ["ComponentRegistry"]

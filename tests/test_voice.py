@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from sirah.voice.simulated import FakeSpeechInput, FakeSpeechOutput
+from sirah.errors import SpeechError, SpeechInputError
 from sirah.types import SpeechRecognitionEvent
-from sirah.errors import SpeechInputError, SpeechError
+from sirah.voice.simulated import FakeSpeechInput, FakeSpeechOutput
 
 
 @pytest.mark.asyncio

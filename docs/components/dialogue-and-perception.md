@@ -16,18 +16,32 @@ eventos estructurados. Ninguna interfaz ni proveedor está adoptado.
 
 ## Hardware, software y dependencias
 
-Gemini textual, Piper CLI y Vosk PTT tienen adaptadores concretos. Piper usa un
-modelo y reproductor externos; Vosk usa modelo y `arecord` externos. No se
-incluyen modelos ni se validan altavoz o micrófono físicos. No existe
-implementación local de cámara u OpenCV.
+Groq/Ollama textual, Piper CLI y Vosk PTT tienen adaptadores concretos. Piper
+usa un modelo y reproductor externos; Vosk usa modelo y `arecord` externos.
+La cámara local usa OpenCV y `MediaPipeVision` opcional; los modelos `.task` se
+instalan manualmente y no se descargan en runtime. No se validan altavoz,
+micrófono ni cámara del robot físicamente.
+
+El Web Lab expone `/api/overlay` como observabilidad local: entrega bboxes
+normalizados de rostros y manos, atributos estabilizados y el resumen textual
+actual. La interfaz dibuja esas cajas en un canvas del navegador y muestra el
+texto que se añade a la petición de chat. Este endpoint no sube imágenes ni
+crea una segunda fuente de estado de percepción.
+
+Las respuestas de texto y voz fuerzan un refresco de percepción antes de
+construir el contexto. Las expresiones de blendshapes usan una zona muerta y la
+ausencia de rostro requiere observaciones consecutivas para evitar resets
+espurios. El color de ropa se obtiene de una ROI de hombros limitada al espacio
+entre rostros vecinos, con mediana y fallback de borde.
 
 ## Seguridad y pruebas
 
 Una intención de LLM nunca puede evitar planificación, seguridad o RobotPort.
-Faltan corpus, métricas, privacidad, comportamiento sin red y experimentos
-reproducibles.
+Faltan corpus, métricas de precisión, calibración de manos/expresiones en la
+Pi 4B, privacidad y experimentos reproducibles.
 
 ## Próximos pasos
 
-Validar Vosk con micrófono local mediante el smoke opt-in. No añadir escucha
-permanente, wake word ni AEC sin requisitos y pruebas separados.
+Validar Vosk con micrófono local y medir MediaPipe Tasks en la Pi 4B mediante
+smokes opt-in. No añadir escucha permanente, wake word ni AEC sin requisitos y
+pruebas separados.

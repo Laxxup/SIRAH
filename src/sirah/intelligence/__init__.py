@@ -10,8 +10,8 @@ __all__ = [
     "LaboratoryIntelligence",
 ]
 
-from sirah.intelligence.port import IntelligencePort
+from sirah.intelligence.demo_adapter import LaboratoryIntelligence
+from sirah.intelligence.fake_adapter import FakeIntelligence
 from sirah.intelligence.groq_adapter import GroqIntelligence
 from sirah.intelligence.ollama_adapter import OllamaIntelligence
-from sirah.intelligence.fake_adapter import FakeIntelligence
-from sirah.intelligence.demo_adapter import LaboratoryIntelligence
+from sirah.intelligence.port import IntelligencePort

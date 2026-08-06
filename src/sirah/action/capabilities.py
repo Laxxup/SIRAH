@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sirah.types import CapabilityDefinition, CapabilityRequest
 from sirah.errors import CapabilityNotFoundError, CapabilityRejectedError
+from sirah.types import CapabilityDefinition, CapabilityRequest
 
 __all__ = ["CapabilityCatalog", "CapabilityPolicy"]
 

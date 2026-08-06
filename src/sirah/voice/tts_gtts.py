@@ -8,8 +8,8 @@ import tempfile
 import uuid
 from time import monotonic
 
-from sirah.types import SpeechCompletion
 from sirah.errors import SpeechError
+from sirah.types import SpeechCompletion
 
 __all__ = ["GTTSTTS"]
 
@@ -60,7 +60,7 @@ class GTTSTTS:
             )
             try:
                 await asyncio.wait_for(proc.wait(), timeout=self._timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 proc.kill()
                 await proc.wait()
 

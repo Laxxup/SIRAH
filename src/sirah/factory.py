@@ -8,32 +8,24 @@ Profiles:
 from __future__ import annotations
 
 from enum import Enum, auto
-from typing import Any
-
-from sirah.core.orchestrator import SirahOrchestrator
-from sirah.core.context import ConversationContext
-from sirah.core.registry import ComponentRegistry
-
-from sirah.intelligence.port import IntelligencePort
-from sirah.intelligence.fake_adapter import FakeIntelligence
-from sirah.intelligence.demo_adapter import LaboratoryIntelligence
-from sirah.intelligence.groq_adapter import GroqIntelligence
-from sirah.intelligence.ollama_adapter import OllamaIntelligence
-
-from sirah.perception.port import PerceptionPort
-from sirah.perception.simulated import SimulatedPerception
-
-from sirah.voice.port import SpeechInputPort, SpeechOutputPort
-from sirah.voice.simulated import FakeSpeechInput, FakeSpeechOutput
 
 from sirah.action.capabilities import CapabilityCatalog, CapabilityPolicy
 from sirah.action.runner import ActionRunner
 from sirah.action.simulated import SimulatedRobot
-
-from sirah.social.memory import InteractionMemory
-from sirah.social.situational import SituationalCoordinator
-
+from sirah.autonomy.mood_engine import MoodEngine
 from sirah.bridge.laptop_client import LaptopClient
+from sirah.core.context import ConversationContext
+from sirah.core.orchestrator import SirahOrchestrator
+from sirah.core.registry import ComponentRegistry
+from sirah.intelligence.demo_adapter import LaboratoryIntelligence
+from sirah.intelligence.fake_adapter import FakeIntelligence
+from sirah.intelligence.groq_adapter import GroqIntelligence
+from sirah.intelligence.port import IntelligencePort
+from sirah.perception.port import PerceptionPort
+from sirah.perception.simulated import SimulatedPerception
+from sirah.social.situational import SituationalCoordinator
+from sirah.voice.port import SpeechInputPort, SpeechOutputPort
+from sirah.voice.simulated import FakeSpeechInput, FakeSpeechOutput
 
 __all__ = ["SystemProfile", "build_system", "SystemAssembly"]
 
@@ -81,6 +73,7 @@ def build_system(
     edge_port: int = 8765,
     tts: str = "fake",
     piper_voice: str = "es_ES-sharvard-medium",
+    mood_enabled: bool = True,
 ) -> SystemAssembly:
     context = ConversationContext(max_messages=16)
     registry = ComponentRegistry()
@@ -120,6 +113,8 @@ def build_system(
     else:
         speech_output = FakeSpeechOutput()
 
+    mood = MoodEngine() if mood_enabled else None
+
     orchestrator = SirahOrchestrator(
         intelligence=intelligence,
         perception=perception,
@@ -131,6 +126,7 @@ def build_system(
         cortex=None,
         context=context,
         registry=registry,
+        mood=mood,
     )
 
     situational = SituationalCoordinator(

@@ -37,12 +37,14 @@ class LaptopClient:
             )
             self._connected = True
             logger.info("LaptopClient connected to %s:%d", self._host, self._port)
-        except asyncio.TimeoutError:
+        except TimeoutError as exc:
             raise BridgeConnectionError(
                 f"connection to {self._host}:{self._port} timed out"
-            )
+            ) from exc
         except OSError as exc:
-            raise BridgeConnectionError(f"cannot reach {self._host}:{self._port}: {exc}")
+            raise BridgeConnectionError(
+                f"cannot reach {self._host}:{self._port}: {exc}"
+            ) from exc
 
     async def disconnect(self) -> None:
         self._connected = False
@@ -93,8 +95,8 @@ class LaptopClient:
             )
             if not response:
                 raise BridgeTimeoutError("no heartbeat response")
-        except asyncio.TimeoutError:
-            raise BridgeTimeoutError("heartbeat timeout")
+        except TimeoutError as exc:
+            raise BridgeTimeoutError("heartbeat timeout") from exc
 
     async def _send(self, msg: EdgeMessage) -> None:
         if self._writer is None:
@@ -103,5 +105,5 @@ class LaptopClient:
         try:
             self._writer.write(payload.encode())
             await asyncio.wait_for(self._writer.drain(), timeout=self._timeout)
-        except (asyncio.TimeoutError, OSError) as exc:
-            raise BridgeTimeoutError(f"send failed: {exc}")
+        except (TimeoutError, OSError) as exc:
+            raise BridgeTimeoutError(f"send failed: {exc}") from exc

@@ -2,23 +2,19 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from time import monotonic
-from typing import Any
 
-from sirah.intelligence.port import IntelligencePort
+from sirah.errors import (
+    IntelligenceTimeoutError,
+    IntelligenceUnavailableError,
+)
 from sirah.types import (
+    DecisionType,
+    IntelligenceDecision,
     IntelligenceRequest,
     IntelligenceResponse,
-    IntelligenceDecision,
-    DecisionType,
-)
-from sirah.errors import (
-    IntelligenceUnavailableError,
-    IntelligenceTimeoutError,
-    InvalidIntelligenceResponseError,
 )
 
 __all__ = ["OllamaIntelligence"]
@@ -44,9 +40,11 @@ class OllamaIntelligence:
 
         try:
             timeout = aiohttp.ClientTimeout(total=5)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(f"{self._base_url}/api/tags") as resp:
-                    return resp.status == 200
+            async with (
+                aiohttp.ClientSession(timeout=timeout) as session,
+                session.get(f"{self._base_url}/api/tags") as resp,
+            ):
+                return resp.status == 200
         except Exception:
             return False
 
@@ -79,18 +77,20 @@ class OllamaIntelligence:
 
         timeout = aiohttp.ClientTimeout(total=self._timeout)
         try:
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.post(
-                    f"{self._base_url}/api/chat", json=payload
-                ) as resp:
+            async with (
+                aiohttp.ClientSession(timeout=timeout) as session,
+                session.post(f"{self._base_url}/api/chat", json=payload) as resp,
+            ):
                     if resp.status != 200:
                         raise IntelligenceUnavailableError(f"Ollama HTTP {resp.status}")
                     data = await resp.json()
                     content = data["message"]["content"]
-        except asyncio.TimeoutError:
-            raise IntelligenceTimeoutError(f"Ollama timed out after {self._timeout}s")
+        except TimeoutError as exc:
+            raise IntelligenceTimeoutError(
+                f"Ollama timed out after {self._timeout}s"
+            ) from exc
         except aiohttp.ClientError as exc:
-            raise IntelligenceUnavailableError(f"Ollama error: {exc}")
+            raise IntelligenceUnavailableError(f"Ollama error: {exc}") from exc
 
         latency = (monotonic() - t0) * 1000
         decision = self._parse(content)

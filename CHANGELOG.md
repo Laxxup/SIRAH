@@ -4,6 +4,29 @@
 
 ### Added
 
+- Web Lab experimental con cámara MJPEG, conversación, cámara móvil, estados de
+  ánimo y grabación de voz desde el navegador.
+- Preparación de audio WebM a WAV mediante `ffmpeg` antes de Whisper y pruebas
+  de regresión para el contrato multimodal del prompt.
+- Diagnóstico Web Lab del micrófono mediante `arecord` y exposición de mensajes
+  autónomos en la interfaz web.
+- Assets del Web Lab incluidos dentro del wheel/sdist, arranque sin cámara para
+  pruebas y diagnóstico estructurado de componentes en `/api/status`.
+- Clasificación visual BGR/HSV que separa grises de colores saturados, ROI de
+  sonrisa proporcional al rostro e histéresis de dos observaciones.
+- Percepción multirostro: análisis por persona, colores de ropa distinguibles,
+  orden izquierda-derecha y resumen de cantidad de personas para el prompt.
+- MediaPipe Tasks opcional para blendshapes de sonrisa y conteo local de dedos,
+  con fallback Haar, histéresis por rostro, conteo estable de personas y regla
+  de no inventar manos u objetos ausentes.
+- Web Lab rediseñado como consola de percepción accesible, con overlay canvas
+  opcional de cajas MediaPipe, bboxes de manos, contexto textual visible para
+  Groq y actualización de manos en cada tick de análisis.
+- Refresco visual inmediato antes de respuestas web, ausencia de rostro sticky,
+  actualización configurable de expresiones y ROI robusta de ropa por persona,
+  visible en el overlay como rectángulo de muestreo.
+- Validación defensiva de `EdgeMessage.from_json` para rechazar payloads y tipos
+  inválidos antes de que lleguen al bridge.
 - Entrada local Vosk push-to-talk con captura PCM `arecord` cancelable,
   importación tardía, límites defensivos y smoke opt-in.
 - Turnos semidúplex INPUT/OUTPUT mediante lease correlacionado y polling no
@@ -15,6 +38,14 @@
 
 ### Changed
 
+- El prompt dinámico de `MoodEngine` conserva las capacidades de cámara,
+  micrófono y parlantes; la grabación web espera `onstop` antes de enviar el
+  audio para evitar blobs vacíos.
+- La captura de cámara del Web Lab ahora usa un loop asyncio persistente y el
+  stream MJPEG solo emite frames nuevos; se eliminaron intervalos dependientes
+  de peticiones HTTP.
+- La investigación de `awesome-ros2` se convirtió en patrones locales de QA,
+  diagnósticos y límites de protocolo sin introducir ROS 2 ni duplicar Cortex.
 - Piper conserva atómicamente la primera causa terminal y la captura arecord
   mantiene cleanup acotado incluso ante fallos de procesos, selector o streams.
 - La captura arecord traduce fallos de `poll()` y la consola conserva el modo

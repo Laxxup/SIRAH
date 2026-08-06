@@ -85,6 +85,7 @@ class IntelligenceRequest:
     context: PresentContext = field(default_factory=PresentContext)
     max_tokens: int = 256
     temperature: float = 0.7
+    system_prompt_override: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

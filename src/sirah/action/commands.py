@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+from typing import Protocol
+
 __all__ = ["LocalStopRouter"]
 
 STOP_PATTERNS = ("stop", "para", "detente", "alto", "basta", "quieto", "pausa")
+
+
+class _StopRunner(Protocol):
+    async def stop_all(self) -> None: ...
 
 
 class LocalStopRouter:
@@ -12,11 +18,11 @@ class LocalStopRouter:
         cleaned = text.strip().lower()
         return cleaned in STOP_PATTERNS
 
-    def dispatch(self, runner: object) -> bool:
+    def dispatch(self, runner: _StopRunner) -> bool:
         import asyncio
 
         async def _stop() -> bool:
-            await runner.stop_all()  # type: ignore[union-attr]
+            await runner.stop_all()
             return True
 
         try:

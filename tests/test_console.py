@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+
 import pytest
 
 from sirah.console import LaboratoryConsole
@@ -61,7 +62,7 @@ async def test_console_unknown_command() -> None:
 
 @pytest.mark.asyncio
 async def test_console_dispatch_text() -> None:
-    from sirah.factory import build_system, SystemProfile
+    from sirah.factory import SystemProfile, build_system
 
     console = LaboratoryConsole(
         profile=SystemProfile.DEV_LAPTOP,

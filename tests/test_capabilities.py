@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 
 from sirah.action.capabilities import CapabilityCatalog, CapabilityPolicy
-from sirah.types import CapabilityDefinition, CapabilityRequest
 from sirah.errors import CapabilityNotFoundError, CapabilityRejectedError
+from sirah.types import CapabilityDefinition, CapabilityRequest
 
 
 def test_catalog_defaults() -> None:

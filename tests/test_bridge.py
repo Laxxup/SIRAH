@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from sirah.bridge.protocol import EdgeMessage, MessageKind
 
 
@@ -40,3 +42,18 @@ def test_message_kind_values() -> None:
     assert MessageKind.TTS_CMD.value == "tts_cmd"
     assert MessageKind.HEARTBEAT.value == "heartbeat"
     assert MessageKind.ERROR.value == "error"
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        "{}",
+        '{"msg_id":"abc","kind":"unknown"}',
+        '{"msg_id":"abc","kind":"heartbeat","payload":[]}',
+        '{"msg_id":"abc","kind":"heartbeat","timestamp":"now"}',
+        "not json",
+    ],
+)
+def test_edge_message_rejects_malformed_input(data: str) -> None:
+    with pytest.raises(ValueError, match="invalid edge message"):
+        EdgeMessage.from_json(data)

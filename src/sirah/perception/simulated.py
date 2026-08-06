@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from time import monotonic
 
-from sirah.types import PerceptionFrame, FaceDetection, PoseEstimate
-from sirah.perception.port import PerceptionPort
 from sirah.errors import PerceptionUnavailableError
+from sirah.types import FaceDetection, PerceptionFrame
 
 __all__ = ["SimulatedPerception"]
 

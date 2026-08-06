@@ -9,26 +9,35 @@ import os
 from time import monotonic
 from typing import Any
 
-from sirah.intelligence.port import IntelligencePort
+from sirah.errors import (
+    IntelligenceRateLimitError,
+    IntelligenceTimeoutError,
+    IntelligenceUnavailableError,
+)
 from sirah.types import (
+    DecisionType,
+    IntelligenceDecision,
     IntelligenceRequest,
     IntelligenceResponse,
-    IntelligenceDecision,
-    DecisionType,
-)
-from sirah.errors import (
-    IntelligenceUnavailableError,
-    IntelligenceTimeoutError,
-    IntelligenceRateLimitError,
-    InvalidIntelligenceResponseError,
 )
 
 __all__ = ["GroqIntelligence"]
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SYSTEM_PROMPT = """Eres SIRAH, un asistente robótico amable y conversacional.
+DEFAULT_SYSTEM_PROMPT = """Eres SIRAH, un asistente robótico con cámara, micrófono y parlantes.
 Hablas español de forma natural y cálida.
+
+Tus capacidades REALES:
+- Tienes una cámara y puedes ver a la persona frente a ti.
+- Tienes micrófono y puedes escuchar lo que dicen.
+- Tienes parlantes y puedes hablar (Piper TTS en español).
+- Puedes detectar rostros, colores de ropa, expresiones y movimiento.
+- Estás conectada a Groq (Llama 3.3 70B) para razonar.
+
+NUNCA digas que eres "solo texto", que "no tienes acceso visual" o que
+"no puedes percibir el entorno". SIEMPRE usa la información de contexto
+que recibes para responder con precisión.
 
 Responde SIEMPRE en formato JSON exactamente así:
 {
@@ -42,7 +51,7 @@ Si el usuario pide una acción física, usa capability_name con uno de:
 - "robot.stop" (detenerse)
 - "robot.home" (posición inicial)
 
-Mantén respuestas cortas (<100 palabras). Sé cálido pero conciso."""
+Mantén respuestas cortas (<100 palabras). Sé cálida pero concisa."""
 
 
 class GroqIntelligence:
@@ -98,8 +107,9 @@ class GroqIntelligence:
         raise IntelligenceUnavailableError("all retries exhausted")
 
     def _build_payload(self, request: IntelligenceRequest) -> dict[str, Any]:
+        system_content = request.system_prompt_override or self._system_prompt
         messages: list[dict[str, str]] = [
-            {"role": "system", "content": self._system_prompt}
+            {"role": "system", "content": system_content}
         ]
         for msg in request.messages:
             messages.append({"role": msg.role, "content": msg.content})
@@ -123,10 +133,10 @@ class GroqIntelligence:
         timeout = aiohttp.ClientTimeout(total=self._timeout)
 
         try:
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.post(
-                    self._base_url, json=payload, headers=headers
-                ) as resp:
+            async with (
+                aiohttp.ClientSession(timeout=timeout) as session,
+                session.post(self._base_url, json=payload, headers=headers) as resp,
+            ):
                     if resp.status == 429:
                         raise IntelligenceRateLimitError("Groq rate limit")
                     if resp.status == 401:
@@ -140,10 +150,14 @@ class GroqIntelligence:
                     data = await resp.json()
                     content = data["choices"][0]["message"]["content"]
                     return content
-        except asyncio.TimeoutError:
-            raise IntelligenceTimeoutError(f"Groq timed out after {self._timeout}s")
+        except TimeoutError as exc:
+            raise IntelligenceTimeoutError(
+                f"Groq timed out after {self._timeout}s"
+            ) from exc
         except aiohttp.ClientError as exc:
-            raise IntelligenceUnavailableError(f"Groq connection error: {exc}")
+            raise IntelligenceUnavailableError(
+                f"Groq connection error: {exc}"
+            ) from exc
 
     def _parse_decision(self, raw: str) -> IntelligenceDecision:
         try:

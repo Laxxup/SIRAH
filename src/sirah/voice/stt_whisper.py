@@ -7,8 +7,8 @@ import logging
 from time import monotonic
 from typing import Any
 
-from sirah.types import SpeechRecognitionEvent
 from sirah.errors import SpeechInputError, SpeechUnavailableError
+from sirah.types import SpeechRecognitionEvent
 
 __all__ = ["WhisperSTT"]
 
@@ -63,9 +63,10 @@ class WhisperSTT:
 
         try:
             def _run() -> SpeechRecognitionEvent:
-                import numpy as np
                 import io
                 import wave
+
+                import numpy as np
 
                 buf = io.BytesIO(audio_data)
                 with wave.open(buf, "rb") as wf:

@@ -8,6 +8,6 @@ __all__ = [
     "ComponentRegistry",
 ]
 
-from sirah.core.orchestrator import SirahOrchestrator
 from sirah.core.context import ConversationContext
+from sirah.core.orchestrator import SirahOrchestrator
 from sirah.core.registry import ComponentRegistry

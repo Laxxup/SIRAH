@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
-from sirah.types import SpeechRecognitionEvent, SpeechCompletion
+
+from sirah.types import SpeechCompletion, SpeechRecognitionEvent
 
 __all__ = ["SpeechInputPort", "SpeechOutputPort"]
 

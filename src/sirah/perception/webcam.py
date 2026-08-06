@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from __future__ import annotations
-
 import asyncio
 import logging
+from collections.abc import AsyncIterator
 from time import monotonic
-from typing import AsyncIterator, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sirah.types import PerceptionFrame
 
@@ -37,7 +36,7 @@ class WebcamCapture:
         self._fps = fps
         self._face_detector = face_detector
         self._pose_detector = pose_detector
-        self._cap: object | None = None
+        self._cap: Any = None
         self._running = False
         self._frame_interval = 1.0 / max(fps, 1)
 

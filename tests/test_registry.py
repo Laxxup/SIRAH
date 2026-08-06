@@ -6,7 +6,6 @@ from sirah.core.registry import ComponentRegistry
 from sirah.types import (
     ComponentKind,
     ComponentStatus,
-    ComponentId,
     ConversationMessage,
     ConversationResult,
 )

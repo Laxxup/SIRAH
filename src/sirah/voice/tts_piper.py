@@ -5,14 +5,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import subprocess
 import tempfile
 import uuid
+from contextlib import suppress
 from pathlib import Path
 from time import monotonic
 
+from sirah.errors import SpeechBusyError, SpeechError
 from sirah.types import SpeechCompletion
-from sirah.errors import SpeechBusyError, SpeechUnavailableError, SpeechError
 
 __all__ = ["PiperTTS"]
 
@@ -105,10 +105,10 @@ class PiperTTS:
                 if proc.returncode != 0:
                     err_msg = stderr.decode()[:200] if stderr else "unknown"
                     raise SpeechError(f"Piper failed: {err_msg}")
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 proc.kill()
                 await proc.wait()
-                raise SpeechError("Piper synthesis timed out")
+                raise SpeechError("Piper synthesis timed out") from None
 
             play_proc = await asyncio.create_subprocess_exec(
                 "aplay", "-q", tmp_path,
@@ -117,7 +117,7 @@ class PiperTTS:
             )
             try:
                 await asyncio.wait_for(play_proc.wait(), timeout=self._timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 play_proc.kill()
                 await play_proc.wait()
 
@@ -133,10 +133,8 @@ class PiperTTS:
         finally:
             self._busy = False
             if tmp_path and os.path.exists(tmp_path):
-                try:
+                with suppress(OSError):
                     os.unlink(tmp_path)
-                except OSError:
-                    pass
 
     async def stop(self) -> None:
         self._busy = False

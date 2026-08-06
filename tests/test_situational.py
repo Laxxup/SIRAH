@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+
 import pytest
 
-from sirah.core.orchestrator import SirahOrchestrator
-from sirah.intelligence.fake_adapter import FakeIntelligence
-from sirah.perception.simulated import SimulatedPerception
-from sirah.voice.simulated import FakeSpeechInput, FakeSpeechOutput
 from sirah.action.capabilities import CapabilityCatalog, CapabilityPolicy
 from sirah.action.runner import ActionRunner
 from sirah.action.simulated import SimulatedRobot
+from sirah.core.orchestrator import SirahOrchestrator
+from sirah.intelligence.fake_adapter import FakeIntelligence
+from sirah.perception.simulated import SimulatedPerception
 from sirah.social.situational import SituationalCoordinator
 from sirah.types import FaceDetection
+from sirah.voice.simulated import FakeSpeechInput, FakeSpeechOutput
 
 
 @pytest.mark.asyncio

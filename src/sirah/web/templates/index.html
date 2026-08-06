@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0d0b12">
+  <title>SIRAH Web Lab | Consola de percepción</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="SIRAH Web Lab, inicio">
+        <span class="brand-mark" aria-hidden="true">S</span>
+        <span>
+          <strong>SIRAH</strong>
+          <small>WEB LAB / PERCEPCIÓN</small>
+        </span>
+      </a>
+      <div class="topbar-status" aria-live="polite">
+        <span class="status-dot ok" id="status-dot" aria-hidden="true"></span>
+        <span id="status-info">Iniciando sistema...</span>
+      </div>
+      <div class="topbar-actions">
+        <button class="button button-quiet" id="btn-vision" type="button">
+          Cámara laptop
+        </button>
+        <button class="button button-quiet" id="btn-mobile" type="button">
+          Cámara celular
+        </button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="camera-column" aria-labelledby="camera-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">01 / percepción local</p>
+            <h1 id="camera-title">Lo que SIRAH está leyendo</h1>
+          </div>
+          <div class="live-badge" id="live-badge">
+            <span class="live-pulse" aria-hidden="true"></span> LIVE
+          </div>
+        </div>
+
+        <div class="camera-card">
+          <div class="camera-toolbar">
+            <span class="toolbar-label">640 × 480 / MediaPipe Tasks</span>
+            <button class="button button-overlay" id="btn-overlay" type="button" aria-pressed="true">
+              <span class="checkbox-mark" aria-hidden="true">+</span>
+              Mostrar mapeo
+            </button>
+          </div>
+          <div class="camera-stage" id="camera-stage">
+            <img id="camera-feed" src="/camera" alt="Vista en vivo de la cámara de SIRAH">
+            <canvas id="overlay-canvas" aria-label="Cajas de detección de rostros y manos"></canvas>
+            <div class="camera-placeholder" id="cam-placeholder" hidden>
+              <strong>Cámara inactiva</strong>
+              <span>Activa una fuente de vídeo para iniciar la percepción.</span>
+            </div>
+          </div>
+          <div class="camera-legend" aria-label="Leyenda del mapeo">
+            <span><i class="legend-swatch face-swatch"></i> rostro / contexto</span>
+            <span><i class="legend-swatch hand-swatch"></i> mano / dedos</span>
+            <span id="mapping-stats">Esperando detecciones...</span>
+          </div>
+        </div>
+
+        <section class="context-card" aria-labelledby="context-title">
+          <div class="card-heading">
+            <div>
+              <p class="eyebrow">02 / traducción</p>
+              <h2 id="context-title">Contexto enviado a Groq</h2>
+            </div>
+            <span class="signal-tag">TEXTO · LOCAL</span>
+          </div>
+          <p class="card-description">El proveedor recibe esta descripción estructurada; la imagen permanece local.</p>
+          <pre class="context-output" id="context-text" aria-live="polite">Sin contexto visual confirmado.</pre>
+        </section>
+      </section>
+
+      <aside class="right-column" aria-label="Conversación y controles">
+        <section class="chat-card" aria-labelledby="chat-title">
+          <div class="card-heading">
+            <div>
+              <p class="eyebrow">03 / diálogo</p>
+              <h2 id="chat-title">Habla con SIRAH</h2>
+            </div>
+            <span class="autonomy-label" id="autonomy-info">Autonomía: iniciando...</span>
+          </div>
+          <div id="chat-messages" class="chat-messages" aria-live="polite" aria-label="Historial de conversación"></div>
+          <form id="chat-form" class="chat-form">
+            <label class="sr-only" for="chat-input">Mensaje para SIRAH</label>
+            <input id="chat-input" type="text" placeholder="Escribe un mensaje..." autocomplete="off" autofocus>
+            <button class="button button-send" id="btn-send" type="submit">Enviar <span aria-hidden="true">↗</span></button>
+          </form>
+        </section>
+
+        <section class="controls-card" aria-labelledby="controls-title">
+          <div class="card-heading">
+            <div>
+              <p class="eyebrow">04 / interacción</p>
+              <h2 id="controls-title">Controles</h2>
+            </div>
+            <span class="mood-value" id="status-mood">NEUTRAL</span>
+          </div>
+          <div class="control-grid">
+            <button class="button control-button" id="btn-listen" type="button">
+              <span class="control-icon" aria-hidden="true">◉</span>
+              <span><strong>Grabar voz</strong><small>5 segundos</small></span>
+            </button>
+            <button class="button control-button" id="btn-mood" type="button">
+              <span class="control-icon" aria-hidden="true">◌</span>
+              <span><strong>Cambiar humor</strong><small>Estado de SIRAH</small></span>
+            </button>
+          </div>
+          <p class="privacy-note"><span aria-hidden="true">⌁</span> Los frames, el audio y la conversación no salen de esta sesión salvo el texto que envías al proveedor configurado.</p>
+        </section>
+      </aside>
+    </main>
+
+    <footer class="footer">
+      <span>SIRAH / pre-alpha local</span>
+      <span>MediaPipe → contexto textual → inteligencia</span>
+    </footer>
+  </div>
+
+  <script>
+    const input = document.getElementById('chat-input');
+    const chatForm = document.getElementById('chat-form');
+    const messages = document.getElementById('chat-messages');
+    const cameraFeed = document.getElementById('camera-feed');
+    const cameraStage = document.getElementById('camera-stage');
+    const camPlaceholder = document.getElementById('cam-placeholder');
+    const overlayCanvas = document.getElementById('overlay-canvas');
+    const overlayContext = overlayCanvas.getContext('2d');
+    const contextText = document.getElementById('context-text');
+    const mappingStats = document.getElementById('mapping-stats');
+    const statusInfo = document.getElementById('status-info');
+    let overlayEnabled = true;
+    let latestOverlay = {faces: [], hands: []};
+    let moodStates = ['NEUTRAL', 'HAPPY', 'CURIOUS', 'TIRED', 'CONCERNED'];
+    let currentMood = 0;
+    let autonomousSeen = 0;
+
+    function addMessage(role, text) {
+      const message = document.createElement('div');
+      message.className = 'message ' + role;
+      message.textContent = text;
+      messages.appendChild(message);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    async function sendText(text) {
+      if (!text.trim()) return;
+      addMessage('user', text);
+      input.value = '';
+      input.disabled = true;
+      document.getElementById('btn-send').disabled = true;
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({text})
+        });
+        const data = await response.json();
+        addMessage(data.ok ? 'sirah' : 'system', data.ok ? data.response : (data.error || 'Error'));
+      } catch (error) {
+        addMessage('system', 'Error de conexión con SIRAH.');
+      }
+      input.disabled = false;
+      document.getElementById('btn-send').disabled = false;
+      input.focus();
+    }
+
+    chatForm.addEventListener('submit', event => {
+      event.preventDefault();
+      sendText(input.value);
+    });
+
+    function resizeOverlay() {
+      const rect = cameraStage.getBoundingClientRect();
+      overlayCanvas.width = Math.max(1, Math.round(rect.width));
+      overlayCanvas.height = Math.max(1, Math.round(rect.height));
+      drawOverlay();
+    }
+
+    function drawLabel(ctx, text, x, y, color) {
+      ctx.font = '600 12px ui-monospace, SFMono-Regular, Menlo, monospace';
+      const padding = 5;
+      const width = ctx.measureText(text).width + padding * 2;
+      const labelY = Math.max(18, y);
+      ctx.fillStyle = color;
+      ctx.fillRect(x, labelY - 18, width, 18);
+      ctx.fillStyle = '#0d0b12';
+      ctx.fillText(text, x + padding, labelY - 5);
+    }
+
+    function drawBox(item, color, label, dashed = false) {
+      const [x, y, width, height] = item.bbox || [0, 0, 0, 0];
+      const canvasWidth = overlayCanvas.width;
+      const canvasHeight = overlayCanvas.height;
+      const left = x * canvasWidth;
+      const top = y * canvasHeight;
+      const boxWidth = width * canvasWidth;
+      const boxHeight = height * canvasHeight;
+      overlayContext.strokeStyle = color;
+      overlayContext.lineWidth = 2;
+      overlayContext.setLineDash(dashed ? [6, 4] : []);
+      overlayContext.strokeRect(left, top, boxWidth, boxHeight);
+      overlayContext.setLineDash([]);
+      drawLabel(overlayContext, label, left, top, color);
+    }
+
+    function drawOverlay() {
+      overlayContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+      if (!overlayEnabled) return;
+      (latestOverlay.faces || []).forEach(face => {
+        const color = face.smiling ? '#ff7a00' : '#bd93f9';
+        const expression = face.smiling ? 'sonriendo' : 'neutra';
+        if (face.torso_bbox) {
+          drawBox({bbox: face.torso_bbox}, color, `ROI P${face.index} · ${face.color}`, true);
+        }
+        drawBox(face, color, `P${face.index} · ${face.color} · ${expression}`);
+      });
+      (latestOverlay.hands || []).forEach(hand => {
+        drawBox(hand, '#52e0c4', `M${hand.index} · ${hand.handedness} · ${hand.finger_count} dedos`);
+      });
+    }
+
+    async function updateOverlay() {
+      try {
+        const response = await fetch('/api/overlay', {cache: 'no-store'});
+        const data = await response.json();
+        latestOverlay = data;
+        contextText.textContent = data.context || 'Sin contexto visual confirmado.';
+        mappingStats.textContent = `${(data.faces || []).length} rostros · ${(data.hands || []).length} manos mapeadas`;
+        drawOverlay();
+      } catch (error) {
+        mappingStats.textContent = 'Overlay sin conexión';
+      }
+    }
+
+    document.getElementById('btn-overlay').addEventListener('click', event => {
+      overlayEnabled = !overlayEnabled;
+      event.currentTarget.setAttribute('aria-pressed', String(overlayEnabled));
+      event.currentTarget.classList.toggle('active', overlayEnabled);
+      drawOverlay();
+    });
+
+    window.addEventListener('resize', resizeOverlay);
+    cameraFeed.addEventListener('load', resizeOverlay);
+    resizeOverlay();
+    setInterval(updateOverlay, 1000);
+    updateOverlay();
+
+    async function updateStatus() {
+      try {
+        const response = await fetch('/api/status', {cache: 'no-store'});
+        const data = await response.json();
+        if (!data.ok) return;
+        document.getElementById('status-dot').className = 'status-dot ' + (data.healthy ? 'ok' : 'error');
+        statusInfo.textContent = (data.healthy ? 'Sistema operativo' : 'Revisar componentes') + ' · ' + data.components + ' componentes';
+        document.getElementById('btn-vision').classList.toggle('active', data.vision_active);
+      } catch (error) {
+        statusInfo.textContent = 'Servidor no disponible';
+      }
+    }
+
+    async function updateAutonomy() {
+      try {
+        const response = await fetch('/api/autonomy', {cache: 'no-store'});
+        const data = await response.json();
+        if (!data.ok) return;
+        document.getElementById('autonomy-info').textContent = 'Autonomía: ' + (data.active ? 'activa' : 'inactiva');
+        const history = data.messages || [];
+        if (autonomousSeen > history.length) autonomousSeen = 0;
+        history.slice(autonomousSeen).forEach(text => addMessage('sirah', text));
+        autonomousSeen = history.length;
+      } catch (error) {}
+    }
+
+    async function describeMicrophoneError(error) {
+      let message = 'No se pudo abrir el micrófono.';
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        message = 'El navegador bloquea el micrófono en este contexto. Usa localhost o HTTPS.';
+      } else if (error && (error.name === 'NotAllowedError' || error.name === 'SecurityError')) {
+        message = 'Permiso de micrófono denegado. Actívalo desde el candado del navegador.';
+      } else if (error && error.name === 'NotFoundError') {
+        message = 'No se encontró un micrófono disponible.';
+      }
+      try {
+        const response = await fetch('/api/mic');
+        const data = await response.json();
+        if (data.devices && data.devices.length) message += ' El sistema ve: ' + data.devices.join('; ') + '.';
+      } catch (ignored) {}
+      return message;
+    }
+
+    document.getElementById('btn-listen').addEventListener('click', async event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      button.querySelector('strong').textContent = 'Escuchando...';
+      addMessage('system', 'Escuchando durante 5 segundos...');
+      let stream = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({audio: true});
+        const recorder = new MediaRecorder(stream);
+        const chunks = [];
+        const blob = await new Promise((resolve, reject) => {
+          recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
+          recorder.onerror = event => reject(event.error || new Error('Error de grabación'));
+          recorder.onstop = () => resolve(new Blob(chunks, {type: recorder.mimeType || 'audio/webm'}));
+          recorder.start();
+          setTimeout(() => recorder.stop(), 5000);
+        });
+        const form = new FormData();
+        form.append('audio', blob, 'recording.webm');
+        const response = await fetch('/api/listen', {method: 'POST', body: form});
+        const data = await response.json();
+        if (data.ok && data.text) {
+          addMessage('user', data.text);
+          addMessage('sirah', data.response || '');
+        } else addMessage('system', data.response || 'No se entendió.');
+      } catch (error) {
+        addMessage('system', await describeMicrophoneError(error));
+      } finally {
+        if (stream) stream.getTracks().forEach(track => track.stop());
+        button.disabled = false;
+        button.querySelector('strong').textContent = 'Grabar voz';
+      }
+    });
+
+    document.getElementById('btn-mood').addEventListener('click', async () => {
+      currentMood = (currentMood + 1) % moodStates.length;
+      const state = moodStates[currentMood];
+      await fetch('/api/mood', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({state})
+      });
+      document.getElementById('status-mood').textContent = state;
+    });
+
+    document.getElementById('btn-vision').addEventListener('click', async event => {
+      const button = event.currentTarget;
+      const action = button.classList.contains('active') ? 'off' : 'on';
+      const response = await fetch('/api/vision', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action})
+      });
+      const data = await response.json();
+      if (data.ok && action === 'on') {
+        button.classList.add('active');
+        cameraFeed.hidden = false;
+        camPlaceholder.hidden = true;
+      } else if (action === 'off') {
+        button.classList.remove('active');
+        cameraFeed.hidden = true;
+        camPlaceholder.hidden = false;
+      }
+    });
+
+    let mobileStream = null;
+    let mobileInterval = null;
+    document.getElementById('btn-mobile').addEventListener('click', async event => {
+      const button = event.currentTarget;
+      if (button.classList.contains('active')) {
+        if (mobileStream) mobileStream.getTracks().forEach(track => track.stop());
+        if (mobileInterval) clearInterval(mobileInterval);
+        mobileStream = null;
+        mobileInterval = null;
+        button.classList.remove('active');
+        cameraFeed.src = '/camera';
+        cameraFeed.hidden = false;
+        camPlaceholder.hidden = true;
+        return;
+      }
+      try {
+        mobileStream = await navigator.mediaDevices.getUserMedia({video: {facingMode: 'user', width: 640, height: 480}});
+        const video = document.createElement('video');
+        video.srcObject = mobileStream;
+        await video.play();
+        const canvas = document.createElement('canvas');
+        canvas.width = 640;
+        canvas.height = 480;
+        const context = canvas.getContext('2d');
+        mobileInterval = setInterval(() => {
+          context.drawImage(video, 0, 0, 640, 480);
+          canvas.toBlob(blob => { if (blob) fetch('/api/upload_frame', {method: 'POST', body: blob}); }, 'image/jpeg', 0.6);
+        }, 500);
+        button.classList.add('active');
+        cameraFeed.hidden = true;
+        camPlaceholder.textContent = 'Cámara del celular activa';
+        camPlaceholder.hidden = false;
+      } catch (error) {
+        addMessage('system', 'No se pudo acceder a la cámara del celular: ' + error.message);
+      }
+    });
+
+    setInterval(updateStatus, 5000);
+    setInterval(updateAutonomy, 1000);
+    updateStatus();
+    updateAutonomy();
+    addMessage('system', 'Web Lab listo. Activa «Mostrar mapeo» para inspeccionar MediaPipe.');
+  </script>
+</body>
+</html>

@@ -6,8 +6,8 @@ import pytest
 
 from sirah.action.runner import ActionRunner
 from sirah.action.simulated import SimulatedRobot
-from sirah.types import CapabilityRequest, CapabilityExecutionResult
 from sirah.errors import CapabilityExecutionError
+from sirah.types import CapabilityRequest
 
 
 @pytest.mark.asyncio

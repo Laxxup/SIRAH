@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sirah.factory import build_system, SystemProfile
-from sirah.types import FaceDetection
+from sirah.factory import SystemProfile, build_system
 
 
 @pytest.mark.asyncio
