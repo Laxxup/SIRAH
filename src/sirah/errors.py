@@ -28,6 +28,7 @@ __all__ = [
     "RuntimeAccessDeniedError",
     "RuntimeAssemblyAccessError",
     "RuntimeConfigurationError",
+    "PersonalityConfigurationError",
     "DeviceNotAllowedError",
     "ActionError",
     "CapabilityRejectedError",
@@ -135,6 +136,10 @@ class RuntimeAssemblyAccessError(SirahRecoverableError):
 
 class RuntimeConfigurationError(SirahFatalError):
     """Server-only runtime configuration is missing or invalid."""
+
+
+class PersonalityConfigurationError(RuntimeConfigurationError):
+    """Personality configuration directory or files are missing or invalid."""
 
 
 class DeviceNotAllowedError(SirahRecoverableError):
