@@ -7,8 +7,9 @@ from __future__ import annotations
 
 from sirah.action import ActionRunner, CapabilityCatalog, CapabilityPolicy
 from sirah.core import ComponentRegistry, ConversationContext, SirahOrchestrator
+from sirah.core.runtime import SirahRuntime
 from sirah.errors import *  # noqa: F403
-from sirah.factory import SystemAssembly, SystemProfile, build_system
+from sirah.factory import SystemAssembly, SystemProfile
 from sirah.intelligence import IntelligencePort
 from sirah.perception import PerceptionPort
 from sirah.social import (
@@ -20,10 +21,10 @@ from sirah.types import *  # noqa: F403
 from sirah.voice import SpeechInputPort, SpeechOutputPort
 
 __all__ = [
-    "build_system",
     "SystemProfile",
     "SystemAssembly",
     "SirahOrchestrator",
+    "SirahRuntime",
     "ConversationContext",
     "ComponentRegistry",
     "IntelligencePort",

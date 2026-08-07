@@ -35,7 +35,8 @@ La distribución `sirah`, importable como `sirah`, demuestra actualmente:
 - un `RobotPort` simulado, determinista y sin hardware.
 - percepción de presencia simulada a través de eventos públicos de Cortex;
 - iniciativa de saludo determinista y TTS simulado cancelable;
-- TTS local Piper experimental, opcional y degradable, mediante subprocess;
+- TTS local Piper experimental, opcional y degradable, mediante API Python con
+  modelo persistente por ciclo de vida del runtime;
 - entrada Whisper experimental desde el Web Lab y proveedores fake para tests;
 - percepción Haar experimental con cámara local y `SimulatedPerception`;
 - Web Lab Flask con diagnóstico de micrófono, autonomía visible y snapshot de
@@ -56,6 +57,68 @@ python -m pip install .
 .venv/bin/python -m pytest -q
 ```
 
+## Runtime Headless
+
+`sirah-runtime` es el proceso servidor que ensambla `SirahRuntime` y posee el
+socket Unix y las configuraciones de dispositivos. CLI y Web Lab son clientes;
+no pueden elegir dispositivos ni crear el runtime. Piper es opcional y solo se
+configura aquí; no añade cámara, autonomía, UI, Telegram ni control físico.
+
+Configura únicamente en el entorno del servicio, nunca en una petición cliente:
+
+```bash
+export SIRAH_RUNTIME_SOCKET=/run/sirah/runtime.sock
+export SIRAH_RUNTIME_CLI_SECRET="secreto-fuera-del-repositorio"
+export SIRAH_RUNTIME_WEB_LAB_SECRET="secreto-fuera-del-repositorio"
+export SIRAH_RUNTIME_PROFILE=dev_laptop
+export SIRAH_RUNTIME_CAPTURE_DEVICES=default
+export SIRAH_RUNTIME_CAPTURE_DEVICE=default
+export SIRAH_RUNTIME_OUTPUT_DEVICES=default
+export SIRAH_RUNTIME_OUTPUT_DEVICE=default
+# Opcional tras instalar `.[voice-piper]`; ambos son archivos externos legibles.
+export SIRAH_RUNTIME_PIPER_MODEL=/opt/sirah-voices/es_MX-voice.onnx
+export SIRAH_RUNTIME_PIPER_CONFIG=/opt/sirah-voices/es_MX-voice.onnx.json
+.venv/bin/sirah-runtime
+```
+
+El proceso valida que el socket sea absoluto, que ambos secretos existan, que el
+perfil sea `dev_laptop` o `dev_distributed`, y que los dispositivos configurados
+pertenezcan a sus allowlists. La salida configurada queda validada y reservada
+para el runtime. Si se configuran ambos archivos Piper, el runtime carga una
+voz una sola vez con `piper-tts`; síntesis y reproducción por la salida
+permitida permanecen separadas. Un fallo de Piper degrada voz y conserva el
+runtime textual. `SIGINT` y `SIGTERM` detienen ordenadamente el runtime y
+eliminan su socket propio.
+
+El diseño de systemd está en
+[`deploy/systemd/sirah-runtime.service`](deploy/systemd/sirah-runtime.service).
+El script `scripts/deploy_pi.sh` requiere una copia del proyecto en `/opt/sirah`
+(o `SIRAH_INSTALL_DIR`) y un host que ya provea `python3.14`; no sustituye ese
+requisito por el Python del sistema. La evidencia histórica de Raspberry Pi con
+Debian 13 y Python 3.13 no es un objetivo de despliegue soportado para esta
+versión. El script instala el paquete y las unidades del runtime y del Web Lab
+local opcional. Solo prepara los archivos: no habilita ni inicia servicios.
+Copia los ejemplos a `/etc/sirah/*.env.example`; crea los
+archivos privados `runtime.env` y, si corresponde, `web-lab.env` con permisos
+`0600` y secretos reales antes de habilitar unidades manualmente.
+
+Los clientes reciben únicamente el socket y su secreto compartido. La consola
+usa `SIRAH_CLI_SECRET`; Web Lab usa `SIRAH_WEB_LAB_SECRET`. Estos nombres son
+deliberadamente distintos de `SIRAH_RUNTIME_CLI_SECRET` y
+`SIRAH_RUNTIME_WEB_LAB_SECRET`, que pertenecen al entorno privado del runtime:
+
+```bash
+# En otra terminal, tras iniciar sirah-runtime.
+export SIRAH_RUNTIME_SOCKET=/run/sirah/runtime.sock
+export SIRAH_CLI_SECRET="el-mismo-secreto-configurado-para-cli"
+.venv/bin/sirah-console
+
+# Cliente Web Lab local opcional, sin configuración de dispositivos.
+export SIRAH_RUNTIME_SOCKET=/run/sirah/runtime.sock
+export SIRAH_WEB_LAB_SECRET="el-mismo-secreto-configurado-para-web-lab"
+.venv/bin/sirah-web
+```
+
 Groq es opcional:
 
 ```bash
@@ -70,79 +133,37 @@ las cuotas y los modelos dependen del proveedor. La suite de tests usa
 
 ## SIRAH Laboratory Console
 
-La consola de laboratorio es una demostración interactiva textual, no una
-interfaz definitiva ni un servidor. Conserva una sesión en memoria, permite
-seleccionar el fake, laboratorio, Groq u Ollama y muestra la separación entre conversación,
-propuesta, validación y ejecución:
+La consola de laboratorio es un cliente textual del runtime, no una interfaz
+definitiva ni un servidor. Muestra la separación entre conversación, propuesta,
+validación y ejecución sin crear el sistema ni seleccionar dispositivos:
 
 ```bash
-.venv/bin/python examples/interactive_conversation.py --help
-.venv/bin/python examples/interactive_conversation.py
-.venv/bin/python examples/interactive_conversation.py --enable-greet
+SIRAH_RUNTIME_SOCKET=/run/sirah/runtime.sock \
+SIRAH_CLI_SECRET="el-mismo-secreto-configurado-para-cli" \
+.venv/bin/sirah-console
 ```
 
-Piper está implementado como integración experimental opt-in; el fake continúa
-como default. Fue validado localmente con audio real en Debian 13, pero sigue
-siendo pre-alpha y no implica soporte universal. El ejecutable y el modelo son
-externos, no forman parte de la instalación base. La configuración, evidencia y
-smoke local están en [la guía de Piper](docs/piper.md). SIRAH no descarga ni
-empaqueta modelos.
-
-La entrada de voz Whisper es opt-in desde el Web Lab; texto continúa como
-predeterminado y disponible ante cualquier degradación. Usa turnos semidúplex,
-un modelo externo y no persiste audio.
-
-Comandos locales: `/ayuda`, `/estado`, `/componentes`, `/capacidades`,
-`/contexto`, `/eventos`, `/limpiar`, `/presencia [clave]`, `/ausencia`,
-`/evaluar`, `/silencio [on|off]`, `/autonomia [on|off]`, `/detener`,
-`/voz-fin`, `/voz-estado`, `/voz-detener`, `/escuchar`,
-`/escuchar-finalizar`, `/escuchar-cancelar`, `/escucha-estado` y `/salir`.
-La entrada de voz es únicamente push-to-talk semidúplex: el fake es el proveedor
-predeterminado y Whisper es experimental, sin validación física universal del
-micrófono.
-No implementa wake word, AEC, manos libres ni escucha continua. Las órdenes exactas
-`stop`, `para` y `detente` también
-se resuelven localmente antes de la inteligencia. No llegan al proveedor ni
-controlan hardware directamente.
+El runtime conserva el texto como ruta predeterminada. La voz local existente
+usa una configuración de captura propiedad del servidor y no persiste audio.
+Piper no forma parte del contrato de clientes: Web Lab y consola no pueden
+habilitarlo ni cambiar modelo, configuración o salida.
 
 ## SIRAH Web Lab
 
-El laboratorio web expone conversación, cámara en vivo, selección de estado de
-ánimo y grabación desde el navegador. Requiere el extra `full`, `ffmpeg` para
-convertir el audio WebM del navegador y un modelo local de `faster-whisper` para
-transcribir voz:
+El laboratorio web es un cliente local opcional del runtime. Expone conversación
+y estado mediante el socket Unix; no crea cámara, selecciona dispositivos ni
+recibe configuración de hardware. Inicia primero `sirah-runtime` y después el
+cliente con su secreto compartido:
 
 ```bash
-.venv/bin/sirah-web --intel=groq --tts=piper
+SIRAH_RUNTIME_SOCKET=/run/sirah/runtime.sock \
+SIRAH_WEB_LAB_SECRET="el-mismo-secreto-configurado-para-web-lab" \
+.venv/bin/sirah-web
 ```
 
-Abre `http://localhost:5000`. La cámara del laptop usa el dispositivo local;
-el botón de cámara celular envía frames desde el navegador. El Web Lab no guarda
-audio, frames ni conversaciones fuera del contexto temporal de la sesión.
-La autonomía permanece activa en segundo plano y sus intervenciones aparecen en
-el historial de la página. En Firefox, si el micrófono fue bloqueado previamente,
-restablece el permiso desde el candado de `localhost`.
-
-El Web Lab incluye el modo **Mostrar mapeo**: el navegador dibuja sobre la cámara
-las cajas normalizadas de rostros y manos que produce MediaPipe, con color,
-expresión, lateralidad y dedos confirmados. El panel «Contexto enviado a Groq»
-muestra el texto que se inyecta en el chat. Las imágenes permanecen locales; el
-proveedor recibe contexto textual, no los frames.
-
-El contexto visual se refresca inmediatamente antes de responder a texto o voz.
-Las expresiones MediaPipe usan una zona muerta para no quedar bloqueadas por
-ruido del score, y el color de ropa usa una ROI de hombros, mediana y fallback
-cuando la persona está cerca del borde. `VisionLoop` permite ajustar la cadencia
-de rostros con `face_analyze_every`; laptop usa 1 y una Pi 4B puede comenzar con
-3 hasta completar su smoke de rendimiento.
-
-La demostración actual usa MediaPipe Tasks cuando encuentra sus modelos locales
-y cae a Haar cuando no están disponibles; conserva `SimulatedPerception` para
-pruebas sin hardware. El clasificador de ropa usa saturación y HSV para no
-confundir grises cálidos con verde; la sonrisa usa blendshapes e histéresis
-temporal y las manos aportan conteo de dedos. Cámara, altavoz del robot,
-memoria persistente y hardware físico siguen siendo experimentales o no
-configurados según el perfil.
+Abre `http://localhost:5000`. El Web Lab no guarda conversaciones fuera del
+contexto temporal del runtime. No incluye cámara, autonomía ni controles físicos
+en esta fase.
 
 ## Historia del proyecto
 
@@ -183,7 +204,7 @@ opcional y no se ejecuta implícitamente.
 | Percepción simulada | Simulado | Frames deterministas sin hardware | `src/sirah/perception/simulated.py` |
 | Iniciativa y autonomía | Implementado, experimental | Política local y pruebas offline | `src/sirah/autonomy/` |
 | TTS fake | Simulado | Determinista, sin audio real | `FakeSpeechOutput` |
-| Piper TTS | Implementado, experimental | Audio real validado localmente en Debian 13; no universal | `docs/piper.md` |
+| Piper TTS | Implementado, experimental | API opcional, modelo persistente y smoke físico opt-in; no universal | `docs/piper.md` |
 | Brazo simulado | Provisional | Solo con `--enable-greet` | `arm.greet` |
 | Cámara laptop | Experimental implementada | Smoke local; MediaPipe Tasks opt-in y Haar fallback | `src/sirah/autonomy/vision_loop.py` |
 | Micrófono | Experimental | Diagnóstico `arecord`; navegador requiere permiso y `ffmpeg`/Whisper | `src/sirah/web_server.py` |
@@ -204,9 +225,10 @@ esta copia es deliberadamente más completo y constituye su documentación
 autoritativa.
 
 No existe firmware estable para siete servos, cámara, MQTT o Serial concreto.
-Whisper existe como adaptador PTT experimental sin modelo incluido; Piper existe
-como adaptador CLI experimental, sin modelo incluido, y
-su síntesis y reproducción se validaron en una configuración Debian 13 concreta.
+Whisper existe como adaptador PTT experimental sin modelo incluido; Piper usa su
+API Python opcional con modelo externo y reproducción separada propiedad del
+runtime. La síntesis y reproducción se validaron en una configuración Debian 13
+concreta.
 Groq y Ollama son integraciones textuales opcionales. La entrada Whisper no
 constituye conversación manos libres ni valida micrófono, visión o hardware
 robótico real.

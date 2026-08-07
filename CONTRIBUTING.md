@@ -18,11 +18,11 @@ Cortex antes de que un adaptador la traduzca al firmware.
 
 ## Entorno y gates
 
-SIRAH requiere Python 3.13 o posterior. Instala primero el wheel de SIRAH Cortex
+SIRAH requiere Python 3.14 o posterior. Instala primero el wheel de SIRAH Cortex
 `0.1.0a1` y luego el extra de desarrollo:
 
 ```bash
-python3.13 -m venv .venv
+python3.14 -m venv .venv
 .venv/bin/python -m pip install /ruta/a/sirah_cortex-0.1.0a1-py3-none-any.whl
 .venv/bin/python -m pip install -e ".[dev]"
 ```
@@ -30,7 +30,7 @@ python3.13 -m venv .venv
 Antes de cada commit funcional ejecuta:
 
 ```bash
-.venv/bin/python -m ruff check src tests examples
+.venv/bin/python -m ruff check src tests
 .venv/bin/python -m mypy src tests --ignore-missing-imports
 .venv/bin/python -m pytest -q
 git diff --check

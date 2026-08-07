@@ -7,27 +7,29 @@ name = "sirah"
 version = "0.2.0.dev0"
 description = "Conversational robotic agent with webcam face detection, async voice, and Groq/Ollama intelligence"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 license = "Apache-2.0"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "NOTICE"]
 dependencies = []
 
 [project.optional-dependencies]
 groq = ["aiohttp>=3.9"]
 ollama = ["aiohttp>=3.9"]
-perception = ["opencv-python>=4.8", "mediapipe>=0.10", "numpy>=1.24"]
+perception = ["opencv-python-headless>=4.8,<5", "mediapipe>=0.10", "numpy>=1.24"]
 voice-stt = ["faster-whisper>=1.0"]
 voice-tts = ["gtts>=2.5"]
-voice-full = ["faster-whisper>=1.0", "gtts>=2.5"]
+voice-piper = ["piper-tts>=1.4,<2"]
+voice-full = ["faster-whisper>=1.0", "gtts>=2.5", "piper-tts>=1.4,<2"]
 bridge-serial = ["pyserial-asyncio>=0.6"]
 cortex = ["sirah-cortex==0.1.0a1"]
 full = [
     "aiohttp>=3.9",
-    "opencv-python>=4.8",
+    "opencv-python-headless>=4.8,<5",
     "mediapipe>=0.10",
     "numpy>=1.24",
     "faster-whisper>=1.0",
     "gtts>=2.5",
+    "piper-tts>=1.4,<2",
     "flask>=3.0",
 ]
 dev = [
@@ -39,6 +41,7 @@ dev = [
 ]
 
 [project.scripts]
+sirah-runtime = "sirah.runtime_service:cli"
 sirah-console = "sirah.console:cli"
 sirah-web = "sirah.web_server:main"
 
@@ -56,14 +59,15 @@ asyncio_mode = "auto"
 addopts = ["--tb=short", "-q"]
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.14"
 ignore_missing_imports = true
 explicit_package_bases = true
 namespace_packages = true
 
 [tool.ruff]
 line-length = 88
-target-version = "py313"
+target-version = "py314"
+extend-exclude = ["scripts/*.sh"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]

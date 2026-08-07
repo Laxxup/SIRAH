@@ -69,8 +69,9 @@ La adquisición PCM, el reconocimiento local y el runtime PTT son puertos
 separados de SIRAH. Todos los turnos INPUT/OUTPUT usan leases correlacionados;
 Cortex no se modifica ni recibe PCM.
 TTS no es movimiento mecánico y no se fuerza dentro de `RobotPort`. El fake no
-usa subprocess, audio, threads ni red. Piper y el reproductor son procesos
-directos externos administrados; el worker nunca modifica `InteractionMemory`.
+usa subprocess, audio, threads ni red. Piper usa su API Python cargada en el
+runtime; solo `aplay` es un proceso externo administrado y nunca modifica
+`InteractionMemory`.
 Vosk PTT y captura arecord están implementados experimentalmente. Escucha
 permanente, wake word, AEC y streaming están fuera de alcance.
 

@@ -1,22 +1,17 @@
 # Entrada local Vosk push-to-talk
 
-Estado: Experimental. Validación: simulación; micrófono físico no validado.
+Estado: Evidencia histórica de un adaptador experimental; no forma parte del
+contrato `sirah-runtime` actual.
 
-La consola conserva texto como modo predeterminado. Vosk se activa explícitamente:
-
-```bash
-python -m pip install ".[stt-vosk]"
-.venv/bin/python examples/interactive_conversation.py \
-  --speech-input-provider vosk --vosk-model /ruta/al/modelo
-```
+La consola actual es un cliente del runtime y no puede activar Vosk, elegir un
+modelo ni configurar captura. El runtime-service actual no ofrece un comando de
+despliegue para Vosk.
 
 El modelo y `arecord` son externos. SIRAH no descarga ni empaqueta modelos. La
 disponibilidad solo comprueba configuración, ejecutable, dependencia y modelo
 legible; no garantiza micrófono, routing ni calidad.
 
-`/escuchar` inicia PTT, `/escuchar-finalizar` solicita el cierre,
-`/escuchar-cancelar` cancela y `/escucha-estado` consulta el estado. La captura
-es PCM raw mono `S16_LE`, acotada y semidúplex con TTS.
+La captura histórica era PCM raw mono `S16_LE`, acotada y semidúplex con TTS.
 
 `SpeechInputRuntime` es el único propietario de `capture.stop`, finalización
 del reconocedor y commit terminal. Cancelar solo registra intención; el worker
@@ -34,9 +29,7 @@ terminal STT sin esperar otra línea de texto y no usa un loop ocupado. El
 reconocedor limita parciales, texto final y segmentos, rechaza JSON o
 confidence inválidos y reinicia su estado después de fallos.
 
-El smoke manual requiere `SIRAH_RUN_VOSK_SMOKE=1`, `SIRAH_VOSK_MODEL`, stdin
-TTY y opcionalmente `SIRAH_ARECORD_BIN`, `SIRAH_AUDIO_INPUT_DEVICE` y
-`SIRAH_VOSK_SMOKE_SHOW_TEXT=1`. No forma parte de la suite normal.
+No hay smoke Vosk soportado por el runtime-service actual.
 
 El micrófono, routing ALSA, calidad, latencia y comportamiento físico de
 cancelación no se han validado. Tampoco existen wake word, AEC, manos libres,

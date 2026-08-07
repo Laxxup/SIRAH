@@ -1,4 +1,4 @@
-# ADR-005: Piper CLI como primer TTS local real
+# ADR-005: Piper API persistente como TTS local real
 
 ## Estado
 
@@ -8,51 +8,41 @@ Aceptado como integración experimental de pre-alpha. No validado físicamente.
 
 SIRAH necesita confirmar un saludo únicamente después de audio reproducido, sin
 convertir TTS en `RobotPort` ni introducir una dependencia Python obligatoria.
-Se ejecutan Piper CLI y un reproductor local como procesos directos
-administrados. Los modelos permanecen externos.
+El runtime carga la API Python de Piper una vez y usa un reproductor local
+separado para cada WAV efímero. Los modelos permanecen externos.
 
-Se elige CLI/subprocess frente a una biblioteca Python porque Piper ya ofrece
-un límite ejecutable pequeño, aislable y opcional. `player_argv` es una tupla
-tokenizada y validada; nunca se interpreta una cadena de shell. Los procesos
-usan listas, `shell=False`, stderr descartado de forma acotada y texto UTF-8 por
-stdin.
+Se elige la API `piper-tts` frente al CLI para eliminar descubrimiento ambiguo y
+carga repetida del modelo. La síntesis vive en un worker de hilo breve para no
+bloquear asyncio; la reproducción sigue separada y solo recibe el WAV temporal
+por la salida que el servicio validó. Piper nunca recibe texto por argv.
 
-El adaptador acepta una sola operación y usa un worker dedicado, sin cola,
-`asyncio` global ni callbacks. El consumidor hace polling no bloqueante. Esto
-mantiene `InteractionMemory` en el thread coordinador y vuelve explícita la
-entrega exactamente una vez.
+El adaptador acepta una sola operación, sin cola ni callbacks. El consumidor
+conserva el lease semidúplex existente, manteniendo `InteractionMemory` fuera del
+worker y haciendo explícita la entrega exactamente una vez.
 
 `SpeechState` representa solo `IDLE`, `SYNTHESIZING`, `PLAYING`,
 `CANCELLING` y `CLOSED`; `SpeechOutcome` representa el terminal. Cada aceptación
 crea un `operation_id`, única correlación. `stop(expected_operation_id)` impide
 que una cancelación vieja alcance una operación nueva.
 
-Síntesis, reproducción y terminación tienen deadlines monotónicos separados.
-Al cancelar o vencer un deadline se solicita `terminate`, se espera un grace
-acotado, se usa `kill` si hace falta y se hace `wait` final. SIRAH garantiza el
-proceso directo que inicia; no promete terminar descendientes arbitrarios ni
-crea grupos POSIX.
+La carga y la síntesis fallan con errores de voz tipados. El fallo de Piper
+degrada el componente de voz; no detiene el proceso ni la conversación textual.
+La reproducción informa su fallo como resultado terminal no exitoso para que el
+lease se libere.
 
-Cada operación usa un WAV aleatorio con permisos restrictivos, cerrado antes de
-entregarlo a otro proceso y eliminado en `finally`. `close` es idempotente,
-cancela y espera a que el worker quede recolectado; la terminación de cada
-proceso directo usa el grace acotado descrito arriba. Los fallos se reducen a
-razones breves sin stderr, texto ni rutas privadas.
+Cada operación usa un WAV aleatorio, cerrado antes de entregarlo al reproductor
+Los fallos se reducen a razones breves sin texto ni rutas privadas.
 
-La disponibilidad solo comprueba ejecutables resolubles, archivos legibles y
-temporales utilizables. No afirma compatibilidad del modelo ni audio físico. La
-consola continúa por texto cuando Piper está degradado; el fake sigue siendo el
-default.
+La disponibilidad refleja que el modelo está cargado y no ha fallado; la
+configuración comprueba archivos legibles, no compatibilidad del modelo ni audio
+físico. La consola continúa por texto cuando Piper está degradado; el fake sigue
+siendo el default.
 
 ## Alternativas y consecuencias
 
-Callbacks habrían permitido que el worker tocara coordinación o memoria;
-streaming y colas ampliarían concurrencia y superficie de cancelación. Una
-biblioteca Python añadiría acoplamiento y empaquetado sin necesidad actual.
-Descartar stderr pierde diagnóstico detallado, pero evita bloqueo, acumulación
-y exposición; podrá reemplazarse por captura estrictamente acotada si existe un
-caso operativo comprobado.
+El CLI requería descubrimiento de binarios y cargaba el modelo por operación.
+Streaming y colas ampliarían concurrencia y superficie de cancelación. El
+adaptador no conserva stderr, texto ni WAV después de una operación.
 
 Revisar esta decisión si se requiere streaming medido, múltiples voces,
-sincronización labial, diagnóstico acotado más rico, soporte no POSIX o si la
-API estable de Piper ofrece una integración más segura que el proceso CLI.
+sincronización labial, diagnóstico acotado más rico o soporte no POSIX.

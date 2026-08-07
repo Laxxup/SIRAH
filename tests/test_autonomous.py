@@ -14,7 +14,22 @@ from sirah.intelligence.fake_adapter import FakeIntelligence
 from sirah.perception.simulated import SimulatedPerception
 from sirah.social.situational import AutonomousCoordinator
 from sirah.types import FaceDetection
+from sirah.voice.audio_service import AudioTurnService
+from sirah.voice.coordinator import AudioTurnCoordinator
 from sirah.voice.simulated import FakeSpeechInput, FakeSpeechOutput
+
+
+def voice(output: FakeSpeechOutput) -> AudioTurnService:
+    async def respond(_: str) -> str:
+        return ""
+
+    return AudioTurnService(
+        capture_device="test-capture",
+        speech_input=FakeSpeechInput(),
+        speech_output=output,
+        coordinator=AudioTurnCoordinator(),
+        respond=respond,
+    )
 
 
 @pytest.mark.asyncio
@@ -62,7 +77,7 @@ async def test_autonomous_greets_with_person() -> None:
     coord = AutonomousCoordinator(
         orchestrator=orch,
         perception=sim_perception,
-        speech=speech_output,
+        voice=voice(speech_output),
         interval_s=0.05,
         silent=False,
     )
@@ -92,7 +107,7 @@ async def test_autonomous_idle_behavior() -> None:
     coord = AutonomousCoordinator(
         orchestrator=orch,
         perception=sim_perception,
-        speech=speech_output,
+        voice=voice(speech_output),
         interval_s=0.05,
         silent=False,
         enable_person_tracking=True,
@@ -125,7 +140,7 @@ async def test_autonomous_mood_changes() -> None:
     coord = AutonomousCoordinator(
         orchestrator=orch,
         perception=sim_perception,
-        speech=speech_output,
+        voice=voice(speech_output),
         interval_s=0.05,
         silent=False,
     )

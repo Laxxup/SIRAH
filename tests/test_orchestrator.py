@@ -10,20 +10,34 @@ from sirah.action.simulated import SimulatedRobot
 from sirah.core.orchestrator import SirahOrchestrator
 from sirah.intelligence.fake_adapter import FakeIntelligence
 from sirah.perception.simulated import SimulatedPerception
+from sirah.voice.audio_service import AudioTurnService
+from sirah.voice.coordinator import AudioTurnCoordinator
 from sirah.voice.simulated import FakeSpeechInput, FakeSpeechOutput
 
 
 @pytest.fixture
 def orchestrator() -> SirahOrchestrator:
-    return SirahOrchestrator(
+    output = FakeSpeechOutput()
+    orchestrator = SirahOrchestrator(
         intelligence=FakeIntelligence(scripted=["respuesta de prueba"]),
         perception=SimulatedPerception(),
         speech_input=FakeSpeechInput(),
-        speech_output=FakeSpeechOutput(),
+        speech_output=output,
         capabilities=CapabilityCatalog(),
         policy=CapabilityPolicy(),
         action_runner=ActionRunner(robot=SimulatedRobot()),
     )
+    async def respond(_: str) -> str:
+        return ""
+
+    orchestrator.set_voice_service(AudioTurnService(
+        capture_device="test-capture",
+        speech_input=FakeSpeechInput(),
+        speech_output=output,
+        coordinator=AudioTurnCoordinator(),
+        respond=respond,
+    ))
+    return orchestrator
 
 
 @pytest.mark.asyncio

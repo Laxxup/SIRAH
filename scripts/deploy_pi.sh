@@ -1,55 +1,57 @@
 #!/usr/bin/env bash
-# deploy_pi.sh — Install SIRAH Edge Server on Raspberry Pi 4B
-# Run this ON the Raspberry Pi.
+# deploy_pi.sh — Prepare the SIRAH runtime and optional local Web Lab client.
+# Run this only on a target that already provides Python 3.14, after the source
+# is present in /opt/sirah (or set SIRAH_INSTALL_DIR). It installs and
+# configures unit files but never enables or starts a system service.
 
 set -euo pipefail
 
-echo "=== SIRAH Edge Server Installer for Raspberry Pi 4B ==="
+INSTALL_DIR="${SIRAH_INSTALL_DIR:-/opt/sirah}"
+PYTHON="python3.14"
+
+echo "=== SIRAH runtime preparation (Python 3.14) ==="
 echo
 
-# 1. System deps
-echo "[1/5] Installing system dependencies..."
-sudo apt-get update -qq
-sudo apt-get install -y --no-install-recommends \
-    python3 python3-pip python3-venv \
-    piper-tts alsa-utils \
-    libcamera0 libcamera-dev \
-    python3-opencv || true
+# 1. Never substitute the target interpreter with a lower system Python.
+echo "[1/4] Checking Python 3.14..."
+if ! command -v "$PYTHON" > /dev/null 2>&1; then
+    echo "ERROR: Python 3.14 is required, but python3.14 is unavailable." >&2
+    echo "Use a supported target with Python 3.14, then rerun this script." >&2
+    exit 1
+fi
 
-# 2. Create venv
-echo "[2/5] Creating Python virtual environment..."
-python3 -m venv .venv-edge
-source .venv-edge/bin/activate
+if [ ! -f "$INSTALL_DIR/pyproject.toml" ]; then
+    echo "ERROR: expected SIRAH source at $INSTALL_DIR" >&2
+    exit 1
+fi
 
-# 3. Install SIRAH
-echo "[3/5] Installing SIRAH..."
-pip install --upgrade pip
-pip install -e .
+# 2. Install the headless runtime package; no Piper, camera, or hardware extra.
+echo "[2/4] Installing sirah-runtime..."
+sudo "$PYTHON" -m venv "$INSTALL_DIR/.venv"
+sudo "$INSTALL_DIR/.venv/bin/python" -m pip install --upgrade pip
+sudo "$INSTALL_DIR/.venv/bin/python" -m pip install -e "$INSTALL_DIR"
 
-# 4. Optional: perception support
-echo "[4/5] Installing perception (MediaPipe + OpenCV)..."
-pip install opencv-python-headless mediapipe numpy || {
-    echo "WARNING: MediaPipe install failed. Perception will be simulated."
-}
+# 3. Install service designs and credential-free environment examples.
+echo "[3/4] Installing runtime and optional Web Lab client configuration..."
+sudo install -d -m 0750 /etc/sirah
+sudo install -m 0644 "$INSTALL_DIR/deploy/systemd/sirah-runtime.service" \
+    /etc/systemd/system/sirah-runtime.service
+sudo install -m 0644 "$INSTALL_DIR/deploy/systemd/sirah-web-lab.service" \
+    /etc/systemd/system/sirah-web-lab.service
+sudo install -m 0600 "$INSTALL_DIR/deploy/systemd/runtime.env.example" \
+    /etc/sirah/runtime.env.example
+sudo install -m 0600 "$INSTALL_DIR/deploy/systemd/web-lab.env.example" \
+    /etc/sirah/web-lab.env.example
+sudo systemctl daemon-reload
 
-# 5. Start script
-cat > run_edge_server.sh << 'SCRIPT'
-#!/usr/bin/env bash
-source .venv-edge/bin/activate
-python3 -c "
-import asyncio
-from sirah.bridge.pi_server import EdgeServer
-async def main():
-    server = EdgeServer(host='0.0.0.0', port=8765)
-    await server.start()
-    print('Edge server running on :8765')
-    await asyncio.Event().wait()
-asyncio.run(main())
-"
-SCRIPT
-chmod +x run_edge_server.sh
+# 4. Service account can read the installation and its two private env files.
+echo "[4/4] Preparing service account..."
+if ! id -u sirah > /dev/null 2>&1; then
+    sudo useradd --system --user-group --home-dir /opt/sirah --shell /usr/sbin/nologin sirah
+fi
+sudo chown -R sirah:sirah "$INSTALL_DIR"
 
 echo
-echo "=== Done! ==="
-echo "Run the edge server: ./run_edge_server.sh"
-echo "Connect from laptop: sirah-console --profile=DEV_DISTRIBUTED"
+echo "Create /etc/sirah/runtime.env from runtime.env.example and replace secrets."
+echo "For optional local Web Lab, create /etc/sirah/web-lab.env from its example."
+echo "This script does not run systemctl; review and enable units explicitly."

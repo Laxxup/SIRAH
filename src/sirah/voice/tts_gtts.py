@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import tempfile
 import uuid
+from contextlib import suppress
 from time import monotonic
 
 from sirah.errors import SpeechError
@@ -39,6 +41,7 @@ class GTTSTTS:
         op_id = str(uuid.uuid4())[:8]
         self._busy = True
         t0 = monotonic()
+        mp3_path = ""
 
         try:
             loop = asyncio.get_running_loop()
@@ -72,6 +75,9 @@ class GTTSTTS:
             raise SpeechError(f"gTTS error: {exc}") from exc
         finally:
             self._busy = False
+            if mp3_path and os.path.exists(mp3_path):
+                with suppress(OSError):
+                    os.unlink(mp3_path)
 
     async def stop(self) -> None:
         self._busy = False

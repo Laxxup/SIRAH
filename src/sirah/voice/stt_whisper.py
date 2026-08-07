@@ -3,40 +3,67 @@
 from __future__ import annotations
 
 import asyncio
-import logging
+from collections import OrderedDict
+from collections.abc import Callable
+from dataclasses import dataclass
 from time import monotonic
 from typing import Any
 
-from sirah.errors import SpeechInputError, SpeechUnavailableError
+from sirah.errors import (
+    SpeechRecognitionError,
+    SpeechRecognitionTimeoutError,
+    SpeechUnavailableError,
+)
 from sirah.types import SpeechRecognitionEvent
 
-__all__ = ["WhisperSTT"]
+__all__ = ["SttDiagnostics", "WhisperSTT"]
 
-logger = logging.getLogger(__name__)
+
+@dataclass(frozen=True, slots=True)
+class SttDiagnostics:
+    """Transcript-free timing for one ephemeral recognizer turn."""
+
+    turn_id: str
+    latency_ms: float
 
 
 class WhisperSTT:
     def __init__(
         self,
-        model_size: str = "base",
+        model_size: str = "tiny",
         device: str = "cpu",
         compute_type: str = "int8",
         language: str = "es",
-        beam_size: int = 5,
+        beam_size: int = 1,
+        timeout_s: float = 30.0,
+        model_loader: Callable[[], Any] | None = None,
     ) -> None:
         self._model_size = model_size
         self._device = device
         self._compute_type = compute_type
         self._language = language
         self._beam_size = beam_size
+        self._timeout_s = timeout_s
+        self._model_loader = model_loader
         self._model: Any = None
         self._initialised = False
+        self._load_error: SpeechUnavailableError | None = None
+        self._start_lock = asyncio.Lock()
+        self._diagnostics: OrderedDict[str, SttDiagnostics] = OrderedDict()
 
     async def start(self) -> None:
-        loop = asyncio.get_running_loop()
-        self._model = await loop.run_in_executor(None, self._load_model)
-        self._initialised = True
-        logger.info("WhisperSTT: model %s loaded", self._model_size)
+        async with self._start_lock:
+            if self._initialised:
+                return
+            if self._load_error is not None:
+                raise self._load_error
+            try:
+                loop = asyncio.get_running_loop()
+                self._model = await loop.run_in_executor(None, self._load_model)
+            except Exception as error:
+                self._load_error = SpeechUnavailableError("Whisper model could not load")
+                raise self._load_error from error
+            self._initialised = True
 
     async def stop(self) -> None:
         self._model = None
@@ -46,6 +73,8 @@ class WhisperSTT:
         return self._initialised and self._model is not None
 
     def _load_model(self) -> Any:
+        if self._model_loader is not None:
+            return self._model_loader()
         from faster_whisper import WhisperModel
 
         return WhisperModel(
@@ -54,8 +83,10 @@ class WhisperSTT:
             compute_type=self._compute_type,
         )
 
-    async def transcribe(self, audio_data: bytes) -> SpeechRecognitionEvent:
+    async def transcribe(self, wav: bytes, turn_id: str) -> SpeechRecognitionEvent:
         if not self._initialised or self._model is None:
+            if self._load_error is not None:
+                raise self._load_error
             raise SpeechUnavailableError("Whisper model not loaded")
 
         loop = asyncio.get_running_loop()
@@ -68,7 +99,7 @@ class WhisperSTT:
 
                 import numpy as np
 
-                buf = io.BytesIO(audio_data)
+                buf = io.BytesIO(wav)
                 with wave.open(buf, "rb") as wf:
                     frames = wf.readframes(wf.getnframes())
                     audio_np = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
@@ -100,10 +131,24 @@ class WhisperSTT:
                     timestamp=monotonic(),
                 )
 
-            result = await loop.run_in_executor(None, _run)
-            latency = (monotonic() - t0) * 1000
-            logger.debug("Whisper transcribed in %.0fms: %s", latency, result.text[:80])
+            result = await asyncio.wait_for(
+                loop.run_in_executor(None, _run), timeout=self._timeout_s
+            )
+            self._record_diagnostics(turn_id, (monotonic() - t0) * 1000)
             return result
+        except TimeoutError as error:
+            self._record_diagnostics(turn_id, (monotonic() - t0) * 1000)
+            raise SpeechRecognitionTimeoutError("Whisper transcription timed out") from error
+        except Exception as error:
+            self._record_diagnostics(turn_id, (monotonic() - t0) * 1000)
+            raise SpeechRecognitionError("Whisper transcription failed") from error
 
-        except Exception as exc:
-            raise SpeechInputError(f"Whisper transcription failed: {exc}") from exc
+    def diagnostics_for(self, turn_id: str) -> SttDiagnostics:
+        """Return bounded transcript-free timing for the requested turn."""
+        return self._diagnostics[turn_id]
+
+    def _record_diagnostics(self, turn_id: str, latency_ms: float) -> None:
+        self._diagnostics[turn_id] = SttDiagnostics(turn_id, latency_ms)
+        self._diagnostics.move_to_end(turn_id)
+        if len(self._diagnostics) > 64:
+            self._diagnostics.popitem(last=False)

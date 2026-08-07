@@ -2,7 +2,7 @@
 
 ## Estado
 
-Aceptado para la pre-alpha `0.1.0.dev0`.
+Reemplazado por el cliente `sirah-console` del runtime headless.
 
 ## Contexto
 
@@ -13,33 +13,32 @@ catálogo de capacidades, ejecución mediante Cortex y un robot simulado.
 
 ## Decisión
 
-Crear `examples/interactive_conversation.py` como SIRAH Laboratory Console.
-La consola usa argparse, conserva una sesión en memoria y consume
-`ConversationOrchestrator`, `ComponentRegistry` y `SystemSnapshot`.
+La consola consume un socket Unix autenticado del único `SirahRuntime`. Usa
+`SIRAH_RUNTIME_SOCKET` y `SIRAH_CLI_SECRET`; no crea el sistema, no construye
+adaptadores ni recibe configuración de dispositivos.
 
 La consola puede:
 
-- mostrar respuestas, decisiones, autorizaciones, comandos y eventos resumidos;
-- mostrar componentes disponibles, simulados y no configurados;
-- ejecutar únicamente capacidades que ya atraviesan la política y Cortex;
-- ofrecer comandos locales de diagnóstico y limpieza de sesión.
+- enviar texto y consultar el snapshot expuesto por el runtime;
+- mostrar respuestas y componentes serializados;
+- solicitar únicamente capacidades ya autorizadas por el runtime.
 
 La consola no contiene reglas de seguridad, no crea `RobotCommand`, no accede
-al SDK de Gemini, no llama directamente a `RobotPort` y no persiste datos.
+a Cortex, no llama directamente a `RobotPort`, no selecciona dispositivos y no
+persiste datos.
 
 ## Consecuencias positivas
 
 - La demostración hace visible la modularidad y la degradación progresiva.
-- El fake permite trabajar sin red y Gemini sigue siendo intercambiable.
-- Un futuro panel puede consumir los mismos servicios y snapshots.
+- El runtime mantiene una sola asamblea y una sola autoridad de hardware.
+- Un futuro panel puede consumir el mismo socket y snapshots.
 - La lógica de dominio permanece fuera de la interfaz.
 
 ## Consecuencias negativas
 
 - La consola no es una interfaz de usuario definitiva.
-- El estado desaparece al cerrar el proceso.
 - La representación del presente es resumida y no sustituye telemetría real.
-- Un panel futuro requerirá contratos de transporte y autenticación propios.
+- Los clientes deben recibir y proteger su propio secreto compartido.
 
 ## Evolución futura
 

@@ -86,3 +86,12 @@ async def test_coordinator_concurrency() -> None:
     assert "A_released" in results
     assert "B_got" in results
     assert "B_released" in results
+
+
+@pytest.mark.asyncio
+async def test_coordinator_reports_held_direction_for_rejected_human_input() -> None:
+    coord = AudioTurnCoordinator()
+    await coord.reserve(AudioTurnDirection.OUTPUT)
+
+    with pytest.raises(AudioTurnBusyError, match="OUTPUT"):
+        await coord.reserve(AudioTurnDirection.INPUT)

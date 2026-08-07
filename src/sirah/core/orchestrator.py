@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from time import monotonic
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from sirah.action.capabilities import CapabilityCatalog, CapabilityPolicy
 from sirah.action.runner import ActionRunner
@@ -16,7 +16,6 @@ from sirah.errors import (
     ActionError,
     IntelligenceError,
     PerceptionError,
-    SpeechError,
 )
 from sirah.intelligence.port import IntelligencePort
 from sirah.perception.port import PerceptionPort
@@ -27,6 +26,7 @@ from sirah.types import (
     ComponentStatus,
     ConversationMessage,
     ConversationResult,
+    DecisionType,
     IntelligenceDecision,
     IntelligenceRequest,
     PerceptionFrame,
@@ -36,6 +36,9 @@ from sirah.types import (
     SystemSnapshot,
 )
 from sirah.voice.port import SpeechInputPort, SpeechOutputPort
+
+if TYPE_CHECKING:
+    from sirah.voice.audio_service import AudioTurnService
 
 __all__ = ["SirahOrchestrator"]
 
@@ -75,6 +78,7 @@ class SirahOrchestrator:
         self._context = context or ConversationContext()
         self._registry = registry or ComponentRegistry()
         self._mood = mood
+        self._voice: AudioTurnService | None = None
 
         self._registry.register(ComponentKind.CORE, "orchestrator")
         self._registry.register(ComponentKind.INTELLIGENCE, "primary")
@@ -108,6 +112,26 @@ class SirahOrchestrator:
             ComponentStatus.READY,
             "started",
         )
+        self._registry.update(
+            ComponentId(ComponentKind.INTELLIGENCE, "primary"),
+            ComponentStatus.READY,
+            "configured",
+        )
+        self._registry.update(
+            ComponentId(ComponentKind.PERCEPTION, "camera"),
+            ComponentStatus.READY,
+            "configured",
+        )
+        self._registry.update(
+            ComponentId(ComponentKind.VOICE, "speech"),
+            ComponentStatus.READY,
+            "configured",
+        )
+        self._registry.update(
+            ComponentId(ComponentKind.ACTION, "runner"),
+            ComponentStatus.READY,
+            "configured",
+        )
         logger.info("SirahOrchestrator started")
 
     async def stop(self) -> None:
@@ -140,7 +164,7 @@ class SirahOrchestrator:
             decision = response.decision
         except IntelligenceError:
             decision = IntelligenceDecision(
-                decision_type=type("DT", (), {"CONVERSATION": None})().CONVERSATION,  # type: ignore[arg-type]
+                decision_type=DecisionType.CONVERSATION,
                 text_response="Lo siento, no puedo procesar eso ahora.",
             )
             self._registry.update(
@@ -201,22 +225,19 @@ class SirahOrchestrator:
             )
 
     async def say(self, text: str) -> SpeechCompletion:
-        if self._speech_output is None:
+        if self._voice is None:
             return SpeechCompletion(operation_id="noop", success=False, error="no TTS")
-        try:
-            return await self._speech_output.speak(text)
-        except SpeechError as exc:
-            return SpeechCompletion(operation_id="error", success=False, error=str(exc))
+        result = await self._voice.speak_autonomously(text)
+        return result.tts_completion or SpeechCompletion(
+            operation_id=result.turn_id, success=False, error=result.stage.value
+        )
+
+    def set_voice_service(self, voice: AudioTurnService) -> None:
+        self._voice = voice
 
     async def listen(self, timeout: float = 10.0) -> SpeechRecognitionEvent:
-        if self._speech_input is None:
-            return SpeechRecognitionEvent(text="", is_final=False)
-        try:
-            return await asyncio.wait_for(
-                self._speech_input.listen(), timeout=timeout
-            )
-        except TimeoutError:
-            return SpeechRecognitionEvent(text="", is_final=False, confidence=0.0)
+        del timeout
+        return SpeechRecognitionEvent(text="", is_final=False, confidence=0.0)
 
     async def perceive(self) -> PerceptionFrame:
         if self._perception is None:

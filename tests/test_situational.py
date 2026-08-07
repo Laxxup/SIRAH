@@ -14,7 +14,22 @@ from sirah.intelligence.fake_adapter import FakeIntelligence
 from sirah.perception.simulated import SimulatedPerception
 from sirah.social.situational import SituationalCoordinator
 from sirah.types import FaceDetection
+from sirah.voice.audio_service import AudioTurnService
+from sirah.voice.coordinator import AudioTurnCoordinator
 from sirah.voice.simulated import FakeSpeechInput, FakeSpeechOutput
+
+
+def voice(output: FakeSpeechOutput) -> AudioTurnService:
+    async def respond(_: str) -> str:
+        return ""
+
+    return AudioTurnService(
+        capture_device="test-capture",
+        speech_input=FakeSpeechInput(),
+        speech_output=output,
+        coordinator=AudioTurnCoordinator(),
+        respond=respond,
+    )
 
 
 @pytest.mark.asyncio
@@ -87,7 +102,7 @@ async def test_situational_greets_when_face_detected() -> None:
     coord = SituationalCoordinator(
         orchestrator=orch,
         perception=sim_perception,
-        speech=speech_output,
+        voice=voice(speech_output),
         interval_s=0.05,
         silent=False,
     )

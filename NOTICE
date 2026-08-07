@@ -1,0 +1,10 @@
+SIRAH third-party notice
+
+piper-tts is an optional GPL-licensed dependency and is not distributed with
+SIRAH. Operators must retain and comply with the license and notices supplied
+with the selected piper-tts release and each external voice model.
+
+Any packaging, redistribution, or combination of SIRAH with piper-tts or a
+voice model requires legal review of GPL obligations and the model's separate
+license before distribution. SIRAH source code remains licensed under Apache
+License 2.0; this notice does not alter that license.

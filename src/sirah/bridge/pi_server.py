@@ -89,28 +89,5 @@ class EdgeServer:
             await writer.wait_closed()
 
     async def _handle_tts(self, msg: EdgeMessage) -> None:
-        text = msg.payload.get("text", "")
-        if not text:
-            return
-
-        logger.info("Edge TTS: %s...", text[:50])
-        proc = await asyncio.create_subprocess_exec(
-            self._tts_cmd,
-            "--output-raw",
-            "-s", self._speaker,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-
-        stdout, _ = await proc.communicate(input=(text + "\n").encode())
-
-        if stdout:
-            play = await asyncio.create_subprocess_exec(
-                "aplay", "-q",
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            await play.communicate(input=stdout)
-            await play.wait()
+        del msg
+        logger.warning("Edge TTS is disabled; runtime AudioTurnService owns playback")

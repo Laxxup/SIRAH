@@ -20,7 +20,15 @@ __all__ = [
     "SpeechBusyError",
     "SpeechUnavailableError",
     "SpeechInputError",
+    "SpeechRecognitionError",
+    "SpeechRecognitionTimeoutError",
+    "AudioCaptureError",
+    "AudioFormatError",
     "AudioTurnBusyError",
+    "RuntimeAccessDeniedError",
+    "RuntimeAssemblyAccessError",
+    "RuntimeConfigurationError",
+    "DeviceNotAllowedError",
     "ActionError",
     "CapabilityRejectedError",
     "CapabilityExecutionError",
@@ -97,8 +105,40 @@ class SpeechInputError(SpeechError):
     """STT capture or recognition failure."""
 
 
+class SpeechRecognitionError(SpeechInputError):
+    """The speech recognizer could not produce a result."""
+
+
+class SpeechRecognitionTimeoutError(SpeechRecognitionError):
+    """The speech recognizer exceeded its per-turn deadline."""
+
+
+class AudioCaptureError(SpeechInputError):
+    """The configured server-side capture process failed."""
+
+
+class AudioFormatError(SpeechInputError):
+    """Captured PCM or WAV does not match the runtime format."""
+
+
 class AudioTurnBusyError(SpeechError):
     """Audio turn lease is held by another party."""
+
+
+class RuntimeAccessDeniedError(SirahRecoverableError):
+    """Runtime client attempted an unauthorised request."""
+
+
+class RuntimeAssemblyAccessError(SirahRecoverableError):
+    """A caller outside the runtime attempted to assemble the system."""
+
+
+class RuntimeConfigurationError(SirahFatalError):
+    """Server-only runtime configuration is missing or invalid."""
+
+
+class DeviceNotAllowedError(SirahRecoverableError):
+    """Runtime selected a device outside its configured allowlist."""
 
 
 class ActionError(SirahRecoverableError):

@@ -148,7 +148,12 @@ class GroqIntelligence:
                         raise IntelligenceUnavailableError(f"Groq HTTP {resp.status}: {body}")
 
                     data = await resp.json()
-                    content = data["choices"][0]["message"]["content"]
+                    try:
+                        content = data["choices"][0]["message"]["content"]
+                    except (KeyError, IndexError, TypeError) as exc:
+                        raise IntelligenceUnavailableError(
+                            f"Groq returned unexpected body: {exc}"
+                        ) from exc
                     return content
         except TimeoutError as exc:
             raise IntelligenceTimeoutError(

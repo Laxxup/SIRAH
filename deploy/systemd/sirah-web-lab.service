@@ -1,0 +1,21 @@
+[Unit]
+Description=SIRAH local Web Lab runtime client
+After=sirah-runtime.service
+Requires=sirah-runtime.service
+
+[Service]
+Type=simple
+User=sirah
+Group=sirah
+WorkingDirectory=/opt/sirah
+EnvironmentFile=/etc/sirah/web-lab.env
+ExecStart=/opt/sirah/.venv/bin/sirah-web
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target

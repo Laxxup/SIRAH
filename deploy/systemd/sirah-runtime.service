@@ -1,0 +1,25 @@
+[Unit]
+Description=SIRAH headless runtime
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sirah
+Group=sirah
+SupplementaryGroups=audio
+WorkingDirectory=/opt/sirah
+EnvironmentFile=/etc/sirah/runtime.env
+RuntimeDirectory=sirah
+RuntimeDirectoryMode=0750
+ExecStart=/opt/sirah/.venv/bin/sirah-runtime
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/run/sirah
+
+[Install]
+WantedBy=multi-user.target

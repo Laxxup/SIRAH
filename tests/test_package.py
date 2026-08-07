@@ -9,8 +9,8 @@ def test_package_imports() -> None:
     assert sirah.__all__ is not None
 
 
-def test_build_system_in_all() -> None:
-    assert "build_system" in sirah.__all__
+def test_runtime_in_all() -> None:
+    assert "SirahRuntime" in sirah.__all__
 
 
 def test_system_profile_in_all() -> None:

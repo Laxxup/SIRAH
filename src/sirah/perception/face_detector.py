@@ -76,7 +76,7 @@ class VisualContext:
 
 
 def _classify_color(bgr: object) -> str:
-    """Classify a BGR sample without mistaking neutral light for a hue."""
+    """Classify a BGR sample, tolerant of indoor lighting and low saturation."""
     import numpy as np
 
     values = np.asarray(bgr, dtype=float).reshape(-1)
@@ -85,37 +85,48 @@ def _classify_color(bgr: object) -> str:
 
     blue, green, red = (float(value) for value in values[:3])
     maximum = max(blue, green, red)
-    spread = maximum - min(blue, green, red)
+    minimum = min(blue, green, red)
+    spread = maximum - minimum
 
-    if maximum < 35:
+    if maximum < 30:
         return "negro"
-    if spread < 40:
-        if maximum < 120:
-            return "gris oscuro"
-        if maximum > 210:
-            return "blanco"
-        return "gris"
+    if maximum > 235 and spread < 30:
+        return "blanco"
 
-    hue, saturation, _ = colorsys.rgb_to_hsv(
+    hue, saturation, value = colorsys.rgb_to_hsv(
         red / 255.0, green / 255.0, blue / 255.0
     )
-    if saturation < 0.22:
+
+    if saturation < 0.15:
+        if maximum < 120:
+            return "gris oscuro"
+        if maximum > 200:
+            return "blanco"
         return "gris"
-    if hue < 0.04 or hue >= 0.96:
+    if value < 0.25:
+        return "gris oscuro"
+
+    if hue < 0.03 or hue >= 0.97:
         return "rojo"
-    if hue < 0.12:
-        return "naranja"
-    if hue < 0.20:
+    if hue < 0.08:
+        return "naranja" if saturation > 0.4 else "cafe"
+    if hue < 0.16:
         return "amarillo"
-    if hue < 0.47:
+    if hue < 0.22:
+        return "amarillo verdoso"
+    if hue < 0.42:
         return "verde"
-    if hue < 0.60:
+    if hue < 0.52:
+        return "verde azulado"
+    if hue < 0.62:
         return "azul claro"
-    if hue < 0.78:
+    if hue < 0.72:
         return "azul"
-    if hue < 0.92:
+    if hue < 0.82:
+        return "azul oscuro"
+    if hue < 0.90:
         return "morado"
-    return "rojo"
+    return "rosa"
 
 
 class FaceDetector:

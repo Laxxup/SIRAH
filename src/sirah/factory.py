@@ -24,10 +24,13 @@ from sirah.intelligence.port import IntelligencePort
 from sirah.perception.port import PerceptionPort
 from sirah.perception.simulated import SimulatedPerception
 from sirah.social.situational import SituationalCoordinator
+from sirah.types import ComponentId, ComponentKind, ComponentStatus
 from sirah.voice.port import SpeechInputPort, SpeechOutputPort
 from sirah.voice.simulated import FakeSpeechInput, FakeSpeechOutput
 
-__all__ = ["SystemProfile", "build_system", "SystemAssembly"]
+__all__ = ["SystemProfile", "SystemAssembly"]
+
+_RUNTIME_ASSEMBLY_TOKEN = object()
 
 
 class SystemProfile(Enum):
@@ -72,9 +75,19 @@ def build_system(
     edge_host: str = "raspberrypi.local",
     edge_port: int = 8765,
     tts: str = "fake",
+    stt: str = "fake",
     piper_voice: str = "es_ES-sharvard-medium",
+    piper_model_path: str | None = None,
+    piper_config_path: str | None = None,
+    output_device: str | None = None,
     mood_enabled: bool = True,
+    *,
+    _runtime_token: object | None = None,
 ) -> SystemAssembly:
+    from sirah.errors import RuntimeAssemblyAccessError
+
+    if _runtime_token is not _RUNTIME_ASSEMBLY_TOKEN:
+        raise RuntimeAssemblyAccessError("system assembly is owned by SirahRuntime")
     context = ConversationContext(max_messages=16)
     registry = ComponentRegistry()
     robot = SimulatedRobot()
@@ -102,11 +115,30 @@ def build_system(
         intelligence = FakeIntelligence()
 
     perception: PerceptionPort | None = SimulatedPerception()
-    speech_input: SpeechInputPort | None = FakeSpeechInput()
+    if stt == "whisper":
+        from sirah.voice.stt_whisper import WhisperSTT
+
+        speech_input: SpeechInputPort | None = WhisperSTT()
+    else:
+        speech_input = FakeSpeechInput()
 
     if tts == "piper":
-        from sirah.voice.tts_piper import PiperTTS
-        speech_output: SpeechOutputPort | None = PiperTTS(model_name=piper_voice)
+        from pathlib import Path
+
+        from sirah.voice.tts_piper import AplayPlayer, PiperTTS
+
+        if not (piper_model_path and piper_config_path and output_device):
+            raise RuntimeAssemblyAccessError("Piper requires runtime audio configuration")
+        speech_output: SpeechOutputPort | None = PiperTTS(
+            model_path=Path(piper_model_path),
+            config_path=Path(piper_config_path),
+            player=AplayPlayer(output_device),
+            on_failure=lambda: registry.update(
+                ComponentId(ComponentKind.VOICE, "speech"),
+                ComponentStatus.DEGRADED,
+                "Piper unavailable",
+            ),
+        )
     elif tts == "gtts":
         from sirah.voice.tts_gtts import GTTSTTS
         speech_output = GTTSTTS()
@@ -132,7 +164,6 @@ def build_system(
     situational = SituationalCoordinator(
         orchestrator=orchestrator,
         perception=perception,
-        speech=speech_output,
         interval_s=0.5,
         silent=False,
     )

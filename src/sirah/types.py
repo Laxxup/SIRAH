@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from enum import Enum, auto
-from typing import Any
+from enum import Enum, StrEnum, auto
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from sirah.voice.diagnostics import AudioMetrics, AudioStage
 
 __all__ = [
     "DecisionType",
+    "ClientKind",
+    "ClientCapabilities",
+    "RuntimeRequest",
     "ComponentKind",
     "ComponentStatus",
     "InitiativeAction",
@@ -29,6 +37,7 @@ __all__ = [
     "PerceptionFrame",
     "SpeechCompletion",
     "SpeechRecognitionEvent",
+    "VoiceTurnResult",
     "EdgeMessage",
 ]
 
@@ -37,6 +46,44 @@ class DecisionType(Enum):
     CONVERSATION = auto()
     INITIATIVE = auto()
     EMERGENCY = auto()
+
+
+class ClientKind(StrEnum):
+    """Identities recognised by the headless runtime."""
+
+    WEB_LAB = "web_lab"
+    CLI = "cli"
+
+
+class ClientCapabilities(StrEnum):
+    """Operations exposed to runtime clients in the initial ACL."""
+
+    CONVERSATION_SUBMIT = "conversation.submit"
+    STATUS_READ = "status.read"
+    DIAGNOSTICS_READ = "diagnostics.read"
+    LABORATORY_MANUAL_TEXT = "laboratory.manual_text"
+    LOCAL_VOICE_TURN_SUBMIT = "local_voice_turn.submit"
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeRequest:
+    """A client operation with immutable, non-device metadata."""
+
+    capability: ClientCapabilities
+    metadata: Mapping[str, object] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "metadata", _freeze_metadata(self.metadata))
+
+
+def _freeze_metadata(value: object) -> object:
+    if isinstance(value, Mapping):
+        return MappingProxyType({key: _freeze_metadata(item) for key, item in value.items()})
+    if isinstance(value, list | tuple):
+        return tuple(_freeze_metadata(item) for item in value)
+    if isinstance(value, set | frozenset):
+        return frozenset(_freeze_metadata(item) for item in value)
+    return value
 
 
 class ComponentKind(Enum):
@@ -176,6 +223,18 @@ class SpeechRecognitionEvent:
     is_final: bool
     confidence: float = 0.0
     timestamp: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class VoiceTurnResult:
+    """Ephemeral terminal result for one locally-owned voice turn."""
+
+    turn_id: str
+    stage: AudioStage
+    diagnostics: AudioMetrics | None = None
+    transcript: str | None = None
+    response: str | None = None
+    tts_completion: SpeechCompletion | None = None
 
 
 @dataclass(frozen=True, slots=True)

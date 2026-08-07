@@ -1,93 +1,34 @@
-"""Integration test: full pipeline with fake components."""
+"""Integration tests through the headless runtime boundary."""
 
 from __future__ import annotations
 
 import pytest
 
-from sirah.factory import SystemProfile, build_system
+from sirah.core.runtime import SirahRuntime
+from sirah.types import ClientKind
 
 
 @pytest.mark.asyncio
 async def test_full_pipeline_conversation() -> None:
-    sys = build_system(
-        profile=SystemProfile.DEV_LAPTOP,
-        intelligence_type="laboratory",
-    )
-    await sys.orchestrator.start()
-    assert sys.orchestrator.is_running
+    runtime = SirahRuntime(client_secrets={ClientKind.CLI: "cli-secret"})
 
-    result = await sys.orchestrator.handle_text("Hola, ¿cómo estás?")
-    assert result.message.role == "assistant"
-    assert "Hola" in result.message.content or "SIRAH" in result.message.content
-
-    await sys.orchestrator.stop()
-    assert not sys.orchestrator.is_running
+    await runtime.start()
+    try:
+        result = await runtime.submit_text("Hola, ¿cómo estás?")
+        assert result.message.role == "assistant"
+        assert "Hola" in result.message.content
+    finally:
+        await runtime.stop()
 
 
 @pytest.mark.asyncio
-async def test_full_pipeline_multi_turn() -> None:
-    sys = build_system(
-        profile=SystemProfile.DEV_LAPTOP,
-        intelligence_type="scripted",
-    )
-    await sys.orchestrator.start()
+async def test_full_pipeline_multiple_runtime_turns() -> None:
+    runtime = SirahRuntime(client_secrets={ClientKind.CLI: "cli-secret"})
 
-    r1 = await sys.orchestrator.handle_text("primero")
-    r2 = await sys.orchestrator.handle_text("segundo")
-    r3 = await sys.orchestrator.handle_text("tercero")
-
-    assert r1.message.content is not None
-    assert r2.message.content is not None
-    assert r3.message.content is not None
-
-    ctx = sys.orchestrator.context
-    assert len(ctx.messages) == 6
-
-    snap = sys.orchestrator.snapshot
-    assert snap.healthy()
-
-    await sys.orchestrator.stop()
-
-
-@pytest.mark.asyncio
-async def test_full_pipeline_stop_command() -> None:
-    sys = build_system(
-        profile=SystemProfile.DEV_LAPTOP,
-        intelligence_type="laboratory",
-    )
-    await sys.orchestrator.start()
-
-    result = await sys.orchestrator.handle_text("para")
-    assert "Deteniéndome" in result.message.content
-
-    await sys.orchestrator.stop()
-
-
-@pytest.mark.asyncio
-async def test_full_pipeline_situational_integration() -> None:
-    sys = build_system(
-        profile=SystemProfile.DEV_LAPTOP,
-        intelligence_type="fake",
-    )
-    await sys.orchestrator.start()
-
-    assert sys.situational is not None
-    await sys.situational.start()
-    assert sys.situational.memory.is_empty
-
-    await sys.situational.stop()
-    await sys.orchestrator.stop()
-
-
-@pytest.mark.asyncio
-async def test_full_pipeline_tts_integration() -> None:
-    sys = build_system(
-        profile=SystemProfile.DEV_LAPTOP,
-        intelligence_type="fake",
-    )
-    await sys.orchestrator.start()
-
-    result = await sys.orchestrator.say("hola mundo")
-    assert result.success
-
-    await sys.orchestrator.stop()
+    await runtime.start()
+    try:
+        results = [await runtime.submit_text(text) for text in ("uno", "dos", "tres")]
+        assert all(result.message.content for result in results)
+        assert runtime.snapshot().healthy()
+    finally:
+        await runtime.stop()

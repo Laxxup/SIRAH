@@ -23,6 +23,7 @@ from sirah.types import ConversationMessage
 
 if TYPE_CHECKING:
     from sirah.core.orchestrator import SirahOrchestrator
+    from sirah.voice.audio_service import AudioTurnService
 
 __all__ = ["VisionLoop"]
 
@@ -92,6 +93,7 @@ class VisionLoop:
     def __init__(
         self,
         orchestrator: SirahOrchestrator,
+        voice: AudioTurnService | None = None,
         person_tracker: PersonTracker | None = None,
         face_detector: FaceDetector | None = None,
         camera_device: int = 0,
@@ -106,6 +108,7 @@ class VisionLoop:
         headless: bool = False,
     ) -> None:
         self._orchestrator = orchestrator
+        self._voice = voice
         self._tracker = person_tracker or PersonTracker()
         self._camera_device = camera_device
         self._width = width
@@ -121,6 +124,9 @@ class VisionLoop:
         self._running = False
         self._silent = silent
         self._headless = headless
+        self._mobile_mode = False
+        self._mobile_last_frame_at = 0.0
+        self._mobile_keepalive = 2.0
         self._capture_task: asyncio.Task[object] | None = None
         self._analyze_task: asyncio.Task[object] | None = None
 
@@ -202,6 +208,13 @@ class VisionLoop:
         while self._running:
             try:
                 t0 = monotonic()
+
+                if (
+                    self._mobile_mode
+                    and monotonic() - self._mobile_last_frame_at < self._mobile_keepalive
+                ):
+                    await asyncio.sleep(0.04)
+                    continue
 
                 def _step() -> object | None:
                     ret, frame = self._cap.read()  # type: ignore[union-attr]
@@ -393,8 +406,8 @@ class VisionLoop:
                     if len(self._conversation_history) > 20:
                         self._conversation_history = self._conversation_history[-15:]
 
-                    if not self._silent and self._orchestrator._speech_output:
-                        await self._orchestrator.say(text)
+                    if not self._silent and self._voice is not None:
+                        await self._voice.speak_autonomously(text)
 
         except Exception as exc:
             logger.warning("Vision LLM failed: %s", exc)

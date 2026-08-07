@@ -209,14 +209,16 @@ class MediaPipeVision(FaceDetector):
         x_limits: tuple[int, int] | None = None,
     ) -> tuple[int, int, int, int]:
         height, width = frame.shape[:2]
-        x, y, face_width, face_height = bbox
-        x1 = max(0, int(x - face_width * 0.6))
-        x2 = min(width, int(x + face_width * 1.6))
+        x1_face, y1_face, x2_face, y2_face = bbox
+        face_width = max(1, x2_face - x1_face)
+        face_height = max(1, y2_face - y1_face)
+        x1 = max(0, int(x1_face - face_width * 0.6))
+        x2 = min(width, int(x2_face + face_width * 0.8))
         if x_limits is not None:
             x1 = max(x1, x_limits[0])
             x2 = min(x2, x_limits[1])
-        y1 = max(0, min(height, int(y + face_height)))
-        y2 = min(height, int(y + face_height * 2.2))
+        y1 = max(0, min(height, y2_face))
+        y2 = min(height, int(y2_face + face_height * 1.8))
         if y2 - y1 < max(8, int(face_height * 0.35)):
             y1 = max(0, height - max(8, face_height))
             y2 = height
@@ -255,8 +257,10 @@ class MediaPipeVision(FaceDetector):
     ) -> tuple[tuple[int, int, int, int], FaceVisualContext]:
         height, width = frame.shape[:2]
         bbox = self._bbox(landmarks, width, height)
-        x, y, face_width, face_height = bbox
-        center_x = (x + face_width / 2) / width
+        x1, y1, x2, y2 = bbox
+        face_width = max(1, x2 - x1)
+        face_height = max(1, y2 - y1)
+        center_x = (x1 + x2) / 2.0 / width
         if center_x < 0.35:
             position = "izquierda"
         elif center_x > 0.65:
@@ -307,6 +311,8 @@ class MediaPipeVision(FaceDetector):
                 (bbox[2] + raw_entries[index + 1][0][0]) // 2
                 if index + 1 < len(raw_entries)
                 else width
+                if index + 1 < len(raw_entries)
+                else width
             )
             entries.append(
                 self._face_context(
@@ -320,10 +326,15 @@ class MediaPipeVision(FaceDetector):
         contexts = tuple(entry[1] for entry in entries)
         detections = tuple(
             FaceDetection(
-                bbox=(x / width, y / height, face_width / width, face_height / height),
+                bbox=(
+                    x1 / width,
+                    y1 / height,
+                    (x2 - x1) / width,
+                    (y2 - y1) / height,
+                ),
                 confidence=0.9,
             )
-            for x, y, face_width, face_height in (entry[0] for entry in entries)
+            for x1, y1, x2, y2 in (entry[0] for entry in entries)
         )
         colors = [
             context.dominant_color

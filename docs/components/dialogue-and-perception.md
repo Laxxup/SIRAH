@@ -16,8 +16,9 @@ eventos estructurados. Ninguna interfaz ni proveedor está adoptado.
 
 ## Hardware, software y dependencias
 
-Groq/Ollama textual, Piper CLI y Vosk PTT tienen adaptadores concretos. Piper
-usa un modelo y reproductor externos; Vosk usa modelo y `arecord` externos.
+Groq/Ollama textual, Piper por API Python y Vosk PTT tienen adaptadores
+concretos. Piper usa un modelo externo persistente y `aplay` por la salida del
+runtime; Vosk usa modelo y `arecord` externos.
 La cámara local usa OpenCV y `MediaPipeVision` opcional; los modelos `.task` se
 instalan manualmente y no se descargan en runtime. No se validan altavoz,
 micrófono ni cámara del robot físicamente.

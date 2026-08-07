@@ -1,83 +1,31 @@
-"""Test LaboratoryConsole dispatch (no UI)."""
+"""Laboratory console runtime-client tests."""
 
 from __future__ import annotations
-
-import asyncio
 
 import pytest
 
 from sirah.console import LaboratoryConsole
-from sirah.factory import SystemProfile
+from sirah.core.runtime_client import RuntimeClient
+from sirah.types import ClientKind, RuntimeRequest
+
+
+class RecordingRuntime:
+    def __init__(self) -> None:
+        self.requests: list[RuntimeRequest] = []
+
+    async def __call__(self, request: RuntimeRequest) -> object:
+        self.requests.append(request)
+        return {"message": {"content": "respuesta"}}
 
 
 @pytest.mark.asyncio
-async def test_console_create_and_stop() -> None:
+async def test_console_dispatches_text_through_runtime_client(capsys) -> None:  # type: ignore[no-untyped-def]
+    runtime = RecordingRuntime()
     console = LaboratoryConsole(
-        profile=SystemProfile.DEV_LAPTOP,
-        intelligence_type="fake",
+        client=RuntimeClient(ClientKind.CLI, runtime),
     )
-    console._system = None
-    console._running = True
-    await asyncio.sleep(0)
-    assert console._intelligence_type == "fake"
-
-
-@pytest.mark.asyncio
-async def test_console_command_help() -> None:
-    console = LaboratoryConsole(
-        profile=SystemProfile.DEV_LAPTOP,
-        intelligence_type="fake",
-    )
-    sys = __import__("sirah.factory", fromlist=["build_system"]).build_system(
-        profile=SystemProfile.DEV_LAPTOP, intelligence_type="fake"
-    )
-    console._system = sys
-    await sys.orchestrator.start()
-
-    await console._handle_command("help")
-    await console._handle_command("status")
-    await console._handle_command("history")
-    await console._handle_command("silent")
-    await console._handle_command("loud")
-
-    await sys.orchestrator.stop()
-
-
-@pytest.mark.asyncio
-async def test_console_unknown_command() -> None:
-    console = LaboratoryConsole(
-        profile=SystemProfile.DEV_LAPTOP,
-        intelligence_type="fake",
-    )
-    sys = __import__("sirah.factory", fromlist=["build_system"]).build_system(
-        profile=SystemProfile.DEV_LAPTOP, intelligence_type="fake"
-    )
-    console._system = sys
-    await sys.orchestrator.start()
-
-    await console._handle_command("unknown_cmd")
-
-    await sys.orchestrator.stop()
-
-
-@pytest.mark.asyncio
-async def test_console_dispatch_text() -> None:
-    from sirah.factory import SystemProfile, build_system
-
-    console = LaboratoryConsole(
-        profile=SystemProfile.DEV_LAPTOP,
-        intelligence_type="fake",
-    )
-    sys = build_system(
-        profile=SystemProfile.DEV_LAPTOP,
-        intelligence_type="fake",
-    )
-    console._system = sys
-    await sys.orchestrator.start()
 
     await console._dispatch("hola")
 
-    ctx = sys.orchestrator.context
-    assert len(ctx.messages) == 2
-
-    await sys.orchestrator.stop()
+    assert runtime.requests[0].metadata == {"text": "hola"}
+    assert "respuesta" in capsys.readouterr().out

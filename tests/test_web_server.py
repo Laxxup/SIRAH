@@ -1,179 +1,384 @@
-"""Test Web Lab audio preparation helpers."""
+"""Web Lab runtime-client adapter tests."""
 
 from __future__ import annotations
 
-import asyncio
-import threading
-from pathlib import Path
-from types import SimpleNamespace
-
 import pytest
 
-import sirah
-import sirah.web_server as web_server
+from sirah.core.runtime_client import RuntimeClient
+from sirah.errors import RuntimeAccessDeniedError
+from sirah.types import (
+    ClientKind,
+    ComponentId,
+    ComponentKind,
+    ComponentState,
+    ComponentStatus,
+    RuntimeRequest,
+    SpeechCompletion,
+    SystemSnapshot,
+    VoiceTurnResult,
+)
+from sirah.voice.diagnostics import AudioMetrics, AudioStage
+from sirah.web_server import create_app
 
 
-def test_prepare_audio_converts_browser_recording(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    converted = b"RIFF converted wav"
-    monkeypatch.setattr(web_server, "_convert_to_wav", lambda data: converted)
+class RecordingRuntime:
+    def __init__(self) -> None:
+        self.requests: list[RuntimeRequest] = []
+        self.error: Exception | None = None
+        self.result: object | None = None
 
-    assert web_server._prepare_audio(b"browser webm") == converted
-
-
-def test_prepare_audio_keeps_wav_without_conversion(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    def fail_conversion(data: bytes) -> bytes:
-        raise AssertionError("WAV must not be converted")
-
-    monkeypatch.setattr(web_server, "_convert_to_wav", fail_conversion)
-
-    wav = b"RIFF native wav"
-    assert web_server._prepare_audio(wav) == wav
-
-
-def test_prepare_audio_returns_none_when_conversion_fails(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    monkeypatch.setattr(web_server, "_convert_to_wav", lambda data: None)
-
-    assert web_server._prepare_audio(b"invalid browser audio") is None
-
-
-def test_run_async_dispatches_to_dedicated_loop(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    loop = asyncio.new_event_loop()
-    thread = threading.Thread(target=loop.run_forever)
-    thread.start()
-    monkeypatch.setattr(web_server, "_loop", loop)
-
-    try:
-        result = web_server._run_async(asyncio.sleep(0, result="ok"))
-    finally:
-        loop.call_soon_threadsafe(loop.stop)
-        thread.join(timeout=1)
-        loop.close()
-
-    assert result == "ok"
-
-
-def test_parse_arecord_output_returns_capture_devices() -> None:
-    output = """**** List of CAPTURE Hardware Devices ****
-card 0: PCH [HDA Intel PCH], device 0: ALC3204 Analog [ALC3204 Analog]
-  Subdevices: 1/1
-"""
-
-    assert web_server._parse_arecord_output(output) == [
-        "card 0: PCH [HDA Intel PCH], device 0: ALC3204 Analog [ALC3204 Analog]"
-    ]
-
-
-def test_web_assets_live_inside_sirah_package() -> None:
-    package_dir = Path(sirah.__file__).parent
-
-    assert package_dir / "web" / "templates" == web_server.TEMPLATE_DIR
-    assert package_dir / "web" / "static" == web_server.STATIC_DIR
-    assert (web_server.TEMPLATE_DIR / "index.html").is_file()
-    assert (web_server.STATIC_DIR / "style.css").is_file()
+    async def __call__(self, request: RuntimeRequest) -> object:
+        self.requests.append(request)
+        if self.error is not None:
+            raise self.error
+        if self.result is not None:
+            return self.result
+        if request.capability.value == "local_voice_turn.submit":
+            return VoiceTurnResult(
+                turn_id="turn-123",
+                stage=AudioStage.COMPLETED,
+                diagnostics=AudioMetrics(
+                    bytes_count=32000,
+                    duration_ms=1000,
+                    sample_rate=16000,
+                    channels=1,
+                    sample_width=2,
+                    rms=950,
+                    peak=1800,
+                    is_silent=False,
+                ),
+                transcript="hola",
+                response="respuesta",
+                tts_completion=SpeechCompletion(
+                    operation_id="speech-123",
+                    success=True,
+                    duration_ms=250,
+                ),
+            )
+        if request.metadata:
+            return {"message": {"content": "respuesta"}}
+        return SystemSnapshot(
+            components=(
+                ComponentState(
+                    id=ComponentId(ComponentKind.CORE, "orchestrator"),
+                    status=ComponentStatus.READY,
+                    detail="started",
+                ),
+                ComponentState(
+                    id=ComponentId(ComponentKind.VOICE, "speech"),
+                    status=ComponentStatus.READY,
+                    detail="recognizer ready",
+                ),
+            )
+        )
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def web_app():  # type: ignore[no-untyped-def]
-    app = web_server.create_app(
-        intelligence_type="laboratory",
-        tts="fake",
-        start_camera=False,
-    )
-    yield app
-
-    if web_server._system is not None:
-        web_server._run_async(web_server._system.orchestrator.stop())
-    loop = web_server._loop
-    if loop is not None and loop.is_running():
-        loop.call_soon_threadsafe(loop.stop)
-    if web_server._loop_thread is not None:
-        web_server._loop_thread.join(timeout=2)
-    if loop is not None and not loop.is_closed():
-        loop.close()
+    runtime = RecordingRuntime()
+    return create_app(client=RuntimeClient(ClientKind.WEB_LAB, runtime)), runtime
 
 
-def test_index_route_serves_web_lab_without_camera(web_app) -> None:  # type: ignore[no-untyped-def]
-    response = web_app.test_client().get("/")
+def test_status_route_reads_runtime_client(web_app) -> None:  # type: ignore[no-untyped-def]
+    app, runtime = web_app
 
-    assert response.status_code == 200
-    assert b"SIRAH Web Lab" in response.data
-
-
-def test_status_route_reports_no_camera_when_disabled(web_app) -> None:  # type: ignore[no-untyped-def]
-    response = web_app.test_client().get("/api/status")
-
-    assert response.status_code == 200
-    assert response.json["ok"] is True
-    assert response.json["vision_active"] is False
-    assert response.json["diagnostics"]
-    assert response.json["diagnostics"][0] == {
-        "id": "core/orchestrator",
-        "kind": "core",
-        "name": "orchestrator",
-        "status": "ready",
-        "detail": "started",
-    }
-
-
-def test_overlay_route_reports_empty_mapping_without_camera(web_app) -> None:  # type: ignore[no-untyped-def]
-    response = web_app.test_client().get("/api/overlay")
+    response = app.test_client().get("/api/status")
 
     assert response.status_code == 200
     assert response.json == {
         "ok": True,
-        "active": False,
-        "faces": [],
-        "hands": [],
-        "context": "",
+        "healthy": True,
+        "components": [
+            {"kind": "core", "name": "orchestrator", "status": "ready", "detail": "started"},
+            {"kind": "voice", "name": "speech", "status": "ready", "detail": "recognizer ready"},
+        ],
+        "voice": {"available": True, "status": "ready", "detail": "recognizer ready"},
+    }
+    assert runtime.requests[0].capability.value == "status.read"
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        ComponentStatus.UNINITIALISED,
+        ComponentStatus.DEGRADED,
+        ComponentStatus.ERROR,
+        ComponentStatus.SHUTDOWN,
+    ],
+)
+def test_status_marks_any_non_ready_component_unhealthy(
+    web_app, status: ComponentStatus
+) -> None:  # type: ignore[no-untyped-def]
+    app, runtime = web_app
+    runtime.result = SystemSnapshot(
+        components=(
+            ComponentState(
+                id=ComponentId(ComponentKind.VOICE, "speech"),
+                status=status,
+                detail="voice unavailable",
+            ),
+        )
+    )
+
+    response = app.test_client().get("/api/status")
+
+    assert response.status_code == 200
+    assert response.json["healthy"] is False
+    assert response.json["voice"] == {
+        "available": False,
+        "status": status.value,
+        "detail": "voice unavailable",
     }
 
 
-def test_serialize_overlay_keeps_detection_mapping_and_context() -> None:
-    face = SimpleNamespace(bbox=(0.1, 0.2, 0.3, 0.4), confidence=0.9)
-    face_context = SimpleNamespace(
-        dominant_color="verde",
-        smiling=True,
-        smile_score=0.8,
-        torso_bbox=(0.1, 0.6, 0.3, 0.3),
-        face_position="centro",
-        face_distance="media",
-    )
-    hand = SimpleNamespace(
-        bbox=(0.5, 0.2, 0.2, 0.5),
-        handedness="Left",
-        fingers=(True, False, True, False, False),
-        finger_count=2,
-    )
-    vision_loop = SimpleNamespace(
-        _running=True,
-        _latest_faces=(face,),
-        _latest_visual_ctx=SimpleNamespace(
-        face_contexts=(face_context,),
-            hands=SimpleNamespace(hands=(hand,)),
-        ),
-        vision_description="ropa verde, sonriendo, 2 dedos extendidos confirmados",
+def test_status_reports_voice_as_explicitly_unavailable_when_missing(web_app) -> None:  # type: ignore[no-untyped-def]
+    app, runtime = web_app
+    runtime.result = SystemSnapshot(
+        components=(
+            ComponentState(
+                id=ComponentId(ComponentKind.CORE, "orchestrator"),
+                status=ComponentStatus.READY,
+            ),
+        )
     )
 
-    assert web_server._serialize_overlay(vision_loop) == {
+    response = app.test_client().get("/api/status")
+
+    assert response.status_code == 200
+    assert response.json["voice"] == {
+        "available": False,
+        "status": "unavailable",
+        "detail": "voice component unavailable",
+    }
+
+
+def test_status_marks_an_empty_component_snapshot_unhealthy(web_app) -> None:  # type: ignore[no-untyped-def]
+    app, runtime = web_app
+    runtime.result = SystemSnapshot()
+
+    response = app.test_client().get("/api/status")
+
+    assert response.status_code == 200
+    assert response.json["healthy"] is False
+    assert response.json["voice"]["available"] is False
+
+
+def test_chat_route_submits_runtime_client_text(web_app) -> None:  # type: ignore[no-untyped-def]
+    app, runtime = web_app
+
+    response = app.test_client().post("/api/chat", json={"text": "hola"})
+
+    assert response.status_code == 200
+    assert response.json["response"] == "respuesta"
+    assert runtime.requests[0].metadata == {"text": "hola"}
+
+
+@pytest.mark.parametrize("payload", [[], {"text": 7}])
+def test_chat_route_rejects_malformed_json_with_a_safe_error(
+    web_app, payload: object
+) -> None:  # type: ignore[no-untyped-def]
+    app, _ = web_app
+
+    response = app.test_client().post("/api/chat", json=payload)
+
+    assert response.status_code == 400
+    assert response.json == {
+        "ok": False,
+        "error": {"code": "invalid_request", "message": "Text is required."},
+    }
+
+
+def test_chat_route_rejects_invalid_json_with_a_safe_error(web_app) -> None:  # type: ignore[no-untyped-def]
+    app, _ = web_app
+
+    response = app.test_client().post(
+        "/api/chat", data="{", content_type="application/json"
+    )
+
+    assert response.status_code == 400
+    assert response.json == {
+        "ok": False,
+        "error": {"code": "invalid_request", "message": "Text is required."},
+    }
+
+
+def test_listen_route_submits_a_metadata_free_local_voice_turn(web_app) -> None:  # type: ignore[no-untyped-def]
+    app, runtime = web_app
+
+    response = app.test_client().post("/api/listen", json={"device": "hw:3,0"})
+
+    assert response.status_code == 200
+    assert response.json == {
         "ok": True,
-        "active": True,
-        "faces": [{
-            "index": 1,
-            "bbox": [0.1, 0.2, 0.3, 0.4],
-            "confidence": 0.9,
-            "color": "verde",
-            "smiling": True,
-            "smile_score": 0.8,
-            "torso_bbox": [0.1, 0.6, 0.3, 0.3],
-            "position": "centro",
-            "distance": "media",
-        }],
-        "hands": [{
-            "index": 1,
-            "bbox": [0.5, 0.2, 0.2, 0.5],
-            "handedness": "Left",
-            "fingers": [True, False, True, False, False],
-            "finger_count": 2,
-        }],
-        "context": "ropa verde, sonriendo, 2 dedos extendidos confirmados",
+        "turn_id": "turn-123",
+        "stage": "completed",
+        "metrics": {
+            "bytes_count": 32000,
+            "duration_ms": 1000,
+            "sample_rate": 16000,
+            "channels": 1,
+            "sample_width": 2,
+            "rms": 950,
+            "peak": 1800,
+            "is_silent": False,
+        },
+        "transcript": "hola",
+        "response": "respuesta",
+        "tts_completion": {
+            "operation_id": "speech-123",
+            "success": True,
+            "duration_ms": 250,
+        },
     }
+    assert runtime.requests[0].capability.value == "local_voice_turn.submit"
+    assert runtime.requests[0].metadata == {}
+
+
+def _voice_result() -> dict[str, object]:
+    return {
+        "turn_id": "turn-123",
+        "stage": "completed",
+        "diagnostics": {
+            "bytes_count": 32000,
+            "duration_ms": 1000,
+            "sample_rate": 16000,
+            "channels": 1,
+            "sample_width": 2,
+            "rms": 950,
+            "peak": 1800,
+            "is_silent": False,
+        },
+        "transcript": "hola",
+        "response": "respuesta",
+        "tts_completion": {
+            "operation_id": "speech-123",
+            "success": True,
+            "duration_ms": 250,
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("diagnostics", "bytes_count"), "32000"),
+        (("diagnostics", "duration_ms"), -1),
+        (("diagnostics", "sample_rate"), 0),
+        (("diagnostics", "channels"), 0),
+        (("diagnostics", "sample_width"), 0),
+        (("diagnostics", "rms"), -1),
+        (("diagnostics", "peak"), -1),
+        (("diagnostics", "is_silent"), "false"),
+        (("transcript",), 7),
+        (("response",), 7),
+        (("tts_completion", "operation_id"), 7),
+        (("tts_completion", "success"), "true"),
+        (("tts_completion", "duration_ms"), -1),
+        (("tts_completion", "duration_ms"), float("inf")),
+        (("tts_completion", "duration_ms"), float("nan")),
+    ],
+)
+def test_listen_route_rejects_malformed_nested_voice_fields(
+    web_app, path: tuple[str, ...], value: object
+) -> None:  # type: ignore[no-untyped-def]
+    app, runtime = web_app
+    result = _voice_result()
+    target: dict[str, object] = result
+    for key in path[:-1]:
+        nested = target[key]
+        assert isinstance(nested, dict)
+        target = nested
+    target[path[-1]] = value
+    runtime.result = result
+
+    response = app.test_client().post("/api/listen", json={})
+
+    assert response.status_code == 502
+    assert response.json == {
+        "ok": False,
+        "error": {
+            "code": "invalid_runtime_result",
+            "message": "Runtime returned an invalid result.",
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "payload"),
+    [
+        ("get", "/api/status", None),
+        ("post", "/api/listen", {}),
+        ("post", "/api/chat", {"text": "hola"}),
+    ],
+)
+def test_api_routes_return_safe_typed_errors(
+    web_app, method: str, path: str, payload: dict[str, str] | None
+) -> None:  # type: ignore[no-untyped-def]
+    app, runtime = web_app
+    runtime.error = RuntimeAccessDeniedError("capture device hw:3,0 is forbidden")
+
+    response = getattr(app.test_client(), method)(path, json=payload)
+
+    assert response.status_code == 403
+    assert response.json == {
+        "ok": False,
+        "error": {"code": "access_denied", "message": "Request not authorised."},
+    }
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "payload"),
+    [
+        ("get", "/api/status", None),
+        ("post", "/api/listen", {}),
+        ("post", "/api/chat", {"text": "hola"}),
+    ],
+)
+def test_api_routes_reject_malformed_runtime_results(
+    web_app, method: str, path: str, payload: dict[str, str] | None
+) -> None:  # type: ignore[no-untyped-def]
+    app, runtime = web_app
+    runtime.result = {"unexpected": "result"}
+
+    response = getattr(app.test_client(), method)(path, json=payload)
+
+    assert response.status_code == 502
+    assert response.json == {
+        "ok": False,
+        "error": {
+            "code": "invalid_runtime_result",
+            "message": "Runtime returned an invalid result.",
+        },
+    }
+
+
+def test_template_only_references_implemented_api_routes(web_app) -> None:  # type: ignore[no-untyped-def]
+    app, _ = web_app
+
+    html = app.test_client().get("/").get_data(as_text=True)
+
+    assert "/api/chat" in html
+    assert "/api/listen" in html
+    assert "/api/status" in html
+    for stale_route in (
+        "/api/autonomy",
+        "/api/mood",
+        "/api/overlay",
+        "/api/upload_frame",
+        "/api/vision",
+        "/camera",
+    ):
+        assert stale_route not in html
+
+
+def test_template_renders_structured_errors_and_marks_failed_status_unavailable(
+    web_app,
+) -> None:  # type: ignore[no-untyped-def]
+    app, _ = web_app
+
+    html = app.test_client().get("/").get_data(as_text=True)
+
+    assert "data.error?.message || 'Error'" in html
+    assert "function setUnavailableStatus" in html
+    assert "status-dot error" in html
+    assert "Voz: no disponible" in html

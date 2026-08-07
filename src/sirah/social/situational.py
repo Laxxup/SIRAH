@@ -17,7 +17,7 @@ from sirah.types import (
     InitiativeAction,
     InitiativeDecision,
 )
-from sirah.voice.port import SpeechOutputPort
+from sirah.voice.audio_service import AudioTurnService
 
 __all__ = ["SituationalCoordinator", "AutonomousCoordinator"]
 
@@ -29,13 +29,13 @@ class SituationalCoordinator:
         self,
         orchestrator: SirahOrchestrator,
         perception: PerceptionPort | None = None,
-        speech: SpeechOutputPort | None = None,
+        voice: AudioTurnService | None = None,
         interval_s: float = 0.5,
         silent: bool = False,
     ) -> None:
         self._orchestrator = orchestrator
         self._perception = perception
-        self._speech = speech
+        self._voice = voice
         self._interval = interval_s
         self._silent = silent
         self._memory = InteractionMemory()
@@ -89,16 +89,19 @@ class SituationalCoordinator:
 
         self._memory.mark_greet()
 
-        if self._speech is not None and decision.text:
+        if self._voice is not None and decision.text:
             try:
-                completion = await self._speech.speak(decision.text)
-                if completion.success:
+                result = await self._voice.speak_autonomously(decision.text)
+                if result.tts_completion is not None and result.tts_completion.success:
                     self._memory.record(f"greeted: {decision.text[:60]}")
             except Exception as exc:
                 logger.error("Initiative speech failed: %s", exc)
 
     def mark_conversation_active(self, active: bool = True) -> None:
         self._conversation_active = active
+
+    def set_voice_service(self, voice: AudioTurnService) -> None:
+        self._voice = voice
 
     @property
     def memory(self) -> InteractionMemory:
@@ -110,7 +113,7 @@ class AutonomousCoordinator:
         self,
         orchestrator: SirahOrchestrator,
         perception: PerceptionPort | None = None,
-        speech: SpeechOutputPort | None = None,
+        voice: AudioTurnService | None = None,
         interval_s: float = 0.5,
         silent: bool = False,
         enable_person_tracking: bool = True,
@@ -119,7 +122,7 @@ class AutonomousCoordinator:
     ) -> None:
         self._orchestrator = orchestrator
         self._perception = perception
-        self._speech = speech
+        self._voice = voice
         self._interval = interval_s
         self._silent = silent
         self._memory = InteractionMemory()
@@ -196,12 +199,12 @@ class AutonomousCoordinator:
                                 reason=f"owner returned (visit {known.visit_count})",
                             )
 
-            if not self._silent and self._speech is not None and decision.text:
+            if not self._silent and self._voice is not None and decision.text:
                 logger.info("Autonomy initiative: %s", decision.reason)
                 self._memory.mark_greet()
                 try:
-                    completion = await self._speech.speak(decision.text)
-                    if completion.success:
+                    result = await self._voice.speak_autonomously(decision.text)
+                    if result.tts_completion is not None and result.tts_completion.success:
                         self._memory.record(f"greeted: {decision.text[:60]}")
                         if self._mood is not None:
                             self._mood.update(("person_greeted",))
@@ -215,9 +218,9 @@ class AutonomousCoordinator:
             if idle_action is not None:
                 action, text = idle_action
                 logger.info("Idle: %s — %s", action.name, text)
-                if not self._silent and self._speech is not None:
+                if not self._silent and self._voice is not None:
                     try:
-                        await self._speech.speak(text)
+                        await self._voice.speak_autonomously(text)
                     except Exception as exc:
                         logger.error("Idle speech failed: %s", exc)
 
@@ -225,6 +228,9 @@ class AutonomousCoordinator:
         self._conversation_active = active
         if self._idle is not None and active:
             self._idle.mark_active()
+
+    def set_voice_service(self, voice: AudioTurnService) -> None:
+        self._voice = voice
 
     @property
     def memory(self) -> InteractionMemory:

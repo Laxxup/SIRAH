@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import io
+import wave
+
 import pytest
 
-from sirah.errors import SpeechError, SpeechInputError
+from sirah.errors import SpeechError, SpeechInputError, SpeechUnavailableError
 from sirah.types import SpeechRecognitionEvent
 from sirah.voice.simulated import FakeSpeechInput, FakeSpeechOutput
+from sirah.voice.stt_whisper import WhisperSTT
 
 
 @pytest.mark.asyncio
@@ -103,3 +107,58 @@ async def test_fake_speech_output_reset() -> None:
     assert len(out.spoken) == 1
     out.reset()
     assert len(out.spoken) == 0
+
+
+@pytest.mark.asyncio
+async def test_whisper_loads_one_model_for_two_turns_and_keeps_per_turn_latency() -> None:
+    loads = 0
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as writer:
+        writer.setnchannels(1)
+        writer.setsampwidth(2)
+        writer.setframerate(16_000)
+        writer.writeframes(b"\x00\x00")
+    wav = buffer.getvalue()
+
+    class Segment:
+        text = " hola "
+        avg_logprob = -0.2
+
+    class Model:
+        def transcribe(self, wav: bytes, **kwargs: object) -> tuple[list[Segment], object]:
+            assert wav is not None
+            assert kwargs == {"language": "es", "beam_size": 1}
+            return [Segment()], object()
+
+    def load_model() -> Model:
+        nonlocal loads
+        loads += 1
+        return Model()
+
+    recognizer = WhisperSTT(model_loader=load_model)
+
+    await recognizer.start()
+    first = await recognizer.transcribe(wav, "turn-1")
+    second = await recognizer.transcribe(wav, "turn-2")
+
+    assert loads == 1
+    assert first.text == "hola"
+    assert second.text == "hola"
+    assert recognizer.diagnostics_for("turn-1").turn_id == "turn-1"
+    assert recognizer.diagnostics_for("turn-2").latency_ms >= 0
+    assert await recognizer.health() is True
+
+
+@pytest.mark.asyncio
+async def test_whisper_load_failure_is_unhealthy_and_returns_a_typed_cause() -> None:
+    def fail_load() -> object:
+        raise RuntimeError("model unavailable")
+
+    recognizer = WhisperSTT(model_loader=fail_load)
+
+    with pytest.raises(SpeechUnavailableError, match="could not load"):
+        await recognizer.start()
+
+    assert await recognizer.health() is False
+    with pytest.raises(SpeechUnavailableError, match="could not load"):
+        await recognizer.transcribe(b"captured-wav", "turn-1")

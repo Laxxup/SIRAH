@@ -33,6 +33,10 @@ class FakeSpeechInput:
         return self._running
 
     async def listen(self, timeout: float | None = None) -> SpeechRecognitionEvent:
+        del timeout
+        return self._next_event()
+
+    def _next_event(self) -> SpeechRecognitionEvent:
         self._call_count += 1
 
         if self._fail_after is not None and self._call_count > self._fail_after:
@@ -49,6 +53,11 @@ class FakeSpeechInput:
 
         self._history.append(event)
         return event
+
+    async def transcribe(self, audio: bytes, turn_id: str) -> SpeechRecognitionEvent:
+        """Deterministic recognizer seam for the runtime's captured-audio path."""
+        del audio, turn_id
+        return self._next_event()
 
     def reset(self) -> None:
         self._index = 0

@@ -22,9 +22,11 @@ El circuito vertical situado añade percepción simulada, consumo de
 Estas piezas están implementadas únicamente para demostración y no constituyen
 autonomía general ni percepción física.
 
-Piper CLI constituye el primer adaptador TTS local experimental. Su ciclo,
-cancelación y degradación están probados con dobles; además, la síntesis, la
-reproducción, el smoke y la limpieza se validaron con audio real en una
+Piper mediante API Python constituye el primer adaptador TTS local experimental.
+Carga un modelo persistente, sintetiza WAV efímero y lo reproduce con `aplay`
+por la salida elegida por el runtime. El timeout y la cancelación limpian el
+proceso de reproducción; los fallos degradan voz sin detener texto. La síntesis,
+la reproducción, el smoke y la limpieza se validaron con audio real en una
 configuración Debian 13/PipeWire. Esto no demuestra compatibilidad universal.
 Vosk PTT y el semidúplex software están implementados experimentalmente con
 pruebas simuladas; la validación física del micrófono permanece pendiente.
