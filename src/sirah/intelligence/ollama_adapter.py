@@ -11,6 +11,7 @@ from sirah.errors import (
     IntelligenceRateLimitError,
     IntelligenceTimeoutError,
     IntelligenceUnavailableError,
+    InvalidIntelligenceResponseError,
 )
 from sirah.types import (
     DecisionType,
@@ -136,9 +137,14 @@ class OllamaIntelligence:
 
     async def decide(self, request: IntelligenceRequest) -> IntelligenceResponse:
         system_content = request.system_prompt_override or _DEFAULT_SYSTEM_PROMPT
+        fallback_triggers = (
+            IntelligenceTimeoutError,
+            IntelligenceUnavailableError,
+            IntelligenceRateLimitError,
+        )
         try:
             return await self._call_with_model(self._model, system_content, request)
-        except (IntelligenceTimeoutError, IntelligenceUnavailableError) as exc:
+        except fallback_triggers as exc:
             if self._fallback_model and self._fallback_model != self._model:
                 logger.warning(
                     "Ollama principal (%s) fallo (%s), reintentando con fallback %s",
@@ -150,7 +156,7 @@ class OllamaIntelligence:
                     return await self._call_with_model(
                         self._fallback_model, system_content, request
                     )
-                except (IntelligenceTimeoutError, IntelligenceUnavailableError):
+                except fallback_triggers:
                     logger.error(
                         "Ollama fallback (%s) tambien fallo", self._fallback_model
                     )
@@ -227,19 +233,23 @@ class OllamaIntelligence:
     def _parse(self, raw: str) -> IntelligenceDecision:
         try:
             data = json.loads(raw)
-            return IntelligenceDecision(
-                decision_type=DecisionType.CONVERSATION,
-                text_response=data.get("text_response", raw.strip()),
-                capability_name=data.get("capability_name"),
-                capability_params=data.get("capability_params", {}),
-                confidence=0.95,
-            )
-        except (json.JSONDecodeError, KeyError, TypeError):
+        except (json.JSONDecodeError, TypeError):
             return IntelligenceDecision(
                 decision_type=DecisionType.CONVERSATION,
                 text_response=raw.strip()[:500],
-                confidence=0.6,
+                confidence=0.7,
             )
+        if not isinstance(data, dict) or "text_response" not in data:
+            raise InvalidIntelligenceResponseError(
+                f"Ollama JSON sin campo text_response: {raw[:200]}"
+            )
+        return IntelligenceDecision(
+            decision_type=DecisionType.CONVERSATION,
+            text_response=data["text_response"],
+            capability_name=data.get("capability_name"),
+            capability_params=data.get("capability_params") or {},
+            confidence=0.95,
+        )
 
 
 _DEFAULT_SYSTEM_PROMPT = (

@@ -11,6 +11,7 @@ from sirah.errors import (
     IntelligenceRateLimitError,
     IntelligenceTimeoutError,
     IntelligenceUnavailableError,
+    InvalidIntelligenceResponseError,
 )
 from sirah.intelligence.ollama_adapter import OllamaIntelligence
 from sirah.types import ConversationMessage, IntelligenceRequest
@@ -135,23 +136,45 @@ class TestOllamaDecidePrimary:
                 await adapter.decide(_request())
 
     @pytest.mark.asyncio
-    async def test_rate_limit_raises(self) -> None:
+    async def test_rate_limit_raises_without_fallback(self) -> None:
         patcher, _ = _patch_session([_MockResponse(429)])
         with patcher:
-            adapter = OllamaIntelligence(model="m")
+            adapter = OllamaIntelligence(model="m", fallback_model=None)
             with pytest.raises(IntelligenceRateLimitError):
                 await adapter.decide(_request())
 
     @pytest.mark.asyncio
-    async def test_invalid_json_response_fallback(self) -> None:
-        body = json.dumps({"message": {"content": "no es json válido"}})
+    async def test_rate_limit_triggers_fallback(self) -> None:
+        patcher, session = _patch_session([
+            _MockResponse(429),
+            _MockResponse(200, json.dumps({"message": {"content": '{"text_response": "degrado", "capability_name": null, "capability_params": {}}'}})),
+        ])
+        with patcher:
+            adapter = OllamaIntelligence(model="cloud", fallback_model="gemma3:4b")
+            resp = await adapter.decide(_request())
+        assert resp.decision.text_response == "degrado"
+        assert resp.model == "gemma3:4b"
+        assert len(session.post_calls) == 2
+
+    @pytest.mark.asyncio
+    async def test_unstructured_text_response_is_graceful(self) -> None:
+        body = json.dumps({"message": {"content": "Hola, soy SIRAH en texto libre"}})
         patcher, _ = _patch_session([_MockResponse(200, body)])
         with patcher:
             adapter = OllamaIntelligence(model="m")
             resp = await adapter.decide(_request())
         assert resp.decision is not None
-        assert resp.decision.confidence == 0.6
-        assert resp.decision.text_response == "no es json válido"
+        assert resp.decision.confidence == 0.7
+        assert resp.decision.text_response == "Hola, soy SIRAH en texto libre"
+
+    @pytest.mark.asyncio
+    async def test_malformed_json_raises_invalid_response(self) -> None:
+        body = json.dumps({"message": {"content": '{"content": "sin campo text_response"}'}})
+        patcher, _ = _patch_session([_MockResponse(200, body)])
+        with patcher:
+            adapter = OllamaIntelligence(model="m", fallback_model=None)
+            with pytest.raises(InvalidIntelligenceResponseError, match="sin campo text_response"):
+                await adapter.decide(_request())
 
 
 class TestOllamaFallback:
