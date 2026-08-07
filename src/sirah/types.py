@@ -151,6 +151,7 @@ class IntelligenceResponse:
     decision: IntelligenceDecision | None = None
     latency_ms: float = 0.0
     model: str = ""
+    fallback_used: bool = False
 
 
 @dataclass(frozen=True, slots=True)

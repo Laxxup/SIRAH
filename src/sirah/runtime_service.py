@@ -40,6 +40,11 @@ class RuntimeServiceConfig:
     output_device: str
     piper_model_path: Path | None = None
     piper_config_path: Path | None = None
+    intelligence_type: str = "fake"
+    ollama_base_url: str | None = None
+    ollama_model: str = "gpt-oss:120b-cloud"
+    ollama_fallback_model: str | None = "gemma3:4b"
+    ollama_timeout: float = 30.0
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str]) -> RuntimeServiceConfig:
@@ -71,6 +76,13 @@ class RuntimeServiceConfig:
             output_device=output_device,
             piper_model_path=piper_model_path,
             piper_config_path=piper_config_path,
+            intelligence_type=environment.get("SIRAH_LLM_PROVIDER", "fake"),
+            ollama_base_url=environment.get("SIRAH_OLLAMA_URL"),
+            ollama_model=environment.get("SIRAH_OLLAMA_MODEL", "gpt-oss:120b-cloud"),
+            ollama_fallback_model=environment.get(
+                "SIRAH_OLLAMA_FALLBACK_MODEL", "gemma3:4b"
+            ) or None,
+            ollama_timeout=float(environment.get("SIRAH_OLLAMA_TIMEOUT", "30.0")),
         )
 
 
@@ -130,6 +142,11 @@ def _runtime(config: RuntimeServiceConfig) -> SirahRuntime:
         client_secrets=config.client_secrets,
         piper_model_path=config.piper_model_path,
         piper_config_path=config.piper_config_path,
+        intelligence_type=config.intelligence_type,
+        ollama_base_url=config.ollama_base_url,
+        ollama_model=config.ollama_model,
+        ollama_fallback_model=config.ollama_fallback_model,
+        ollama_timeout=config.ollama_timeout,
     )
 
 

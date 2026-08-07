@@ -71,7 +71,10 @@ def build_system(
     intelligence_type: str = "fake",
     groq_api_key: str | None = None,
     groq_model: str = "llama-3.3-70b-versatile",
-    ollama_model: str = "llama3.2:3b",
+    ollama_base_url: str | None = None,
+    ollama_model: str = "gpt-oss:120b-cloud",
+    ollama_fallback_model: str | None = "gemma3:4b",
+    ollama_timeout: float = 30.0,
     edge_host: str = "raspberrypi.local",
     edge_port: int = 8765,
     tts: str = "fake",
@@ -100,6 +103,15 @@ def build_system(
         intelligence = GroqIntelligence(
             api_key=groq_api_key,
             model=groq_model,
+        )
+    elif intelligence_type == "ollama":
+        from sirah.intelligence.ollama_adapter import OllamaIntelligence
+
+        intelligence = OllamaIntelligence(
+            base_url=ollama_base_url or "http://127.0.0.1:11434",
+            model=ollama_model,
+            fallback_model=ollama_fallback_model,
+            timeout=ollama_timeout,
         )
     elif intelligence_type == "laboratory":
         intelligence = LaboratoryIntelligence()

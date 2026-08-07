@@ -45,6 +45,11 @@ class SirahRuntime:
         capture_factory: Callable[[str], CapturePort] = MicCapture,
         piper_model_path: Path | None = None,
         piper_config_path: Path | None = None,
+        intelligence_type: str = "fake",
+        ollama_base_url: str | None = None,
+        ollama_model: str = "gpt-oss:120b-cloud",
+        ollama_fallback_model: str | None = "gemma3:4b",
+        ollama_timeout: float = 30.0,
     ) -> None:
         if not client_secrets:
             raise ValueError("runtime client secrets must be configured")
@@ -65,6 +70,11 @@ class SirahRuntime:
         self._audio: AudioTurnService | None = None
         self._piper_model_path = piper_model_path
         self._piper_config_path = piper_config_path
+        self._intelligence_type = intelligence_type
+        self._ollama_base_url = ollama_base_url
+        self._ollama_model = ollama_model
+        self._ollama_fallback_model = ollama_fallback_model
+        self._ollama_timeout = ollama_timeout
 
     @property
     def hardware_armed(self) -> bool:
@@ -81,11 +91,16 @@ class SirahRuntime:
         if self._assembly is None:
             self._assembly = build_system(
                 profile=self._profile,
+                intelligence_type=self._intelligence_type,
                 stt="whisper",
                 tts="piper" if self._piper_model_path is not None else "fake",
                 piper_model_path=(str(self._piper_model_path) if self._piper_model_path else None),
                 piper_config_path=(str(self._piper_config_path) if self._piper_config_path else None),
                 output_device=self._devices.configured_output_device,
+                ollama_base_url=self._ollama_base_url,
+                ollama_model=self._ollama_model,
+                ollama_fallback_model=self._ollama_fallback_model,
+                ollama_timeout=self._ollama_timeout,
                 _runtime_token=_RUNTIME_ASSEMBLY_TOKEN,
             )
         if self._audio is None:
