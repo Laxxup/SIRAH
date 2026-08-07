@@ -51,6 +51,7 @@ class RuntimeServiceConfig:
     kokoro_speed: float = 1.0
     kokoro_timeout: float = 30.0
     tts: str = "fake"
+    personality_dir: str | None = None
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str]) -> RuntimeServiceConfig:
@@ -95,6 +96,7 @@ class RuntimeServiceConfig:
             kokoro_speed=float(environment.get("SIRAH_KOKORO_SPEED", "1.0")),
             kokoro_timeout=float(environment.get("SIRAH_KOKORO_TIMEOUT", "30.0")),
             tts=environment.get("SIRAH_TTS_PROVIDER", "fake"),
+            personality_dir=environment.get("SIRAH_PERSONALITY_DIR"),
         )
 
 
@@ -165,6 +167,7 @@ def _runtime(config: RuntimeServiceConfig) -> SirahRuntime:
         kokoro_speed=config.kokoro_speed,
         kokoro_timeout=config.kokoro_timeout,
         tts=config.tts,
+        personality_dir=config.personality_dir,
     )
 
 

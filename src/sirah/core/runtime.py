@@ -56,6 +56,7 @@ class SirahRuntime:
         kokoro_speed: float = 1.0,
         kokoro_timeout: float = 30.0,
         tts: str = "fake",
+        personality_dir: str | None = None,
     ) -> None:
         if not client_secrets:
             raise ValueError("runtime client secrets must be configured")
@@ -87,6 +88,7 @@ class SirahRuntime:
         self._ollama_model = ollama_model
         self._ollama_fallback_model = ollama_fallback_model
         self._ollama_timeout = ollama_timeout
+        self._personality_dir = personality_dir
 
     @property
     def hardware_armed(self) -> bool:
@@ -118,6 +120,7 @@ class SirahRuntime:
                 ollama_model=self._ollama_model,
                 ollama_fallback_model=self._ollama_fallback_model,
                 ollama_timeout=self._ollama_timeout,
+                personality_dir=self._personality_dir,
                 _runtime_token=_RUNTIME_ASSEMBLY_TOKEN,
             )
         if self._audio is None:

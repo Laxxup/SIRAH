@@ -89,10 +89,11 @@ def build_system(
     kokoro_timeout: float = 30.0,
     output_device: str | None = None,
     mood_enabled: bool = True,
+    personality_dir: str | None = None,
     *,
     _runtime_token: object | None = None,
 ) -> SystemAssembly:
-    from sirah.errors import RuntimeAssemblyAccessError
+    from sirah.errors import RuntimeAssemblyAccessError, RuntimeConfigurationError
 
     if _runtime_token is not _RUNTIME_ASSEMBLY_TOKEN:
         raise RuntimeAssemblyAccessError("system assembly is owned by SirahRuntime")
@@ -185,6 +186,14 @@ def build_system(
 
     mood = MoodEngine() if mood_enabled else None
 
+    personality = None
+    if personality_dir:
+        from sirah.personality.loader import PersonalityLoader
+        try:
+            personality = PersonalityLoader(personality_dir).load()
+        except Exception as exc:
+            raise RuntimeConfigurationError(f"personality load failed: {exc}") from exc
+
     orchestrator = SirahOrchestrator(
         intelligence=intelligence,
         perception=perception,
@@ -197,6 +206,7 @@ def build_system(
         context=context,
         registry=registry,
         mood=mood,
+        personality=personality,
     )
 
     situational = SituationalCoordinator(

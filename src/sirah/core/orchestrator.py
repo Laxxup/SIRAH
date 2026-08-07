@@ -19,6 +19,7 @@ from sirah.errors import (
 )
 from sirah.intelligence.port import IntelligencePort
 from sirah.perception.port import PerceptionPort
+from sirah.personality.models import PersonalityPrompt
 from sirah.types import (
     CapabilityExecutionResult,
     ComponentId,
@@ -66,6 +67,7 @@ class SirahOrchestrator:
         context: ConversationContext | None = None,
         registry: ComponentRegistry | None = None,
         mood: MoodEngine | None = None,
+        personality: PersonalityPrompt | None = None,
     ) -> None:
         self._intelligence = intelligence
         self._perception = perception
@@ -78,6 +80,7 @@ class SirahOrchestrator:
         self._context = context or ConversationContext()
         self._registry = registry or ComponentRegistry()
         self._mood = mood
+        self._personality = personality
         self._voice: AudioTurnService | None = None
 
         self._registry.register(ComponentKind.CORE, "orchestrator")
@@ -148,6 +151,14 @@ class SirahOrchestrator:
         )
         logger.info("SirahOrchestrator stopped")
 
+    def _build_system_prompt(self) -> str | None:
+        parts: list[str] = []
+        if self._personality and self._personality.base_prompt:
+            parts.append(self._personality.base_prompt)
+        if self._mood:
+            parts.append(self._mood.system_prompt)
+        return "\n\n".join(parts) if parts else None
+
     async def handle_text(self, user_text: str) -> ConversationResult:
         t0 = monotonic()
         self._context.present = PresentContext(user_text=user_text)
@@ -157,7 +168,7 @@ class SirahOrchestrator:
 
         request = IntelligenceRequest(
             messages=self._context.messages,
-            system_prompt_override=self._mood.system_prompt if self._mood else None,
+            system_prompt_override=self._build_system_prompt(),
         )
         try:
             response = await self._intelligence.decide(request)
