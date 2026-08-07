@@ -19,6 +19,8 @@ __all__ = [
     "SpeechError",
     "SpeechBusyError",
     "SpeechUnavailableError",
+    "TTSInvalidAudioError",
+    "TTSTimeoutError",
     "SpeechInputError",
     "SpeechRecognitionError",
     "SpeechRecognitionTimeoutError",
@@ -100,6 +102,14 @@ class SpeechBusyError(SpeechError):
 
 class SpeechUnavailableError(SpeechError):
     """Speech subsystem is not available."""
+
+
+class TTSInvalidAudioError(SpeechError):
+    """TTS service returned invalid or unexpected audio data."""
+
+
+class TTSTimeoutError(SpeechUnavailableError):
+    """TTS request exceeded the configured deadline."""
 
 
 class SpeechInputError(SpeechError):

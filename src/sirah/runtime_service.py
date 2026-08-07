@@ -45,6 +45,12 @@ class RuntimeServiceConfig:
     ollama_model: str = "gpt-oss:120b-cloud"
     ollama_fallback_model: str | None = "gemma3:4b"
     ollama_timeout: float = 30.0
+    kokoro_url: str | None = None
+    kokoro_model: str = "kokoro"
+    kokoro_voice: str = "ef_dora"
+    kokoro_speed: float = 1.0
+    kokoro_timeout: float = 30.0
+    tts: str = "fake"
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str]) -> RuntimeServiceConfig:
@@ -83,6 +89,12 @@ class RuntimeServiceConfig:
                 "SIRAH_OLLAMA_FALLBACK_MODEL", "gemma3:4b"
             ) or None,
             ollama_timeout=float(environment.get("SIRAH_OLLAMA_TIMEOUT", "30.0")),
+            kokoro_url=environment.get("SIRAH_KOKORO_URL"),
+            kokoro_model=environment.get("SIRAH_KOKORO_MODEL", "kokoro"),
+            kokoro_voice=environment.get("SIRAH_KOKORO_VOICE", "ef_dora"),
+            kokoro_speed=float(environment.get("SIRAH_KOKORO_SPEED", "1.0")),
+            kokoro_timeout=float(environment.get("SIRAH_KOKORO_TIMEOUT", "30.0")),
+            tts=environment.get("SIRAH_TTS_PROVIDER", "fake"),
         )
 
 
@@ -147,6 +159,12 @@ def _runtime(config: RuntimeServiceConfig) -> SirahRuntime:
         ollama_model=config.ollama_model,
         ollama_fallback_model=config.ollama_fallback_model,
         ollama_timeout=config.ollama_timeout,
+        kokoro_url=config.kokoro_url,
+        kokoro_model=config.kokoro_model,
+        kokoro_voice=config.kokoro_voice,
+        kokoro_speed=config.kokoro_speed,
+        kokoro_timeout=config.kokoro_timeout,
+        tts=config.tts,
     )
 
 

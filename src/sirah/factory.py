@@ -82,6 +82,11 @@ def build_system(
     piper_voice: str = "es_ES-sharvard-medium",
     piper_model_path: str | None = None,
     piper_config_path: str | None = None,
+    kokoro_url: str | None = None,
+    kokoro_model: str = "kokoro",
+    kokoro_voice: str = "ef_dora",
+    kokoro_speed: float = 1.0,
+    kokoro_timeout: float = 30.0,
     output_device: str | None = None,
     mood_enabled: bool = True,
     *,
@@ -149,6 +154,27 @@ def build_system(
                 ComponentId(ComponentKind.VOICE, "speech"),
                 ComponentStatus.DEGRADED,
                 "Piper unavailable",
+            ),
+        )
+    elif tts == "kokoro_http":
+        from sirah.voice.tts_kokoro import KokoroHTTPTTS
+        from sirah.voice.tts_piper import AplayPlayer
+
+        if not output_device:
+            raise RuntimeAssemblyAccessError("Kokoro requires runtime audio configuration")
+        if not kokoro_url:
+            raise RuntimeAssemblyAccessError("Kokoro requires SIRAH_KOKORO_URL")
+        speech_output = KokoroHTTPTTS(
+            base_url=kokoro_url,
+            model=kokoro_model,
+            voice=kokoro_voice,
+            speed=kokoro_speed,
+            timeout=kokoro_timeout,
+            player=AplayPlayer(output_device),
+            on_failure=lambda: registry.update(
+                ComponentId(ComponentKind.VOICE, "speech"),
+                ComponentStatus.DEGRADED,
+                "Kokoro unavailable",
             ),
         )
     elif tts == "gtts":

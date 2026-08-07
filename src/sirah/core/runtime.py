@@ -50,6 +50,12 @@ class SirahRuntime:
         ollama_model: str = "gpt-oss:120b-cloud",
         ollama_fallback_model: str | None = "gemma3:4b",
         ollama_timeout: float = 30.0,
+        kokoro_url: str | None = None,
+        kokoro_model: str = "kokoro",
+        kokoro_voice: str = "ef_dora",
+        kokoro_speed: float = 1.0,
+        kokoro_timeout: float = 30.0,
+        tts: str = "fake",
     ) -> None:
         if not client_secrets:
             raise ValueError("runtime client secrets must be configured")
@@ -71,6 +77,12 @@ class SirahRuntime:
         self._piper_model_path = piper_model_path
         self._piper_config_path = piper_config_path
         self._intelligence_type = intelligence_type
+        self._kokoro_url = kokoro_url
+        self._kokoro_model = kokoro_model
+        self._kokoro_voice = kokoro_voice
+        self._kokoro_speed = kokoro_speed
+        self._kokoro_timeout = kokoro_timeout
+        self._tts = tts
         self._ollama_base_url = ollama_base_url
         self._ollama_model = ollama_model
         self._ollama_fallback_model = ollama_fallback_model
@@ -93,9 +105,14 @@ class SirahRuntime:
                 profile=self._profile,
                 intelligence_type=self._intelligence_type,
                 stt="whisper",
-                tts="piper" if self._piper_model_path is not None else "fake",
+                tts=self._tts,
                 piper_model_path=(str(self._piper_model_path) if self._piper_model_path else None),
                 piper_config_path=(str(self._piper_config_path) if self._piper_config_path else None),
+                kokoro_url=self._kokoro_url,
+                kokoro_model=self._kokoro_model,
+                kokoro_voice=self._kokoro_voice,
+                kokoro_speed=self._kokoro_speed,
+                kokoro_timeout=self._kokoro_timeout,
                 output_device=self._devices.configured_output_device,
                 ollama_base_url=self._ollama_base_url,
                 ollama_model=self._ollama_model,

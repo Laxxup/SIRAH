@@ -42,12 +42,15 @@ async def test_runtime_marks_voice_degraded_when_piper_fails_after_start(
             raise RuntimeError("Piper failed")
 
     monkeypatch.setattr(piper_module, "PiperTTS", FailingPiper)
+    (tmp_path / "voice.onnx").write_bytes(b"fake")
+    (tmp_path / "voice.onnx.json").write_text("{}")
     runtime = SirahRuntime(
         socket_path=tmp_path / "sirah.sock",
         client_secrets={ClientKind.CLI: "cli-secret"},
         devices=DeviceRegistry(output_devices=("default",)),
         piper_model_path=tmp_path / "voice.onnx",
         piper_config_path=tmp_path / "voice.onnx.json",
+        tts="piper",
     )
 
     await runtime.start()
