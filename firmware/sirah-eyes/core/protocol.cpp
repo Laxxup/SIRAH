@@ -1,12 +1,13 @@
-// Reference parser implementation — mirrors protocol.md v1.0.
-// Kept in lockstep with the Python parser by the contract gate tests.
+// Shared wire-protocol layer — implementation. Spec protocol.md v1.0,
+// mirrored by the Python parser; both gated on the same golden corpus.
 
-#include "protocol_parser.h"
+#include "core/protocol.h"
 
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 
-namespace sirah::contract {
+namespace sirah::eyes::core {
 
 namespace {
 
@@ -27,7 +28,7 @@ int response_arity(std::string_view tok) {
   return -1;
 }
 
-// spec 5: "num" syntax replica of the Python regex:
+// spec 5: "num" syntax (mirror of the Python regex):
 //   -?(0|[1-9][0-9]*)(\.[0-9]{1,3})?
 bool is_num(std::string_view s) {
   size_t i = 0;
@@ -134,4 +135,16 @@ ParseResult parse_line(std::string_view line) {
   return {Kind::Error, {}, {}, 2};  // unreachable
 }
 
-}  // namespace sirah::contract
+std::string format_state(float x, float y, int blink_flag) {
+  char buf[40];
+  // Avoid the "-0.000" artifact: clamp tiny negatives to zero.
+  if (x > -0.0005F && x < 0.0F) x = 0.0F;
+  if (y > -0.0005F && y < 0.0F) y = 0.0F;
+  std::snprintf(buf, sizeof(buf), "STATE %.3f %.3f %d", (double)x, (double)y,
+                blink_flag ? 1 : 0);
+  return buf;
+}
+
+std::string format_err(int code) { return "ERR " + std::to_string(code); }
+
+}  // namespace sirah::eyes::core

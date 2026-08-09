@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-#include "protocol_parser.h"
+#include "core/protocol.h"
 
 namespace fs = std::filesystem;
 
@@ -63,7 +63,7 @@ int main(int argc, char** argv) {
       }
       std::string raw = unescape(line.substr(0, sep));
       std::string expected = line.substr(sep + 1);
-      std::string got = sirah::contract::parse_line(raw).verdict();
+      std::string got = sirah::eyes::core::parse_line(raw).verdict();
       ++total;
       std::cout << "i=" << (total - 1) << " got=" << got << "\n";
       if (got != expected) {
