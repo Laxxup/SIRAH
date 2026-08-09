@@ -19,3 +19,20 @@ jobs:
         run: ruff check .
       - name: Mypy
         run: mypy src
+
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install g++
+        run: sudo apt-get update && sudo apt-get install -y g++ make
+      - name: Install project
+        run: pip install -e . pytest
+      - name: Build host contract tool
+        run: make -C firmware/sirah-eyes/tests/host contract_checker
+      - name: Contract gate (Python + C++ over same corpus)
+        run: pytest tests/contract -q
