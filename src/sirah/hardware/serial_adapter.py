@@ -160,7 +160,8 @@ class SerialTransport(EyeTransport):
             return None  # unreachable: _lose raises LinkLost
         if len(line) > MAX_LINE_BYTES:
             raise FramingError(f"line {len(line)} bytes > {MAX_LINE_BYTES}")
-        return line.removesuffix(b"\n")
+        # Arduino Serial.println emits CRLF; protocol parsing receives payload only.
+        return line.removesuffix(b"\n").removesuffix(b"\r")
 
     def status(self) -> TransportStatus:
         return self._status

@@ -109,6 +109,16 @@ async def test_read_returns_payload_without_newline() -> None:
 
 
 @pytest.mark.asyncio
+async def test_read_normalizes_crlf_firmware_response() -> None:
+    port = MemoryLinePort()
+    transport = SerialTransport(DEVICE, port_factory=lambda d, b: _noop_factory(port, d, b))
+    await transport.connect()
+
+    port.feed(b"STATE 0.000 0.000 0\r\n")
+    assert await transport.read() == b"STATE 0.000 0.000 0"
+
+
+@pytest.mark.asyncio
 async def test_read_partial_feeds_assembles_line() -> None:
     port = MemoryLinePort()
     transport = SerialTransport(DEVICE, port_factory=lambda d, b: _noop_factory(port, d, b))
