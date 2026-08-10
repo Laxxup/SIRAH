@@ -14,8 +14,7 @@ dependencies = []
 
 [project.optional-dependencies]
 perception = [
-    "opencv-headless<5",
-    "mediapipe",
+    "opencv-python-headless<5",
     "numpy",
 ]
 serial = ["pyserial-asyncio>=0.6"]
