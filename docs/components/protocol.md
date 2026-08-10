@@ -4,9 +4,13 @@
 director approval — the parser gates will not be implemented before this
 spec is approved).
 
+SIRAH = **Sistema Inteligente Robótico de Asistencia Humana**; this
+specification governs the eyes subsystem of the general SIRAH project.
+
 - Spec version: **1.0**
 - Date: 2026-08-08
-- Governs: the PC↔ESP32 channel of the SIRAH v0.3.0 Milestone 1 runtime.
+- Governs: the PC↔ESP32 channel of the SIRAH v0.3.0 Milestone 1 runtime
+  (subsistema de ojos).
 - Basis: ADR-0003 (one wire protocol), refined by decisions A1–A4
   (coordinates, heartbeat/watchdog, STATE semantics, no CALIB verb).
 - Transport-agnostic grammar: the framing below is defined abstractly;

@@ -1,5 +1,9 @@
 # SIRAH Intelligence Laboratory
 
+SIRAH = **Sistema Inteligente Robótico de Asistencia Humana** (in Spanish,
+never translated). This laboratory is the experimental-intelligence
+counterpart of the stable eyes subsystem in this repository.
+
 **Status: SCAFFOLD — OFF by default (ADR-0007).**
 
 This directory will host experimental intelligence work (LLM providers,

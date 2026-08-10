@@ -1,4 +1,6 @@
 # SIRAH v0.3.0 runtime settings (ADR-0009; base deps=[] policy).
+# SIRAH = Sistema Inteligente Robótico de Asistencia Humana; this file
+# configures the eyes subsystem of the general SIRAH project.
 
 # Eyes subsystem — serial link to the ESP32 eyes firmware.
 [eyes]

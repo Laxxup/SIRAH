@@ -1,8 +1,9 @@
 # ADRs — index
 
-Architecture Decision Records for SIRAH v0.3.0. Accepted by the director;
-all status "applies to v0.3.0". This index is the repository's own record
-of the decisions that govern it.
+Architecture Decision Records for SIRAH v0.3.0 (subsistema de ojos de
+SIRAH — **Sistema Inteligente Robótico de Asistencia Humana**). Accepted
+by the director; all status "applies to v0.3.0". This index is the
+repository's own record of the decisions that govern it.
 
 | ID | Title |
 |---|---|

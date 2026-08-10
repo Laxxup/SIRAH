@@ -1,5 +1,8 @@
 # Pin map — SIRAH eyes
 
+SIRAH = **Sistema Inteligente Robótico de Asistencia Humana**; this
+document covers the eyes subsystem of the general SIRAH project.
+
 **Status: VERIFIED — PCA9685 (ADR-0011), physical evidence 2026-08-09.**
 
 Servos ride on a PCA9685 (addr 0x40) driven over I2C from the ESP32

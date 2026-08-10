@@ -1,7 +1,12 @@
-# SIRAH v0.3.0
+# SIRAH v0.3.0 — subsistema de ojos
 
-Humanoid eye subsystem: a PC/Raspberry Pi runtime, an ESP32 and six servos
-(eye X, eye Y, four eyelids), guided by a USB webcam.
+SIRAH (**Sistema Inteligente Robótico de Asistencia Humana**) es el proyecto
+general del robot. Este repositorio implementa el **subsistema de ojos** de
+SIRAH v0.3.0: mirada 2D, parpadeo y tracking, con un runtime en PC/Raspberry
+Pi, un ESP32 y seis servos (eye X, eye Y, cuatro párpados), guiados por una
+webcam USB.
+
+El nombre completo solo se usa en español y nunca se traduce.
 
 ## Status
 

@@ -1,4 +1,6 @@
 # config/actuators.yaml — SIRAH shared actuator configuration (ADR-0009)
+# SIRAH = Sistema Inteligente Robótico de Asistencia Humana; this file
+# mirrors the eyes subsystem of the general SIRAH project.
 #
 # ONE source of truth on the PC side for physical limits. Firmware
 # `calibration.h` remains the AUTHORITY (ADR-0003/0004); this YAML is the

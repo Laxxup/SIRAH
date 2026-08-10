@@ -19,7 +19,9 @@ from sirah.config.loader import DEFAULT_SERIAL_DEVICE
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sirah-runtime",
-        description="SIRAH v0.3.0 stable eye runtime (Milestone 1).",
+        description="SIRAH v0.3.0 stable eye runtime (Milestone 1; "
+        "subsistema de ojos de SIRAH — Sistema Inteligente Robótico de "
+        "Asistencia Humana).",
     )
     parser.add_argument(
         "--eyes",

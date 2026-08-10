@@ -1,5 +1,8 @@
 # SIRAH eyes — ESP32 firmware (Stage 4: 6-actuator core)
 
+SIRAH = **Sistema Inteligente Robótico de Asistencia Humana**; this
+firmware serves the eyes subsystem of the general SIRAH project.
+
 ```
 core/       Pure C++ (Arduino-free), host-testable with g++ (ADR-0010)
 platform/   pins.h (A5 working map), servo_driver.{h,cpp}, main.ino

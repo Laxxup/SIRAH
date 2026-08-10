@@ -16,7 +16,9 @@ from sirah.config import consistency
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sirah-calibrate",
-        description="SIRAH v0.3.0 calibration tooling (Milestone 1).",
+        description="SIRAH v0.3.0 calibration tooling (Milestone 1; "
+        "subsistema de ojos de SIRAH — Sistema Inteligente Robótico de "
+        "Asistencia Humana).",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

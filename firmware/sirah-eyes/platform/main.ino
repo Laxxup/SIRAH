@@ -1,4 +1,6 @@
 // SIRAH eyes — ESP32 firmware entry point (Stage 4; device build only).
+// SIRAH = Sistema Inteligente Robótico de Asistencia Humana (in Spanish,
+// never translated); this firmware serves the eyes subsystem.
 //
 // Responsibilities (ADR-0003/0004, A1/A10):
 //   - Serial 115200, line framing per protocol.md v1.0 (63-byte payload,

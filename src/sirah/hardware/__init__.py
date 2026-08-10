@@ -1,4 +1,4 @@
-"""Hardware adapters for SIRAH v0.3.0 (Stage 5: serial USB-UART)."""
+"""Hardware adapters for SIRAH v0.3.0 (subsistema de ojos; Stage 5: serial USB-UART)."""
 
 from sirah.hardware.contract import (
     Command,
