@@ -45,3 +45,21 @@ and `config/calibration.h` in the same commit — physical evidence wins (A5).
 - Calibration drifted repeatedly during the session (horn screw loose):
   treat recorded corners as a snapshot, not a constant; re-verify after
   any mechanical intervention.
+
+## Serial device (PC ↔ ESP32)
+
+The ESP32 UART (CP210x/CH340-class) shows up as `ttyUSB*`/`ttyACM*`; the
+numbering is not stable across reboots. A udev rule gives the robot a
+deterministic name (Stage 5), so the runtime always opens the same path:
+
+```
+# /etc/udev/rules.d/99-sirah-eyes.rules
+# Replace vendor/product with the real USB-UART bridge:
+#   lsusb -> "ID <vid>:<pid>"  ;  udevadm info -a -n /dev/ttyUSB0
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", \
+    SYMLINK+="sirah-eyes", MODE="0660", GROUP="dialout"
+```
+
+After adding the rule: `sudo udevadm control --reload && sudo udevadm trigger`.
+The device then appears at `/dev/sirah-eyes` (set `SIRAH_SERIAL_DEVICE`).
+Baud: 115200 8N1 (firmware `main.ino`). Only the runtime opens the port.
