@@ -1,0 +1,11 @@
+{"observed_at": 0.0, "present": true, "x": 0.2, "y": -0.1, "confidence": 0.9, "source_state": "tracking", "expected_event": null}
+{"observed_at": 1.0, "present": true, "x": 0.2, "y": -0.1, "confidence": 0.9, "source_state": "tracking", "expected_event": "person_arrived"}
+{"observed_at": 2.0, "present": true, "x": 0.2, "y": -0.1, "confidence": 0.9, "source_state": "tracking", "expected_event": null}
+{"observed_at": 3.0, "present": false, "x": null, "y": null, "confidence": null, "source_state": "lost", "expected_event": null}
+{"observed_at": 4.0, "present": false, "x": null, "y": null, "confidence": null, "source_state": "searching", "expected_event": "person_lost"}
+{"observed_at": 4.1, "present": true, "x": 0.0, "y": 0.0, "confidence": 0.8, "source_state": "tracking", "expected_event": null}
+{"observed_at": 4.2, "present": true, "x": 0.0, "y": 0.0, "confidence": 0.8, "source_state": "tracking", "expected_event": null}
+{"observed_at": 4.3, "present": false, "x": null, "y": null, "confidence": null, "source_state": "lost", "expected_event": null}
+{"observed_at": 4.4, "present": false, "x": null, "y": null, "confidence": null, "source_state": "lost", "expected_event": null}
+{"observed_at": 6.0, "present": true, "x": 0.0, "y": 0.0, "confidence": 0.8, "source_state": "tracking", "expected_event": null}
+{"observed_at": 6.1, "present": true, "x": 0.0, "y": 0.0, "confidence": 0.8, "source_state": "tracking", "expected_event": "person_arrived"}

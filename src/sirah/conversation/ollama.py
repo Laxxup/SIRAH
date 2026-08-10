@@ -1,0 +1,168 @@
+"""Optional Ollama Cloud client that produces shadow-only structured intents."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import urllib.request
+from collections.abc import Awaitable, Callable, Mapping
+from typing import Any
+
+from sirah.conversation.contracts import IntentName, IntentProposal, IntentRequest
+from sirah.conversation.errors import (
+    BudgetExhausted,
+    ConfigurationError,
+    ConversationTimeout,
+    InvalidModelResponse,
+    ProposalInFlight,
+    RemoteError,
+)
+
+HttpPost = Callable[[str, dict[str, str], bytes, float], Awaitable[bytes]]
+_ENVIRONMENT_SENTINEL = object()
+
+_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["intent", "speech"],
+    "properties": {
+        "intent": {"type": "string", "enum": [item.value for item in IntentName]},
+        "speech": {"type": ["string", "null"]},
+    },
+}
+
+
+def parse_intent_response(payload: bytes) -> IntentProposal:
+    try:
+        value = json.loads(payload, object_pairs_hook=_object_without_duplicate_keys)
+    except (TypeError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise InvalidModelResponse("intent is not valid JSON") from exc
+    if not isinstance(value, dict) or set(value) != {"intent", "speech"}:
+        raise InvalidModelResponse("intent schema keys are invalid")
+    intent, speech = value["intent"], value["speech"]
+    if not isinstance(intent, str) or not isinstance(speech, (str, type(None))):
+        raise InvalidModelResponse("intent schema values are invalid")
+    try:
+        return IntentProposal(IntentName(intent), speech)
+    except ValueError as exc:
+        raise InvalidModelResponse("intent violates the closed schema") from exc
+
+
+class OllamaIntentProposer:
+    def __init__(
+        self,
+        host: str,
+        model: str,
+        api_key: str,
+        *,
+        timeout_s: float,
+        budget: int,
+        post: HttpPost,
+        _source: object | None = None,
+    ) -> None:
+        if _source is not _ENVIRONMENT_SENTINEL:
+            raise ConfigurationError("use from_environment to configure Ollama")
+        if not 10.0 <= timeout_s <= 20.0:
+            raise ValueError("timeout_s must be between 10 and 20 seconds")
+        if budget < 1:
+            raise ValueError("budget must be positive")
+        self._host = host.rstrip("/")
+        self._model = model
+        self._api_key = api_key
+        self._timeout_s = timeout_s
+        self._remaining = budget
+        self._post = post
+        self._single_flight = asyncio.Lock()
+
+    @classmethod
+    def from_environment(
+        cls,
+        *,
+        environ: Mapping[str, str] | None = None,
+        timeout_s: float = 15.0,
+        budget: int = 10,
+        post: HttpPost | None = None,
+    ) -> OllamaIntentProposer:
+        values = os.environ if environ is None else environ
+        host = values.get("SIRAH_OLLAMA_HOST")
+        model = values.get("SIRAH_OLLAMA_MODEL")
+        api_key = values.get("SIRAH_OLLAMA_API_KEY")
+        if not host or not model or not api_key:
+            raise ConfigurationError("SIRAH_OLLAMA_HOST, MODEL, and API_KEY are required")
+        return cls(
+            host,
+            model,
+            api_key,
+            timeout_s=timeout_s,
+            budget=budget,
+            post=post or _post,
+            _source=_ENVIRONMENT_SENTINEL,
+        )
+
+    async def propose(self, request: IntentRequest) -> IntentProposal:
+        if self._single_flight.locked():
+            raise ProposalInFlight("a conversation proposal is already running")
+        async with self._single_flight:
+            if self._remaining == 0:
+                raise BudgetExhausted("conversation proposal budget is exhausted")
+            self._remaining -= 1
+            payload = _request_payload(self._model, request)
+            headers = {
+                "Authorization": f"Bearer {self._api_key}",
+                "Content-Type": "application/json",
+            }
+            try:
+                response = await asyncio.wait_for(
+                    self._post(f"{self._host}/api/chat", headers, payload, self._timeout_s),
+                    timeout=self._timeout_s,
+                )
+            except TimeoutError as exc:
+                raise ConversationTimeout("Ollama request timed out") from exc
+            except OSError as exc:
+                raise RemoteError("Ollama request failed") from exc
+            except Exception as exc:
+                raise RemoteError("Ollama request failed") from exc
+            return _parse_chat_response(response)
+
+
+def _request_payload(model: str, request: IntentRequest) -> bytes:
+    context = {"event": request.event, "text": request.text, "observed_at": request.observed_at}
+    return json.dumps(
+        {
+            "model": model,
+            "stream": False,
+            "format": _SCHEMA,
+            "messages": [{"role": "user", "content": json.dumps(context)}],
+        },
+        separators=(",", ":"),
+    ).encode()
+
+
+def _parse_chat_response(payload: bytes) -> IntentProposal:
+    try:
+        response: Any = json.loads(payload, object_pairs_hook=_object_without_duplicate_keys)
+        content = response["message"]["content"]
+    except (KeyError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise InvalidModelResponse("Ollama response has no structured content") from exc
+    if not isinstance(content, str):
+        raise InvalidModelResponse("Ollama structured content must be text")
+    return parse_intent_response(content.encode())
+
+
+async def _post(url: str, headers: dict[str, str], body: bytes, timeout: float) -> bytes:
+    def send() -> bytes:
+        request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.read()
+
+    return await asyncio.to_thread(send)
+
+
+def _object_without_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise InvalidModelResponse("JSON object contains duplicate keys")
+        result[key] = value
+    return result
