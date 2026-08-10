@@ -34,7 +34,7 @@ from sirah.config.loader import (
 from sirah.config.schema import ActuatorConfig
 from sirah.hardware.contract import encode_command
 from sirah.hardware.transport import EyeTransport, TransportError
-from sirah.perception.contracts import CameraSource, FaceDetector, GazeTarget
+from sirah.perception.contracts import CameraSource, FaceDetector
 from sirah.runtime.heartbeat import HeartbeatWriter
 from sirah.runtime.policies import LostFacePolicy, SetpointGate
 from sirah.runtime.registry import ComponentRegistry, ComponentStatus
