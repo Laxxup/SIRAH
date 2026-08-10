@@ -1,0 +1,23 @@
+# SIRAH v0.3.0 runtime settings (ADR-0009; base deps=[] policy).
+
+# Eyes subsystem — serial link to the ESP32 eyes firmware.
+[eyes]
+device = "/dev/ttyUSB0"          # allowlist: /dev/ttyUSB* or /dev/sirah-eyes (ADR-0002)
+baudrate = 115200
+armed = false                    # SIRAH_EYES overrides; disarmed by default (legacy eyes.md)
+
+# Heartbeat cadence/timeout (Stage 11 plan: proposed 1 s cadence, 3 s timeout).
+[heartbeat]
+cadence_s = 1.0
+timeout_s = 3.0
+
+# Behavior policies (Stage 7 policies.py; Stage 8 wires the gaze behavior).
+[behavior]
+lost_face_center_s = 2.0         # recenter gaze after this silence from perception
+
+# Loop
+tick_s = 0.02
+
+# Laboratory (ADR-0007): scaffold only in Milestone 1; always off by default.
+[lab]
+enabled = false

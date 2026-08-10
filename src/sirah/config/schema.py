@@ -13,12 +13,22 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import yaml
-
 # Anchors A1: X -1 left / 0 center / +1 right; Y -1 down / 0 center / +1 up.
 _DEFAULT_ACTUATORS_YAML = (
     Path(__file__).resolve().parents[3] / "config" / "actuators.yaml"
 )
+
+
+def _load_yaml_module():
+    """Lazy yaml import keeping the base install zero-dep (plan Stage 7)."""
+    try:
+        import yaml
+    except ImportError as exc:
+        raise ImportError(
+            "PyYAML is required to load config/actuators.yaml; "
+            "install it with `pip install sirah[cli]` (or sirah[dev])"
+        ) from exc
+    return yaml
 
 
 @dataclass(frozen=True)
@@ -115,7 +125,7 @@ def load_actuator_config(path: str | Path | None = None) -> ActuatorConfig:
     """
     yaml_path = Path(path) if path is not None else _DEFAULT_ACTUATORS_YAML
     with yaml_path.open("r", encoding="utf-8") as fh:
-        data = yaml.safe_load(fh)
+        data = _load_yaml_module().safe_load(fh)
 
     eyes = data.get("eyes", {})
     if not isinstance(eyes, dict) or not isinstance(eyes.get("x"), dict) or not isinstance(eyes.get("y"), dict):

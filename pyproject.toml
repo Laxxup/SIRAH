@@ -8,6 +8,27 @@ version = "0.3.0"
 description = "SIRAH v0.3.0 — humanoid eye subsystem runtime (Milestone 1)"
 readme = "README.md"
 requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+perception = [
+    "opencv-headless<5",
+    "mediapipe",
+    "numpy",
+]
+serial = ["pyserial-asyncio>=0.6"]
+cli = ["pyyaml>=6"]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "pyyaml>=6",
+]
+
+[project.scripts]
+sirah-runtime = "sirah.cli.run:main"
+sirah-calibrate = "sirah.cli.calibrate:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
