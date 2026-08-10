@@ -12,6 +12,7 @@ import argparse
 import asyncio
 import signal
 import sys
+from pathlib import Path
 
 from sirah.config.loader import DEFAULT_SERIAL_DEVICE
 
@@ -56,21 +57,37 @@ def build_parser() -> argparse.ArgumentParser:
         help="enable the laboratory proposal source (ADR-0007, default off)",
     )
     parser.add_argument(
+        "--camera-device",
+        default=None,
+        help="USB camera device; requires --yunet-model",
+    )
+    parser.add_argument(
+        "--yunet-model",
+        default=None,
+        help="local verified YuNet ONNX model; requires --camera-device",
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true", help="log component statuses"
     )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if bool(args.camera_device) != bool(args.yunet_model):
+        parser.error("--camera-device and --yunet-model must be supplied together")
     return asyncio.run(_entry(args))
 
 
 async def _entry(args: argparse.Namespace) -> int:
+    from sirah.behavior.gaze_behavior import GazeBehavior
     from sirah.config.loader import load_runtime_config
     from sirah.hardware.fake_esp32 import FakeESP32
     from sirah.hardware.serial_adapter import SerialTransport
     from sirah.hardware.transport import EyeTransport
+    from sirah.perception.opencv_camera import OpenCVCameraSource
+    from sirah.perception.yunet import YuNetFaceDetector
     from sirah.runtime.app import RuntimeApp
     from sirah.runtime.registry import ComponentStatus
 
@@ -99,7 +116,14 @@ async def _entry(args: argparse.Namespace) -> int:
             device=settings.serial_device,
             baudrate=settings.baudrate,
         )
-    app = RuntimeApp(settings, actuators, transport)
+    camera = detector = behavior = None
+    if args.camera_device:
+        camera = OpenCVCameraSource(args.camera_device)
+        detector = YuNetFaceDetector(Path(args.yunet_model))
+        behavior = GazeBehavior()
+    app = RuntimeApp(
+        settings, actuators, transport, camera=camera, face_detector=detector, behavior=behavior
+    )
 
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
