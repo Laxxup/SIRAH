@@ -335,11 +335,18 @@ class FakeESP32(EyeTransport):
     # --- internals -----------------------------------------------------
 
     def _advance(self, ms: float) -> None:
-        steps = int(ms // self.tick_ms)
-        for _ in range(steps):
+        """Run whole ticks whenever the 20 ms boundary is crossed.
+
+        `_sync` may be called more often than one tick (e.g. a 10 ms
+        polling loop): truncating per call would stall easing forever.
+        The remainder accumulates in `_sim_ms`, so steps fire at the
+        wall-time cadence regardless of sync frequency.
+        """
+        limit = self._sim_ms + ms
+        while self._sim_ms + self.tick_ms <= limit:
             self._sim_ms += self.tick_ms
             self._step(self._sim_ms)
-        self._sim_ms += ms - steps * self.tick_ms
+        self._sim_ms = limit
 
     def _enqueue(self, reply: bytes) -> None:
         self._pending.append(reply)

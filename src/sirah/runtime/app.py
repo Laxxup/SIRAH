@@ -1,16 +1,19 @@
-"""Runtime app (Stage 7) — asyncio wiring: config → components → registry.
+"""Runtime app (Stage 8) — asyncio wiring: config → components → registry.
 
 The stable-runtime entry point. Responsibilities and boundaries:
 
 - Loads runtime settings (TOML, A9) + actuator mirror YAML together.
 - Builds the transport as an ADAPTER around the given EyeTransport
   (serial or fake); the runtime OWNS the port (ADR-0002/0009).
-- Runs the perception/behavior pipeline slots when provided (Stage 8
-  supplies camera + face detector + gaze behavior; Stage 7 accepts None
-  and reports them as `off`).
-- Sends heartbeat while eyes ready (Stage 11 semantics scaffolded here).
-- A serial failure DEGRADES eyes but the app keeps running (registry
-  rule); SIGINT/SIGTERM stop it cleanly.
+- Runs the perception/behavior pipeline (Stage 8): camera frame →
+  detector → gaze behavior → SetpointGate → TARGET, wired when the
+  nominal contracts are provided (src/sirah/perception|behavior). Any
+  component failure DEGRADES its registry entry and the app keeps
+  running (registry rule).
+- Lost-face: when no face arrives for `lost_face_center_s`, the policy
+  recenters to CENTER (wired here, Stage 8).
+- Sends heartbeat while eyes ready (Stage 11 semantics scaffolded).
+- SIGINT/SIGTERM stop it cleanly.
 
 The app NEVER decides physical policy (that lives in policies.py +
 firmware); it wires and reports.
@@ -23,12 +26,15 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from sirah.behavior.contracts import Behavior
 from sirah.config.loader import (
     RuntimeSettings,
     load_runtime_config,
 )
 from sirah.config.schema import ActuatorConfig
+from sirah.hardware.contract import encode_command
 from sirah.hardware.transport import EyeTransport, TransportError
+from sirah.perception.contracts import CameraSource, FaceDetector, GazeTarget
 from sirah.runtime.heartbeat import HeartbeatWriter
 from sirah.runtime.policies import LostFacePolicy, SetpointGate
 from sirah.runtime.registry import ComponentRegistry, ComponentStatus
@@ -42,8 +48,8 @@ class RuntimeResult:
 
     settings: RuntimeSettings
     registry: ComponentRegistry
-    faces_seen: int = 0
-    send_errors: int = 0
+    faces_seen: int = 0  # frames with a confident detection (wired Stage 8)
+    send_errors: int = 0  # TARGET sends that failed mid-session
 
 
 class RuntimeApp:
@@ -55,10 +61,10 @@ class RuntimeApp:
         actuators: ActuatorConfig,
         transport: EyeTransport,
         *,
-        camera: Any | None = None,          # Stage 8: next_frame() -> Frame
-        face_detector: Any | None = None,   # Stage 8: detect(frame) -> GazeTarget|None
-        behavior: Any | None = None,        # Stage 8: step(GazeTarget) -> Setpoint
-        proposal_source: Any | None = None, # ADR-0007: next() -> Setpoint|None
+        camera: CameraSource | None = None,
+        face_detector: FaceDetector | None = None,
+        behavior: Behavior | None = None,
+        proposal_source: object | None = None,  # ADR-0007: next() -> Setpoint|None
     ) -> None:
         self.settings = settings
         self.actuators = actuators
@@ -70,6 +76,7 @@ class RuntimeApp:
         self.registry = ComponentRegistry()
         self.policy = SetpointGate()
         self.lost_face = LostFacePolicy(timeout_s=settings.lost_face_center_s)
+        self._eyes_lost = False
         self.result = RuntimeResult(settings=settings, registry=self.registry)
 
     @classmethod
@@ -147,17 +154,61 @@ class RuntimeApp:
             self.registry.set("lab", ComponentStatus.READY, "proposal source present")
 
     async def _pipeline_loop(self, stop: asyncio.Event, eyes_ok: bool) -> None:
-        """Sustain (Stage 7): keep the idle heartbeat alive while devices report.
+        """Stage 8: frame → detect → behavior → gate → TARGET.
 
-        The frame → face → behavior → TARGET wiring lands in Stage 8; this
-        loop only holds the heartbeat task company so the app stays alive
-        until `stop`, and reports camera failures as degraded.
+        When the perception/behavior contracts are wired, each tick pulls
+        one frame, converts it to a gaze intention and sends the gated
+        setpoint. A camera/detector/transport failure DEGRADES its
+        component and the loop continues sleeping — the runtime never
+        dies from a broken sensor (registry rule); lost-face recenters
+        after `lost_face_center_s` (cabled here).
         """
         try:
             while not stop.is_set():
+                await self._pipeline_tick()
                 await asyncio.sleep(self.settings.tick_s)
         except asyncio.CancelledError:
             return
+
+    async def _pipeline_tick(self) -> None:
+        """One pipeline cycle; never raises (transient failures degrade)."""
+        if self.camera is None or self.face_detector is None or self.behavior is None:
+            return
+        try:
+            frame = await self.camera.next_frame()
+        except Exception as exc:  # noqa: BLE001 - camera failures degrade
+            self.registry.set("camera", ComponentStatus.DEGRADED, str(exc))
+            self.camera = None
+            return
+        if frame is None:
+            return  # no frame this tick: hold the current gaze
+        try:
+            target = self.face_detector.detect(frame)
+        except Exception as exc:  # noqa: BLE001 - detector failures degrade
+            self.registry.set("behavior", ComponentStatus.DEGRADED, str(exc))
+            self.face_detector = None
+            return
+
+        if target is None or target.confidence <= 0.0:
+            setpoint = self.lost_face.target()  # CENTER after timeout
+        else:
+            self.lost_face.on_face()
+            self.result.faces_seen += 1
+            setpoint = self.behavior.step(target)
+        if setpoint is None:
+            return
+        gated = self.policy.validate(setpoint.x, setpoint.y)
+        if gated is None:
+            return  # SetpointGate rejected (out of contract) — nothing sent
+        if self._eyes_lost:
+            return
+        try:
+            payload = encode_command("TARGET", (gated.x, gated.y))
+            await self.transport.send(payload)
+        except Exception as exc:  # noqa: BLE001 - link loss degrades eyes
+            self.result.send_errors += 1
+            self._eyes_lost = True
+            self.registry.set("eyes", ComponentStatus.DEGRADED, str(exc))
 
     async def _teardown(self) -> None:
         try:
