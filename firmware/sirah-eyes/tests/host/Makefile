@@ -3,6 +3,7 @@
 #
 # Targets:
 #   all             build + run core tests and the contract checker
+#   core_tests      build + run firmware core tests
 #   contract_checker  build the golden-corpus gate binary
 #   clean
 
@@ -19,12 +20,14 @@ CORE_SRCS = \
 	../../core/easing.cpp \
 	../../core/blink_fsm.cpp
 
-all: $(HOST_TESTS) contract_checker
+all: core_tests contract_checker
+
+core_tests: $(HOST_TESTS)
+	./$(HOST_TESTS)
 
 $(BUILD_DIR)/core_tests: core_tests.cpp $(CORE_SRCS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ core_tests.cpp $(CORE_SRCS)
-	./$@
 
 contract_checker: $(CONTRACT_TOOL)
 
@@ -35,4 +38,4 @@ $(CONTRACT_TOOL): contract_checker.cpp ../../core/protocol.cpp
 clean:
 	rm -rf $(BUILD_DIR)
 
-.PHONY: all contract_checker clean
+.PHONY: all core_tests contract_checker clean
