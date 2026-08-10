@@ -17,20 +17,20 @@ Stage 4 contents:
   (Y more damped, ADR-0005); no overshoot by construction.
 - `core/blink_fsm.{h,cpp}` — firmware-owned blink FSM (ADR-0004/A10);
   cadence 6 s ± 2 s drawn by caller; mid-blink triggers discarded.
-- `platform/servo_driver.{h,cpp}` — ESP32Servo wrapper (device only).
+- `platform/pins.h` — PCA9685 channel map + I2C pins (ADR-0011).
+- `platform/servo_driver.{h,cpp}` — PCA9685 wrapper (device only, requires
+  Adafruit PWM Servo Driver library).
 - `platform/main.ino` — Serial 115200, line protocol, 20 ms tick loop.
 
 Host tests: `make -C tests/host` compiles and runs core tests with g++.
 Contract gate: `make -C tests/host contract_checker` then
 `./tests/host/build/contract_checker <golden-dir>` (exit 0 iff 91/91).
 
-Prerequisites for device build (NOT installed here, decision P3 pending):
-PlatformIO/Arduino-esp32. Stage 4 host gates run without it.
-
 ## Safety authority
 
-`config/calibration.h` holds the physical limits. It is the firmware
-authority (ADR-0003/0004/A9): the runtime config is a mirror validated by
-a consistency test, never a second authority. `platform/pins.h` (A5) is a
-working map pending the physical sweep (docs/hardware/pin-map.md): the
-sweep evidence wins if it contradicts the map.
+`config/calibration.h` holds the physical limits (verified calibration
+2026-08-09). It is the firmware authority (ADR-0003/0004/A9): the runtime
+config is a mirror validated by a consistency test, never a second
+authority. `platform/pins.h` (ADR-0011) is the PCA9685 channel map
+verified physically on 2026-08-09 — see docs/hardware/pin-map.md; physical
+evidence wins if a future sweep contradicts it.

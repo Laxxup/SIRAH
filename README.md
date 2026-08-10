@@ -26,22 +26,22 @@ laboratory/  Intelligence Laboratory scaffold — OFF by default (ADR-0007)
 
 ## Documentation
 
-Planning truth lives in the READ-ONLY architecture-study workspace:
+Records live with this repository:
 
-- ADRs 0001–0010: `sirah-architecture-study/reports/adr/`
-- Architecture study: `sirah-architecture-study/reports/architecture-study-v0.3.0.md`
-- Implementation plan (Milestone 1): `sirah-architecture-study/reports/implementation-plan-milestone-1.md`
-- Initial calibration record: `sirah-architecture-study/reports/hardware/initial-calibration-2026-08-08.md`
+- `docs/adr/` — architecture decision record index (titles and status)
+- `docs/components/` — wire protocol specification
+- `docs/hardware/` — pin map and hardware evidence
 
-This repository keeps its own indexes and hardware records; it never copies
-legacy code (legacy is READ-ONLY).
+Planning records that guided this repository are kept in the project's
+internal workspace and are not part of this repository. Legacy code is
+never copied into this repository (legacy is READ-ONLY).
 
 ## Hardware note
 
-`firmware/sirah-eyes/platform/pins.h` holds the **working pin map (A5)**.
-It is NOT definitive evidence: Stage 4 must verify every actuator
-physically (sweep) and record the truth in `docs/hardware/pin-map.md`.
-Physical evidence wins over this map.
+Servos ride on a PCA9685 driven over I2C (ADR-0011). `pins.h` holds the
+channel map and `config/calibration.h` the corners — both VERIFIED
+physically on 2026-08-09 (record in `docs/hardware/pin-map.md`).
+Physical evidence wins over any future contradiction.
 
 ## License
 

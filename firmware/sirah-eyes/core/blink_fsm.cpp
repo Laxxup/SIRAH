@@ -69,12 +69,17 @@ float BlinkFSM::progress(uint32_t now_ms) const {
       const uint32_t d = config_.closing_ms;
       return elapsed >= d ? 1.0F : static_cast<float>(elapsed) / static_cast<float>(d);
     }
+    case BlinkState::Closed:
+      // Fully closed, sustained for the entire phase (0 -> 1 -> 1 -> 0).
+      return 1.0F;
     case BlinkState::Opening: {
       const uint32_t d = config_.opening_ms;
-      return elapsed >= d ? 1.0F : static_cast<float>(elapsed) / static_cast<float>(d);
+      const float t =
+          elapsed >= d ? 1.0F : static_cast<float>(elapsed) / static_cast<float>(d);
+      return 1.0F - t;  // 1 (closed) -> 0 (open)
     }
     default:
-      return 0.0F;
+      return 0.0F;  // Idle: fully open
   }
 }
 

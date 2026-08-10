@@ -1,58 +1,47 @@
 # Pin map — SIRAH eyes
 
-**Status: PLACEHOLDER — working map (A5), pending physical verification.**
+**Status: VERIFIED — PCA9685 (ADR-0011), physical evidence 2026-08-09.**
 
-The initial calibration record (2026-08-08) documents the working map below.
-It is NOT definitive evidence: Stage 4 of the implementation plan MUST
-verify each actuator physically via sweep. If the sweep contradicts this
-map, physical evidence wins and the corrected truth is recorded here.
+Servos ride on a PCA9685 (addr 0x40) driven over I2C from the ESP32
+(SDA GPIO21, SCL GPIO22). Servo rail powered by an external 4.8–6.4 V
+supply (4xAA NiMH/alkaline) with common GND; the ESP32 stays on USB power
+for logic/flashing only (brownout evidence 2026-08-09).
 
-| Actuator | GPIO (working map) |
+| Actuator | PCA9685 channel |
 |---|---|
-| Ojo X | 25 |
-| Ojo Y | 26 |
-| Párpado superior derecho | 14 |
-| Párpado inferior derecho | 27 |
-| Párpado inferior izquierdo | 32 |
-| Párpado superior izquierdo | 33 |
+| Ojo X | 0 |
+| Ojo Y | 1 |
+| Párpado superior derecho | 2 |
+| Párpado inferior derecho | 3 |
+| Párpado superior izquierdo | 4 |
+| Párpado inferior izquierdo | 5 |
 
-Source: `sirah-architecture-study/reports/hardware/initial-calibration-2026-08-08.md`.
+## Evidence log (verified 2026-08-09, director + executor on hardware)
 
-## Controlled sweep procedure (director — executor: 2026-08-09, env: no serial)
+Calibration firmware with sweep mode (`SWX`/`SWY` commands) drove each
+actuator while the director observed the mechanism. All six actuators
+responded on the channels above; no wrong-channel findings.
 
-The Stage 4 host gates are green, but this environment has no serial
-device (`/dev/ttyUSB*`/`/dev/ttyACM*` absent), so the physical sweep
-cannot run here. Execute it on the robot and record evidence below; do
-not skip it silently.
-
-Procedure (one actuator at a time, servos unloaded/powered-safe):
-
-1. Flash firmware and connect a terminal at 115200 baud.
-2. Expect `READY 1` on boot (protocol.md).
-3. For actuator `Ojo X` (pin 25 working): send `TARGET 1 0` ->
-   eye must move RIGHT (law: +1 = right); `TARGET -1 0` -> left;
-   `TARGET 0 0` -> center ~130°.
-4. For `Ojo Y` (pin 26): `TARGET 0 1` -> up (~94°); `TARGET 0 -1` ->
-   down (~30°); `TARGET 0 0` -> center (~70°).
-5. Eyelid sweep (pins 14/27/32/33): send `BLINK` repeatedly (~1 s
-   apart) and confirm: (a) all four eyelids move, (b) sup/inf perceptibly
-   converge toward each other (closing), (c) they open fully between
-   blinks. A lid that never moves or moves the wrong direction is a
-   wrong pin: record the actuator that actually responds on that GPIO.
-6. Optional squint spot-check on robot side only, never a wire command
-   (squint is calibration data, not protocol).
-7. Record one line per GPIO in the table below with date + who +
-   behavior observed. If any row contradicts the working map, update
-   `platform/pins.h` in the SAME commit as this document and re-run
-   Stage 4 gates (host tests + contract) — physical evidence wins (A5).
-
-### Evidence log (to be completed by director on hardware)
-
-| GPIO | Working map | Sweep result (date, who, behavior) | Verdict |
+| Channel | Actuator | Sweep result (2026-08-09) | Verdict |
 |---|---|---|---|
-| 25 | Ojo X | | |
-| 26 | Ojo Y | | |
-| 14 | Sup der | | |
-| 27 | Inf der | | |
-| 32 | Inf izq | | |
-| 33 | Sup izq | | |
+| 0 | Ojo X | moves inside 70–140°, center 110° | VERIFIED |
+| 1 | Ojo Y | moves inside 60–85°, center 75° | VERIFIED |
+| 2 | Sup der | 110 abierto / 70 cerrado | VERIFIED |
+| 3 | Inf der | 10 abierto / 70 cerrado | VERIFIED |
+| 4 | Sup izq | 145 abierto / 170 cerrado | VERIFIED |
+| 5 | Inf izq | 95 abierto / 40 cerrado | VERIFIED |
+
+The corresponding corners live in `firmware/sirah-eyes/config/calibration.h`
+(the registered hardware asset). `platform/pins.h` holds the channel map
+above. If any future correction is measured, it lands in BOTH this document
+and `config/calibration.h` in the same commit — physical evidence wins (A5).
+
+## Behavioral constraints recorded during verification (2026-08-09)
+
+- Eyes must never move while the eyelids are not 100% open (mechanical
+  jam risk). Squint/lowered-lid poses keep the eyes centered and frozen.
+- A blink needs ~300 ms of sustained closed position to complete physical
+  travel before reopening (blink_fsm.h `closed_ms = 300`).
+- Calibration drifted repeatedly during the session (horn screw loose):
+  treat recorded corners as a snapshot, not a constant; re-verify after
+  any mechanical intervention.

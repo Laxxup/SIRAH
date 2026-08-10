@@ -1,12 +1,13 @@
-// Actuator driver: thin, dumb PWM wrapper (device build only — this file
-// is NOT part of the host build; it requires Arduino + ESP32Servo).
+// Actuator driver: thin, dumb PWM wrapper over PCA9685 (ADR-0011; device
+// build only — this file is NOT part of the host build; it requires
+// Arduino + Adafruit_PWMServoDriver).
 //
 // All safety logic (hard clamps, ADR-0004) lives in core; this layer only
-// attaches/writes servos. Calibration authority: config/calibration.h.
+// writes PWM channels. Calibration authority: config/calibration.h.
 
 #pragma once
 
-#include <ESP32Servo.h>
+#include <Adafruit_PWMServoDriver.h>
 
 #include "config/calibration.h"
 #include "core/mapping.h"
@@ -18,7 +19,7 @@ enum class EyelidId { SupRight, InfRight, SupLeft, InfLeft };
 
 class ServoDriver {
  public:
-  // Attaches all six servos (PWM 500-2400 us) and parks them at the
+  // Begins the PCA9685 (I2C, 50 Hz) and parks all six actuators at the
   // center/open pose.
   void init();
 
@@ -31,12 +32,10 @@ class ServoDriver {
   void set_eyelids(float progress);
 
  private:
-  Servo eye_x_;
-  Servo eye_y_;
-  Servo sup_r_;
-  Servo inf_r_;
-  Servo sup_l_;
-  Servo inf_l_;
+  // Maps a servo angle to the PCA9685 12-bit ON-counter and writes it.
+  void write_servo(int channel, float deg);
+
+  Adafruit_PWMServoDriver pwm_;
 };
 
 }  // namespace sirah::eyes::platform

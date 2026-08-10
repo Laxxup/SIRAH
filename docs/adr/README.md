@@ -1,8 +1,8 @@
 # ADRs — index
 
-Architecture Decision Records for SIRAH v0.3.0. Accepted by the director on
-2026-08-08; all status "applies to v0.3.0". Full texts live (READ-ONLY) in
-the architecture-study workspace: `sirah-architecture-study/reports/adr/`.
+Architecture Decision Records for SIRAH v0.3.0. Accepted by the director;
+all status "applies to v0.3.0". This index is the repository's own record
+of the decisions that govern it.
 
 | ID | Title |
 |---|---|
@@ -16,3 +16,4 @@ the architecture-study workspace: `sirah-architecture-study/reports/adr/`.
 | ADR-0008 | Monorepo layout and repository boundaries |
 | ADR-0009 | Calibration lives in config; no serial access for tools |
 | ADR-0010 | Testing strategy: fake, replay and HIL gates |
+| ADR-0011 | PCA9685 + external 5 V power for the servo rail (accepted 2026-08-09) |

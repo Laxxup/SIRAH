@@ -17,7 +17,9 @@ enum class BlinkState { Idle, Closing, Closed, Opening };
 
 struct BlinkConfig {
   uint32_t closing_ms = 150;
-  uint32_t closed_ms = 90;
+  // Closed-hold 300 ms — physical evidence (verified calibration 2026-08-09):
+  // the eyelids need ~300 ms to complete travel before reopening.
+  uint32_t closed_ms = 300;
   uint32_t opening_ms = 180;
   // Cadence 6 s ± 2 s (A10): the caller draws the interval in
   // [cadence_ms - jitter_ms, cadence_ms + jitter_ms].
@@ -36,7 +38,8 @@ class BlinkFSM {
   void tick(uint32_t now_ms, uint32_t auto_interval_ms);
 
   BlinkState state() const { return state_; }
-  // 0..1 progress inside Closing/Opening (0 otherwise).
+  // Eyelid progress: Idle 0 (open) -> Closing 0..1 -> Closed 1 (sustained)
+  // -> Opening 1..0 -> Idle 0 (open).
   float progress(uint32_t now_ms) const;
 
   const BlinkConfig& config() const { return config_; }
