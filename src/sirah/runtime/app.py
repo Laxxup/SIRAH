@@ -48,6 +48,7 @@ class RuntimeResult:
 
     settings: RuntimeSettings
     registry: ComponentRegistry
+    frames_seen: int = 0  # frames received from the camera source
     faces_seen: int = 0  # frames with a confident detection (wired Stage 8)
     send_errors: int = 0  # outbound eye commands that failed mid-session
 
@@ -184,6 +185,7 @@ class RuntimeApp:
             return
         if frame is None:
             return  # no frame this tick: hold the current gaze
+        self.result.frames_seen += 1
         try:
             target = self.face_detector.detect(frame)
         except Exception as exc:  # noqa: BLE001 - detector failures degrade

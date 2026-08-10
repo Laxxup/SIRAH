@@ -175,6 +175,7 @@ async def test_full_pipeline_sends_target_and_state_converges():
     assert snapshot["eyes"].status == ComponentStatus.READY
     stop.set()
     result = await run
+    assert result.frames_seen == 60
     assert result.faces_seen == 60
     x, y = await _read_state(fake)
     assert 0.4 < x <= 0.51

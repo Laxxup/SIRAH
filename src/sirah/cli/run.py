@@ -164,6 +164,10 @@ async def _entry(args: argparse.Namespace) -> int:
     result = await app.run(stop)
     states = result.registry.snapshot()
     if args.verbose:
+        print(
+            f"  frames={result.frames_seen} faces={result.faces_seen} "
+            f"send_errors={result.send_errors}"
+        )
         for name, state in states.items():
             print(f"  [{state.status}] {name}: {state.detail}")
 
