@@ -49,7 +49,7 @@ class RuntimeResult:
     settings: RuntimeSettings
     registry: ComponentRegistry
     faces_seen: int = 0  # frames with a confident detection (wired Stage 8)
-    send_errors: int = 0  # TARGET sends that failed mid-session
+    send_errors: int = 0  # outbound eye commands that failed mid-session
 
 
 class RuntimeApp:
@@ -108,7 +108,9 @@ class RuntimeApp:
             tasks.append(
                 asyncio.create_task(
                     HeartbeatWriter(
-                        self.transport, cadence_s=self.settings.heartbeat_cadence_s
+                        self.transport,
+                        cadence_s=self.settings.heartbeat_cadence_s,
+                        on_failure=self._degrade_eyes,
                     ).run(stop)
                 )
             )
@@ -206,9 +208,15 @@ class RuntimeApp:
             payload = encode_command("TARGET", (gated.x, gated.y))
             await self.transport.send(payload)
         except Exception as exc:  # noqa: BLE001 - link loss degrades eyes
-            self.result.send_errors += 1
-            self._eyes_lost = True
-            self.registry.set("eyes", ComponentStatus.DEGRADED, str(exc))
+            self._degrade_eyes(exc)
+
+    def _degrade_eyes(self, exc: Exception) -> None:
+        """Record the first eye-link failure and stop further TARGET sends."""
+        if self._eyes_lost:
+            return
+        self.result.send_errors += 1
+        self._eyes_lost = True
+        self.registry.set("eyes", ComponentStatus.DEGRADED, str(exc))
 
     async def _teardown(self) -> None:
         try:

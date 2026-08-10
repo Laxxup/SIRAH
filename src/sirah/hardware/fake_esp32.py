@@ -249,6 +249,7 @@ class FakeESP32(EyeTransport):
         self._target_y = 0.0
         self._last_heartbeat_ms: float | None = None
         self._sim_ms = 0.0  # virtual simulation clock
+        self._next_step_ms = float(tick_ms)
         self._last_sync_ms: float | None = None
 
     @classmethod
@@ -343,9 +344,9 @@ class FakeESP32(EyeTransport):
         wall-time cadence regardless of sync frequency.
         """
         limit = self._sim_ms + ms
-        while self._sim_ms + self.tick_ms <= limit:
-            self._sim_ms += self.tick_ms
-            self._step(self._sim_ms)
+        while self._next_step_ms <= limit:
+            self._step(self._next_step_ms)
+            self._next_step_ms += self.tick_ms
         self._sim_ms = limit
 
     def _enqueue(self, reply: bytes) -> None:

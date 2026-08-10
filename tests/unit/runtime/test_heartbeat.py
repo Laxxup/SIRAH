@@ -41,6 +41,17 @@ async def test_silently_returns_on_transport_failure():
     await asyncio.wait_for(task, timeout=1.0)
 
 
+async def test_notifies_failure_once():
+    transport = RecordingTransport()
+    transport.fail = True
+    errors: list[Exception] = []
+    await HeartbeatWriter(transport, cadence_s=0.01, on_failure=errors.append).run(
+        asyncio.Event()
+    )
+    assert len(errors) == 1
+    assert str(errors[0]) == "link lost"
+
+
 @pytest.mark.asyncio
 async def test_zero_cadence_guard_is_bounded():
     transport = RecordingTransport()

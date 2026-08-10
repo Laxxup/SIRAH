@@ -178,6 +178,13 @@ def test_easing_converges_no_overshoot() -> None:
     assert max_x <= 1.0 and max_y <= 1.0
 
 
+def test_sub_tick_advances_accumulate_to_one_easing_step(fake: FakeESP32) -> None:
+    fake._target_x = 1.0
+    fake.advance(10)
+    fake.advance(10)
+    assert fake._easer.x == pytest.approx(EASE_KX)
+
+
 async def test_fake_state_reports_eased_values(fake: FakeESP32) -> None:
     await fake.connect()
     await fake.read()  # READY
