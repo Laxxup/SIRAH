@@ -1,119 +1,150 @@
-# SIRAH v0.3.0 — subsistema de ojos
+# SIRAH v0.3.0
 
-SIRAH (**Sistema Inteligente Robótico de Asistencia Humana**) es el proyecto
-general del robot. Este repositorio implementa el **subsistema de ojos** de
-SIRAH v0.3.0: mirada 2D, parpadeo natural y tracking, con un runtime en
-PC/Raspberry Pi, un ESP32 y seis servos (eye X, eye Y, cuatro párpados),
-guiados por una webcam USB.
+## Sistema Inteligente Robótico de Asistencia Humana
 
-El nombre completo solo se usa en español y nunca se traduce.
+SIRAH es un **proyecto universitario del Instituto Tecnológico de Ciudad Madero (ITCM)**, desarrollado dentro del **Taller de Robótica**, con colaboración del **IPT de Tampico Centro**.
 
-## Qué es y qué NO es
+El objetivo del proyecto es desarrollar un **robot humanoide educativo**, integrando robótica, electrónica, programación, control y sistemas embebidos.
 
-**Es** el subsistema estable de ojos: runtime asyncio en PC (Raspberry
-Pi 4/PC), protocolo de cable cerrado v1.0 PC↔ESP32, firmware ESP32 dueño
-del parpadeo, easing y pose segura (ADR-0004), calibración verificada
-físicamente y un gemelo conductual (FakeESP32) para probar **sin hardware**.
+Actualmente, SIRAH se encuentra en etapa de **prototipo en desarrollo**.
 
-**NO es** (todavía): tracking de rostros con webcam (Stage 8, planificado),
-inteligencia conversacional (laboratorio ADR-0007, OFF por defecto), ni
-software de producción garantizado — es un prototipo de
-investigación/educación con un núcleo estable y verificado.
+---
 
-## Status
+## Current status
 
-| Componente | Estado |
-|---|---|
-| Protocolo v1.0 — gramática cerrada, 91 casos golden, doble parser Python/C++ gateado en CI | ✅ Normativo (Stage 3) |
-| Firmware ESP32 — blink FSM, easing, watchdog, pose segura | ✅ VERIFIED 2026-08-09 |
-| Runtime asyncio + registry (ready / degraded / off) | ✅ Stage 7 |
-| Calibración (calibration.h ↔ actuators.yaml, test de consistencia) | ✅ VERIFIED 2026-08-09 |
-| FakeESP32 (twin conductual) | ✅ 22 tests unitarios |
-| Tracking 2D por webcam (percepción + gaze behavior) | ⏳ Stage 8 — pendiente |
-| Laboratorio de inteligencia (ADR-0007) | OFF por diseño, scaffold |
-| Tests | 169 passing |
+SIRAH se desarrolla progresivamente mediante diferentes subsistemas.
 
-## Quickstart — sin hardware (menos de 3 minutos)
+Actualmente se encuentran implementados o en desarrollo:
+
+* Runtime en Python con `asyncio`.
+* Comunicación PC ↔ ESP32 mediante protocolo v1.0.
+* Firmware ESP32.
+* Control de servomotores mediante PCA9685.
+* Sistema de ojos con movimiento 2D.
+* Parpadeo, easing, límites y pose segura.
+* Calibración de actuadores.
+* `FakeESP32` para pruebas sin hardware.
+* Pruebas unitarias, contract tests e integración offline.
+* Infraestructura inicial de percepción y comportamiento.
+
+En desarrollo:
+
+* Percepción mediante webcam.
+* Seguimiento visual.
+* Integración de los diferentes subsistemas del robot.
+* Nuevas capacidades de interacción.
+* Futuros subsistemas humanoides.
+
+---
+
+## Eye subsystem
+
+El sistema de ojos es uno de los primeros subsistemas funcionales de SIRAH.
+
+Utiliza un **ESP32**, un **PCA9685** y seis servomotores:
+
+* Eye X.
+* Eye Y.
+* Cuatro párpados.
+
+El firmware mantiene la responsabilidad sobre el control físico de los actuadores, incluyendo parpadeo, easing, límites, watchdog y pose segura.
+
+El runtime en PC/Raspberry Pi se comunica con el ESP32 mediante un protocolo definido y también puede ejecutarse utilizando `FakeESP32`, permitiendo realizar pruebas sin hardware.
+
+La documentación específica del subsistema se encuentra en [`docs/hardware/`](docs/hardware/) y [`docs/components/protocol.md`](docs/components/protocol.md).
+
+---
+
+## Getting started
+
+### Sin hardware
+
+El proyecto puede ejecutarse utilizando `FakeESP32`:
 
 ```bash
 pip install -e ".[cli,serial]"
 sirah-runtime --fake --eyes
 ```
 
-El runtime arma los ojos sobre el gemelo FakeESP32 y mantiene el
-heartbeat hasta Ctrl-C. Los componentes fallidos **degradan**, no matan
-la app.
+Esto permite probar el runtime sin conectar un ESP32.
 
-Con hardware real (ESP32 + PCA9685 + 6 servos; wiring verificado en
-[docs/hardware/pin-map.md](docs/hardware/pin-map.md), ADR-0011):
+### Con hardware
+
+Con el ESP32, PCA9685 y los seis servomotores configurados:
 
 ```bash
 sirah-runtime --eyes
 ```
 
-## Architecture
+Consulta [`docs/hardware/`](docs/hardware/) antes de utilizar el hardware físico.
 
-```
- PC / Raspberry Pi (runtime, src/sirah)          ESP32 (firmware/sirah-eyes)
-┌──────────────────────────────────────┐        ┌─────────────────────────────┐
-│ percepción (Stage 8)                 │        │ core: protocol · mapping ·  │
-│  webcam → camera_source →            │        │       easing · blink_fsm    │
-│         face_detector                │        │ platform: PCA9685 · pins.h  │
-│        ↓                             │        │ config: calibration.h       │
-│ behavior (Stage 8)                   │        │   (autoridad física)        │
-│  gaze_behavior → SetpointGate →      │        └────────────┬────────────────┘
-│        LostFacePolicy                │                     │ I2C + PWM
-│        ↓                             │                     ▼
-│ runtime: RuntimeApp (lifecycle +     │        6 servos — eye X/Y, 4 párpados
-│ registry) + HeartbeatWriter          │
-│        ↓                             │
-│ EyeTransport (contrato, ADR-0002)    │
-│  ├─ SerialTransport (serial real)    │──— serial v1.0: TARGET, BLINK,
-│  └─ FakeESP32 (twin, ADR-0010) ──────┘     HEARTBEAT, STATUS, ERR
+---
+
+## Project structure
+
+```text
+SIRAH
+├── src/              Runtime y software principal
+├── firmware/         Firmware ESP32
+├── config/           Configuración del sistema
+├── tests/             Pruebas automatizadas
+├── docs/              Documentación técnica
+├── laboratory/        Componentes experimentales
+└── scripts/           Herramientas auxiliares
 ```
 
-Regla de seguridad (ADR-0004): el PC **nunca** direcciona servos; solo
-envía setpoints normalizados. Parpadeo, easing, límites y watchdog viven
-en el firmware. El laboratorio de inteligencia (ADR-0007) está aislado y
-OFF por defecto.
+La estructura y las responsabilidades de cada componente están documentadas en [`docs/architecture.md`](docs/architecture.md).
 
-## Repository layout
-
-```
-src/sirah/     runtime Python asyncio: protocol · hardware · config ·
-               runtime · cli (transport/ orphan, se decide en Stage 8)
-firmware/      firmware ESP32 (core/ + platform/) + tests host C++
-config/        runtime.toml (A9) + actuators.yaml (espejo de calibration.h)
-tests/         unit · contract (91 golden) · integration · replay · hil
-docs/          adr/ · components/protocol.md · hardware/ · architecture.md
-               · quickstart.md · roadmap.md
-laboratory/    laboratorio de inteligencia — OFF por defecto (ADR-0007)
-```
+---
 
 ## Testing
 
+Las pruebas de Python pueden ejecutarse mediante:
+
 ```bash
-pytest tests -q                                   # 169 unit + contract
-make -C firmware/sirah-eyes/tests/host core_tests      # host tests C++
-make -C firmware/sirah-eyes/tests/host contract_checker  # gate doble parser
+pytest tests -q
 ```
 
-Estrategia de fake/replay/HIL en ADR-0010 ([docs/adr/](docs/adr/)).
+Las pruebas del firmware:
+
+```bash
+make -C firmware/sirah-eyes/tests/host core_tests
+```
+
+El contrato del protocolo:
+
+```bash
+make -C firmware/sirah-eyes/tests/host contract_checker
+```
+
+El proyecto utiliza pruebas unitarias, contratos de protocolo e integración offline para validar sus componentes.
+
+---
 
 ## Documentation
 
-- [docs/architecture.md](docs/architecture.md) — capas y fronteras
-- [docs/quickstart.md](docs/quickstart.md) — guía paso a paso (fake primero)
-- [docs/roadmap.md](docs/roadmap.md) — stages 1→16 con estado y criterios
-- [docs/components/protocol.md](docs/components/protocol.md) — especificación normativa v1.0
-- [docs/hardware/](docs/hardware/) — pin map, build y evidencia física
-- [docs/adr/](docs/adr/) — índices de decisiones (11 ADRs)
-- [CHANGELOG.md](CHANGELOG.md) — historial por stage
-- [CONTRIBUTING.md](CONTRIBUTING.md) — cómo contribuir
+La documentación técnica del proyecto se encuentra en [`docs/`](docs/).
+
+* [`architecture.md`](docs/architecture.md) — arquitectura general.
+* [`quickstart.md`](docs/quickstart.md) — instalación y primeros pasos.
+* [`roadmap.md`](docs/roadmap.md) — etapas de desarrollo.
+* [`components/protocol.md`](docs/components/protocol.md) — protocolo PC ↔ ESP32.
+* [`hardware/`](docs/hardware/) — hardware, conexiones y calibración.
+* [`adr/`](docs/adr/) — decisiones de arquitectura.
+* [`CHANGELOG.md`](CHANGELOG.md) — historial de cambios.
+* [`CONTRIBUTING.md`](CONTRIBUTING.md) — guía para contribuir.
+
+---
+
+## Development
+
+Para conocer las decisiones técnicas y el estado de las diferentes etapas, consulta el [roadmap](docs/roadmap.md) y los [ADR](docs/adr/).
+
+---
 
 ## License
 
-Apache-2.0 — ver [LICENSE](LICENSE). Código y diseños externos quedan
-acreditados, nunca presentados como trabajo original: el driver de
-servos del firmware usa la librería Adafruit PWM/Servo Driver
-(BSD-3-Clause).
+SIRAH está disponible bajo la **Apache License 2.0**.
+
+Consulta [`LICENSE`](LICENSE) para los términos completos de la licencia.
+
