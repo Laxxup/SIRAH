@@ -50,3 +50,5 @@ v0.3.0 y lo que no.
   roadmap.
 - La arquitectura futura de comportamiento/LLM está documentada en
   `docs/behavior-llm-architecture.md`; no añade dependencias ni autoridad física.
+- `PerceptionSnapshot` es la frontera semántica para eventos y shadow mode;
+  conserva los frames crudos fuera del dominio de comportamiento.
