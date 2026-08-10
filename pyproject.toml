@@ -47,7 +47,7 @@ check_untyped_defs = true
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
-module = ["serial_asyncio", "serial.*"]
+module = ["serial_asyncio", "serial.*", "cv2"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
