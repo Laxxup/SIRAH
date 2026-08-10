@@ -15,7 +15,10 @@ camera fills it; tests/fakes leave it None).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from math import isfinite
+from typing import Literal, Protocol, runtime_checkable
+
+SourceState = Literal["tracking", "lost", "searching"]
 
 
 @dataclass(frozen=True)
@@ -41,6 +44,50 @@ class GazeTarget:
     x: float
     y: float
     confidence: float = 1.0
+
+
+@dataclass(frozen=True)
+class PerceptionSnapshot:
+    """Derived semantic observation for event and shadow-only behavior layers."""
+
+    observed_at: float
+    present: bool
+    x: float | None
+    y: float | None
+    confidence: float | None
+    source_state: SourceState
+
+    def __post_init__(self) -> None:
+        if not isfinite(self.observed_at):
+            raise ValueError("observed_at must be finite")
+        values = (self.x, self.y, self.confidence)
+        if self.source_state == "tracking":
+            if not self.present or any(value is None for value in values):
+                raise ValueError("tracking snapshots require present coordinates")
+            assert self.x is not None and self.y is not None and self.confidence is not None
+            if not -1.0 <= self.x <= 1.0 or not -1.0 <= self.y <= 1.0:
+                raise ValueError("tracking coordinates must be normalized")
+            if not 0.0 <= self.confidence <= 1.0:
+                raise ValueError("tracking confidence must be normalized")
+        elif self.source_state in {"lost", "searching"}:
+            if self.present or any(value is not None for value in values):
+                raise ValueError("lost/searching snapshots require absent coordinates")
+        else:  # pragma: no cover - Literal is enforced statically
+            raise ValueError("unknown source_state")
+
+
+def snapshot_from_target(
+    target: GazeTarget | None,
+    *,
+    observed_at: float,
+    absent_state: Literal["lost", "searching"] = "searching",
+) -> PerceptionSnapshot:
+    """Adapt the Stage 8 detector output without exposing frame payloads."""
+    if target is None:
+        return PerceptionSnapshot(observed_at, False, None, None, None, absent_state)
+    return PerceptionSnapshot(
+        observed_at, True, target.x, target.y, target.confidence, "tracking"
+    )
 
 
 @runtime_checkable
