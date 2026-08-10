@@ -51,6 +51,28 @@ class JsonlReplayCameraSource(ReplayCameraSource):
         super().__init__(records)
 
 
+class OpenCVJsonlReplayCameraSource(JsonlReplayCameraSource):
+    """Decode each JSONL image path before exposing it as a frame payload."""
+
+    def __init__(
+        self, manifest: Path, *, image_loader: Callable[[Path], object] | None = None
+    ) -> None:
+        super().__init__(manifest)
+        self._image_loader = image_loader or _opencv_image_loader
+
+    async def next_frame(self) -> Frame | None:
+        frame = await super().next_frame()
+        if frame is None:
+            return None
+        assert isinstance(frame.payload, dict)
+        image = frame.payload["image"]
+        assert isinstance(image, Path)
+        payload = self._image_loader(image)
+        if payload is None:
+            raise OSError(f"cannot load replay image {image}")
+        return Frame(index=frame.index, payload=payload)
+
+
 class VideoReplayCameraSource:
     """Optional OpenCV video-file source for real replay datasets."""
 
@@ -90,3 +112,11 @@ def _opencv_video_capture(video: Path) -> object:
     except ImportError as exc:
         raise RuntimeError('install perception support: pip install -e ".[perception]"') from exc
     return cv2.VideoCapture(str(video))
+
+
+def _opencv_image_loader(image: Path) -> object:
+    try:
+        import cv2
+    except ImportError as exc:
+        raise RuntimeError('install perception support: pip install -e ".[perception]"') from exc
+    return cv2.imread(str(image))

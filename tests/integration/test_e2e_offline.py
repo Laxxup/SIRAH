@@ -13,6 +13,7 @@ TARGET wire -> FakeESP32 twin, plus the degradation rules:
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 from sirah.behavior.gaze_behavior import GazeBehavior
 from sirah.config.loader import RuntimeSettings
@@ -20,6 +21,7 @@ from sirah.config.schema import load_actuator_config
 from sirah.hardware.fake_esp32 import FakeESP32
 from sirah.hardware.transport import ReadTimeout, TransportError
 from sirah.perception.contracts import Frame, GazeTarget
+from sirah.perception.replay import JsonlReplayCameraSource
 from sirah.runtime.app import RuntimeApp
 from sirah.runtime.registry import ComponentStatus
 
@@ -56,6 +58,12 @@ class WindowDetector:
 
     def detect(self, frame: Frame) -> GazeTarget | None:
         return self._target if frame.index < self._n_faces else None
+
+
+class ReplayFixtureDetector:
+    def detect(self, frame: Frame) -> GazeTarget | None:
+        assert isinstance(frame.payload, dict)
+        return GazeTarget(0.25, -0.25) if frame.payload["label"] == "empty" else None
 
 
 class FailAfterCamera(ScriptedCamera):
@@ -171,6 +179,19 @@ async def test_full_pipeline_sends_target_and_state_converges():
     x, y = await _read_state(fake)
     assert 0.4 < x <= 0.51
     assert -0.51 <= y < -0.35
+
+
+async def test_jsonl_replay_fixture_drives_pipeline():
+    manifest = Path(__file__).parents[1] / "replay" / "fixtures" / "frames.jsonl"
+    fake = FakeESP32.from_actuators_yaml()
+    app = _app(fake, JsonlReplayCameraSource(manifest), ReplayFixtureDetector(), GazeBehavior())
+    stop = asyncio.Event()
+    run = asyncio.create_task(app.run(stop))
+    await _await_until(lambda: app.result.faces_seen == 1)
+    await _await_state(fake, lambda x, y: x > 0.1 and y < -0.05)
+    stop.set()
+    result = await run
+    assert result.send_errors == 0
 
 
 async def test_lost_face_recenters_to_center_after_timeout():

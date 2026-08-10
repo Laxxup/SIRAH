@@ -67,6 +67,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="local verified YuNet ONNX model; requires --camera-device",
     )
     parser.add_argument(
+        "--replay-jsonl",
+        default=None,
+        help="JSONL image replay; requires --yunet-model",
+    )
+    parser.add_argument(
+        "--replay-video",
+        default=None,
+        help="video replay; requires --yunet-model",
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true", help="log component statuses"
     )
     return parser
@@ -75,8 +85,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if bool(args.camera_device) != bool(args.yunet_model):
-        parser.error("--camera-device and --yunet-model must be supplied together")
+    sources = [args.camera_device, args.replay_jsonl, args.replay_video]
+    if sum(source is not None for source in sources) > 1:
+        parser.error("choose only one of --camera-device, --replay-jsonl, or --replay-video")
+    if bool(any(sources)) != bool(args.yunet_model):
+        parser.error("a camera or replay source and --yunet-model must be supplied together")
     return asyncio.run(_entry(args))
 
 
@@ -86,7 +99,12 @@ async def _entry(args: argparse.Namespace) -> int:
     from sirah.hardware.fake_esp32 import FakeESP32
     from sirah.hardware.serial_adapter import SerialTransport
     from sirah.hardware.transport import EyeTransport
+    from sirah.perception.contracts import CameraSource
     from sirah.perception.opencv_camera import OpenCVCameraSource
+    from sirah.perception.replay import (
+        OpenCVJsonlReplayCameraSource,
+        VideoReplayCameraSource,
+    )
     from sirah.perception.yunet import YuNetFaceDetector
     from sirah.runtime.app import RuntimeApp
     from sirah.runtime.registry import ComponentStatus
@@ -116,9 +134,15 @@ async def _entry(args: argparse.Namespace) -> int:
             device=settings.serial_device,
             baudrate=settings.baudrate,
         )
-    camera = detector = behavior = None
+    camera: CameraSource | None = None
+    detector = behavior = None
     if args.camera_device:
         camera = OpenCVCameraSource(args.camera_device)
+    elif args.replay_jsonl:
+        camera = OpenCVJsonlReplayCameraSource(Path(args.replay_jsonl))
+    elif args.replay_video:
+        camera = VideoReplayCameraSource(Path(args.replay_video))
+    if camera is not None:
         detector = YuNetFaceDetector(Path(args.yunet_model))
         behavior = GazeBehavior()
     app = RuntimeApp(

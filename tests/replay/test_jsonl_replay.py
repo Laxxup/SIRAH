@@ -3,7 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sirah.perception.replay import JsonlReplayCameraSource, VideoReplayCameraSource
+from sirah.perception.replay import (
+    JsonlReplayCameraSource,
+    OpenCVJsonlReplayCameraSource,
+    VideoReplayCameraSource,
+)
 
 
 async def test_jsonl_replay_resolves_relative_image_paths(tmp_path):
@@ -29,6 +33,18 @@ async def test_versioned_fixture_is_replayable():
     frame = await source.next_frame()
     assert frame is not None
     assert frame.payload["image"].is_file()
+
+
+async def test_opencv_jsonl_replay_loads_each_image(tmp_path):
+    image = tmp_path / "frame.pgm"
+    image.write_bytes(b"P2\n1 1\n255\n0\n")
+    manifest = tmp_path / "frames.jsonl"
+    manifest.write_text(json.dumps({"image": image.name}) + "\n")
+    source = OpenCVJsonlReplayCameraSource(manifest, image_loader=lambda path: f"loaded:{path.name}")
+    await source.start()
+    frame = await source.next_frame()
+    assert frame is not None
+    assert frame.payload == "loaded:frame.pgm"
 
 
 async def test_video_replay_returns_frames_then_eof(tmp_path):
