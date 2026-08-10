@@ -133,6 +133,7 @@ async def _entry(args: argparse.Namespace) -> int:
         transport = SerialTransport(
             device=settings.serial_device,
             baudrate=settings.baudrate,
+            read_timeout_s=settings.read_timeout_s,
         )
     camera: CameraSource | None = None
     detector = behavior = None

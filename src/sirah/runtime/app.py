@@ -35,7 +35,7 @@ from sirah.config.schema import ActuatorConfig
 from sirah.hardware.contract import encode_command
 from sirah.hardware.transport import EyeTransport, TransportError
 from sirah.perception.contracts import CameraSource, FaceDetector
-from sirah.runtime.heartbeat import HeartbeatWriter
+from sirah.runtime.eye_link_supervisor import EyeLinkSupervisor
 from sirah.runtime.policies import LostFacePolicy, SetpointGate
 from sirah.runtime.registry import ComponentRegistry, ComponentStatus
 
@@ -78,6 +78,7 @@ class RuntimeApp:
         self.policy = SetpointGate()
         self.lost_face = LostFacePolicy(timeout_s=settings.lost_face_center_s)
         self._eyes_lost = False
+        self._eye_link: EyeLinkSupervisor | None = None
         self.result = RuntimeResult(settings=settings, registry=self.registry)
 
     @classmethod
@@ -106,14 +107,15 @@ class RuntimeApp:
 
         tasks = [asyncio.create_task(self._pipeline_loop(stop, eyes_ok))]
         if eyes_ok:
+            self._eye_link = EyeLinkSupervisor(
+                self.transport,
+                heartbeat_cadence_s=self.settings.heartbeat_cadence_s,
+                read_timeout_s=self.settings.read_timeout_s,
+                liveness_timeout_s=self.settings.heartbeat_timeout_s,
+                on_link_lost=self._degrade_eyes,
+            )
             tasks.append(
-                asyncio.create_task(
-                    HeartbeatWriter(
-                        self.transport,
-                        cadence_s=self.settings.heartbeat_cadence_s,
-                        on_failure=self._degrade_eyes,
-                    ).run(stop)
-                )
+                asyncio.create_task(self._eye_link.run(stop))
             )
         await stop.wait()
         for task in tasks:
@@ -204,13 +206,10 @@ class RuntimeApp:
         gated = self.policy.validate(setpoint.x, setpoint.y)
         if gated is None:
             return  # SetpointGate rejected (out of contract) — nothing sent
-        if self._eyes_lost:
+        if self._eyes_lost or self._eye_link is None:
             return
-        try:
-            payload = encode_command("TARGET", (gated.x, gated.y))
-            await self.transport.send(payload)
-        except Exception as exc:  # noqa: BLE001 - link loss degrades eyes
-            self._degrade_eyes(exc)
+        payload = encode_command("TARGET", (gated.x, gated.y))
+        await self._eye_link.submit(payload)
 
     def _degrade_eyes(self, exc: Exception) -> None:
         """Record the first eye-link failure and stop further TARGET sends."""
