@@ -27,6 +27,7 @@ v0.3.0 y lo que no.
 | 11 | Heartbeat timeout/read timeout cableados | ⏳ | runtime.toml sin settings muertos |
 | 12–14 | — | ⏳ | — |
 | 15/16 | Consistency formalizado como gate de release | ⏳ | — |
+| Futuro | Comportamiento por eventos e intentos estructurados | 📄 Diseñado | ADR, shadow mode, replay y métricas antes de cualquier control |
 
 ## Fuera del alcance de v0.3.0
 
@@ -47,3 +48,5 @@ v0.3.0 y lo que no.
 - Los informes de investigación/auditoría (directorio local `informes/`)
   no se versionan en el repo; sus decisiones viven en ADRs y en este
   roadmap.
+- La arquitectura futura de comportamiento/LLM está documentada en
+  `docs/behavior-llm-architecture.md`; no añade dependencias ni autoridad física.
