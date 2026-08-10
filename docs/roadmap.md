@@ -21,8 +21,8 @@ v0.3.0 y lo que no.
 
 | Stage | Título | Estado | Criterios de salida |
 |---|---|---|---|
-| 8 | Tracking 2D: percepción (camera_source, face_detector) + gaze_behavior | ⏳ | Protocol nominales (Frame/GazeTarget); pipeline frame→detect→behavior→gate→TARGET cableado en `_pipeline_loop`; test E2E offline en tests/integration; cablear `lost_face_center_s` |
-| 9 | Harness replay + datasets | ⏳ | driver de captura; datasets (LFS); tests/replay activo |
+| 8 | Tracking 2D: percepción (camera_source, face_detector) + gaze_behavior | ✅ | Protocolos nominales, pipeline cableado, OpenCV/YuNet opcional, E2E offline y `lost_face_center_s` |
+| 9 | Harness replay + datasets | 🟡 En curso | JSONL e `.mp4` replay; fixtures mínimas activas; falta captura de datasets reales y Git LFS |
 | 10 | Robustez de enlace (watchdog de link, degradación en vivo) | ⏳ | HIL unplug test |
 | 11 | Heartbeat timeout/read timeout cableados | ⏳ | runtime.toml sin settings muertos |
 | 12–14 | — | ⏳ | — |
