@@ -12,5 +12,8 @@ make -C firmware/sirah-eyes/tests/host core_tests
 - Unit tests cover pure runtime, protocol, config and perception helpers.
 - Contract tests compare the Python and C++ parsers against the golden corpus.
 - Integration tests use fakes end to end and require no hardware.
-- Replay tests use finite recorded payloads; datasets remain local.
+- Replay supports two sources: versioned JSONL manifests with small image
+  fixtures in `tests/replay/fixtures/`, and optional `.mp4` files with JSONL
+  annotations. Keep real recordings in `tests/replay/data/`, outside normal Git
+  or managed with Git LFS.
 - HIL tests require explicit operator approval and are not CI prerequisites.
