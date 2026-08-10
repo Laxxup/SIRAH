@@ -19,3 +19,5 @@ Reglas:
   consentimiento (es un robot con cámara).
 - Ancho 1280 px para GitHub Cards; PNG/JPEG, GIF ≤ 5–8 s en loop.
 - Etiquetar nombre y fecha de captura en este README al añadirlos.
+- Usar `hero-eyes-YYYY-MM-DD.jpg`, `blink-sweep-YYYY-MM-DD.gif` y
+  `wiring-YYYY-MM-DD.jpg` para material del laboratorio.

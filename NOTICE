@@ -1,0 +1,3 @@
+SIRAH includes firmware integration with the Adafruit PWM Servo Driver library.
+That library is distributed under the BSD-3-Clause license. Its source and
+license notices remain with the upstream dependency.
