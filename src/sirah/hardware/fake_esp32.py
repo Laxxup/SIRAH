@@ -247,6 +247,7 @@ class FakeESP32(EyeTransport):
         self._status = TransportStatus(TransportState.DISCONNECTED)
         self._target_x = 0.0
         self._target_y = 0.0
+        self._blink_requested = False
         self._last_heartbeat_ms: float | None = None
         self._sim_ms = 0.0  # virtual simulation clock
         self._next_step_ms = float(tick_ms)
@@ -293,7 +294,7 @@ class FakeESP32(EyeTransport):
             self._target_x = self._target_y = 0.0
             self._enqueue(b"OK")
         elif result.name == "BLINK":
-            self._blink.trigger(self._sim_ms)
+            self._blink_requested = True
             self._enqueue(b"OK")
         elif result.name == "HEARTBEAT":
             self._last_heartbeat_ms = self._sim_ms  # silent by spec 6.2
@@ -373,9 +374,17 @@ class FakeESP32(EyeTransport):
         ):
             self._target_x = 0.0
             self._target_y = 0.0
-        self._easer.tick(self._target_x, self._target_y, EASE_KX, EASE_KY)
-        interval = self._blink.draw_interval_ms()
-        self._blink.tick(now_ms, interval)
+        if self._blink.state != BlinkState.IDLE:
+            self._blink.tick(now_ms, self._blink.draw_interval_ms())
+            return
+
+        settled = self._easer.tick(self._target_x, self._target_y, EASE_KX, EASE_KY)
+        if not settled:
+            return
+        if self._blink_requested:
+            self._blink.trigger(now_ms)
+            self._blink_requested = False
+        self._blink.tick(now_ms, self._blink.draw_interval_ms())
 
     def _format_state(self) -> bytes:
         x, y = self._easer.x, self._easer.y

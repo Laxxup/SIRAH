@@ -53,6 +53,7 @@ float g_target_x = 0.0F;
 float g_target_y = 0.0F;
 
 uint32_t g_auto_interval_ms = kBlinkCadenceMs;
+bool g_blink_requested = false;
 
 uint32_t draw_blink_interval() {
   const int32_t j = static_cast<int32_t>(
@@ -76,7 +77,7 @@ void handle_command(const sirah::eyes::core::ParseResult& r) {
     g_target_y = 0.0F;
     Serial.println(sirah::eyes::core::kOkLine);
   } else if (r.name == "BLINK") {
-    g_blink.trigger(millis());
+    g_blink_requested = true;
     Serial.println(sirah::eyes::core::kOkLine);
   } else if (r.name == "STATUS") {
     const bool blinking = g_blink.state() != BlinkState::Idle;
@@ -131,12 +132,24 @@ void loop() {
 
   const uint32_t now_ms = millis();
   const BlinkState prev = g_blink.state();
-  g_blink.tick(now_ms, g_auto_interval_ms);
+  if (prev != BlinkState::Idle) {
+    // A blink owns the mechanism briefly; defer gaze motion until it opens.
+    g_blink.tick(now_ms, g_auto_interval_ms);
+  } else {
+    const bool gaze_settled = g_gaze.tick(g_target_x, g_target_y, kEaseKx, kEaseKy);
+    if (gaze_settled) {
+      if (g_blink_requested) {
+        g_blink.trigger(now_ms);
+        g_blink_requested = false;
+      }
+      // Auto blinking starts only while the eyes are not turning.
+      g_blink.tick(now_ms, g_auto_interval_ms);
+    }
+  }
   if (prev != BlinkState::Idle && g_blink.state() == BlinkState::Idle) {
     g_auto_interval_ms = draw_blink_interval();
   }
 
-  g_gaze.tick(g_target_x, g_target_y, kEaseKx, kEaseKy);
   write_actuators(now_ms);
 
   delay(kTickMs);

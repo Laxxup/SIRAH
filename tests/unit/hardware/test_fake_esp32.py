@@ -270,6 +270,22 @@ async def test_blink_command_marks_state_blink_flag(fake: FakeESP32) -> None:
     assert result.args[2] == b"1"  # type: ignore[union-attr]
 
 
+async def test_blink_waits_until_gaze_settles(fake: FakeESP32) -> None:
+    await fake.connect()
+    await fake.read()  # READY
+    await fake.send(b"TARGET 1.0 0.0")
+    assert await fake.read() == b"OK"
+    await fake.send(b"BLINK")
+    assert await fake.read() == b"OK"
+
+    fake.advance(20)
+    assert fake._easer.x == pytest.approx(EASE_KX)
+    assert fake._blink.state == "idle"
+
+    fake.advance(500)
+    assert fake._blink.state != "idle"
+
+
 # --- watchdog mirror (Stage 11) ----------------------------------------
 
 
