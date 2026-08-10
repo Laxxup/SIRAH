@@ -16,3 +16,4 @@ firmware/sirah-eyes/tests/host/build/
 .agents/
 skills-lock.json
 informes/
+models/
