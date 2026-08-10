@@ -7,6 +7,7 @@
 device = "/dev/ttyUSB0"          # allowlist: /dev/ttyUSB* or /dev/sirah-eyes (ADR-0002)
 baudrate = 115200
 armed = false                    # SIRAH_EYES overrides; disarmed by default (legacy eyes.md)
+read_timeout_s = 1.0             # maximum wait for a supervisor STATUS response
 
 # Heartbeat cadence/timeout (Stage 11 plan: proposed 1 s cadence, 3 s timeout).
 [heartbeat]

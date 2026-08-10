@@ -29,6 +29,7 @@ class RuntimeSettings:
     serial_device: str = DEFAULT_SERIAL_DEVICE
     baudrate: int = 115200
     eyes_armed: bool = True  # SIRAH_EYES: 0 disarms the eyes subsystem
+    read_timeout_s: float = 1.0
     heartbeat_cadence_s: float = 1.0  # proposed 1 s cadence (Stage 11/A2)
     heartbeat_timeout_s: float = 3.0  # proposed 3 s timeout (Stage 11/A2)
     lost_face_center_s: float = 2.0
@@ -82,6 +83,7 @@ def load_runtime_settings(
         serial_device=device,
         baudrate=int(eyes.get("baudrate", 115200)),
         eyes_armed=_env_bool(env, "SIRAH_EYES", bool(eyes.get("armed", True))),
+        read_timeout_s=float(eyes.get("read_timeout_s", 1.0)),
         heartbeat_cadence_s=float(heartbeat.get("cadence_s", 1.0)),
         heartbeat_timeout_s=float(heartbeat.get("timeout_s", 3.0)),
         lost_face_center_s=float(behavior.get("lost_face_center_s", 2.0)),

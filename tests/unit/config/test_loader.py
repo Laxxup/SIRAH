@@ -23,6 +23,7 @@ def test_defaults_from_repo_baseline():
     assert settings.eyes_armed is False  # legacy default: disarmed
     assert settings.heartbeat_cadence_s == 1.0
     assert settings.heartbeat_timeout_s == 3.0
+    assert settings.read_timeout_s == 1.0
     assert settings.lost_face_center_s == 2.0
 
 
