@@ -26,6 +26,10 @@ warn_unused_ignores = true
 module = ["serial_asyncio", "serial.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["yaml"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"

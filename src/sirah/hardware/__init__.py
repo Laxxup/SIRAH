@@ -7,6 +7,7 @@ from sirah.hardware.contract import (
     encode_command,
     format_coord,
 )
+from sirah.hardware.fake_esp32 import BlinkConfig, BlinkFSM, FakeESP32, GazeEaser
 from sirah.hardware.serial_adapter import SerialTransport
 from sirah.hardware.transport import (
     EyeTransport,
@@ -19,10 +20,14 @@ from sirah.hardware.transport import (
 )
 
 __all__ = [
+    "BlinkConfig",
+    "BlinkFSM",
     "Command",
     "ContractError",
     "EyeTransport",
+    "FakeESP32",
     "FramingError",
+    "GazeEaser",
     "LinkLost",
     "ReadTimeout",
     "SerialTransport",

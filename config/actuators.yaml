@@ -1,0 +1,70 @@
+# config/actuators.yaml — SIRAH shared actuator configuration (ADR-0009)
+#
+# ONE source of truth on the PC side for physical limits. Firmware
+# `calibration.h` remains the AUTHORITY (ADR-0003/0004); this YAML is the
+# runtime-side mirror, validated by a consistency test (Stage 15/16) so no
+# contradictory duplication can silently appear.
+#
+# Values from the VERIFIED calibration record
+# (reports/hardware/verified-calibration-2026-08-09.md, director's manual
+# sweep via PCA9685, 2026-08-09; evidence class VERIFIED — V6.12 final).
+# NO invented limits.
+#
+# Sign conventions (A1): X normalized −1 left / 0 center / +1 right;
+# Y −1 down / 0 center / +1 up. Physical servo inversion is DATA (the
+# direction field below), never behavior logic (A1/A9).
+
+version: 1
+
+eyes:
+  x:
+    # Inverted range: larger angle = left (verified 2026-08-09).
+    direction: inverted
+    left_deg: 140.0
+    center_deg: 110.0
+    right_deg: 70.0
+  y:
+    direction: normal
+    up_deg: 85.0
+    center_deg: 75.0
+    down_deg: 60.0
+
+eyelids:
+  sup_right:
+    open_deg: 110.0
+    closed_deg: 70.0
+  inf_right:
+    open_deg: 10.0
+    closed_deg: 70.0
+  sup_left:
+    open_deg: 145.0
+    closed_deg: 170.0
+  inf_left:
+    open_deg: 95.0
+    closed_deg: 40.0
+
+squint_deg:
+  # "Entrecerrado" pose corners (calibration data, not wire contract).
+  inf_right: 30.0
+  sup_right: 90.0
+  inf_left: 70.0
+  sup_left: 146.0
+
+pwm:
+  freq_hz: 50
+  pulse_us:
+    min: 500
+    max: 2400
+  i2c:
+    sda: 21
+    scl: 22
+    address: "0x40"
+
+channels:
+  # PCA9685 actuator wiring (verified hardware record 2026-08-09).
+  eye_x: 0
+  eye_y: 1
+  sup_right: 2
+  inf_right: 3
+  sup_left: 4
+  inf_left: 5
