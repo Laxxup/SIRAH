@@ -19,4 +19,7 @@ Rules (ADR-0007):
   authority over physical servos; proposals are reviewed and gated.
 - No "SIRAH Cortex" component exists or will be created under this name.
 
-At Stage 1 this is an empty scaffold: `README.md` + `INTERFACE.md` only.
+As of Stage 7 this is still a scaffold: `README.md` + `INTERFACE.md` only.
+Nothing here is imported, started or wired by the stable runtime; the
+laboratory will host experiments only after the stable physical runtime
+exists.

@@ -7,10 +7,9 @@
 # runtime-side mirror, validated by a consistency test (Stage 15/16) so no
 # contradictory duplication can silently appear.
 #
-# Values from the VERIFIED calibration record
-# (reports/hardware/verified-calibration-2026-08-09.md, director's manual
-# sweep via PCA9685, 2026-08-09; evidence class VERIFIED — V6.12 final).
-# NO invented limits.
+# Values from the VERIFIED calibration record (director's manual sweep via
+# PCA9685, 2026-08-09; evidence class VERIFIED — V6.12 final; record in
+# docs/hardware/pin-map.md). NO invented limits.
 #
 # Sign conventions (A1): X normalized −1 left / 0 center / +1 right;
 # Y −1 down / 0 center / +1 up. Physical servo inversion is DATA (the

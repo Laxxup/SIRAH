@@ -1,8 +1,9 @@
 # Wire protocol PC ↔ ESP32 — SIRAH eyes v1.0
 
-**Status: NORMATIVE** (draft approved scope of Stage 2; ratification pending
-director approval — the parser gates will not be implemented before this
-spec is approved).
+**Status: NORMATIVE** — implemented since Stage 3: the Python parser
+(`src/sirah/protocol/parse_line.py`) and the C++ parser
+(`firmware/sirah-eyes/core/`) both pass the 91-case golden corpus gate in
+CI (ADR-0010).
 
 SIRAH = **Sistema Inteligente Robótico de Asistencia Humana**; this
 specification governs the eyes subsystem of the general SIRAH project.

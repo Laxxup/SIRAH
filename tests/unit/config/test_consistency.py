@@ -12,8 +12,11 @@ from pathlib import Path
 
 from sirah.config.consistency import (
     parse_calibration_header,
+    parse_pins_header,
     validate_actuator_mirror,
+    validate_pins_mirror,
     verify_mirror_files,
+    verify_pins_files,
 )
 
 HEADER_PATH = (
@@ -22,6 +25,13 @@ HEADER_PATH = (
     / "sirah-eyes"
     / "config"
     / "calibration.h"
+)
+PINS_PATH = (
+    Path(__file__).resolve().parents[3]
+    / "firmware"
+    / "sirah-eyes"
+    / "platform"
+    / "pins.h"
 )
 YAML_PATH = Path(__file__).resolve().parents[3] / "config" / "actuators.yaml"
 
@@ -55,3 +65,34 @@ def test_divergence_is_detected(monkeypatch):
     )
     problems = validate_actuator_mirror(schema_mod.load_actuator_config(YAML_PATH))
     assert any("kEyeXLeftDeg" in p for p in problems)
+
+
+def test_repo_pins_mirror_is_consistent():
+    problems = verify_pins_files(YAML_PATH, PINS_PATH)
+    assert problems == [], "\n".join(problems)
+
+
+def test_pins_parser_extracts_channels_and_i2c():
+    values = parse_pins_header(PINS_PATH)
+    assert values["kPwmChannelEyeX"] == 0
+    assert values["kPwmChannelEyeY"] == 1
+    assert values["kPwmChannelEyelidInfLeft"] == 5
+    assert values["kPwmI2cSda"] == 21
+    assert values["kPwmI2cScl"] == 22
+    assert values["kPwmI2cAddr"] == 0x40
+
+
+def test_pins_divergence_is_detected(monkeypatch):
+    from sirah.config import schema as schema_mod
+
+    problems = validate_pins_mirror(schema_mod.load_actuator_config(YAML_PATH), PINS_PATH)
+    assert problems == []
+    # Corrupt the header side: pretend a channel moved on the board.
+    header = parse_pins_header(PINS_PATH)
+    header["kPwmChannelEyeX"] = 7
+    monkeypatch.setattr(
+        "sirah.config.consistency.parse_pins_header",
+        lambda *a, **k: header,
+    )
+    problems = validate_pins_mirror(schema_mod.load_actuator_config(YAML_PATH))
+    assert any("kPwmChannelEyeX" in p for p in problems)

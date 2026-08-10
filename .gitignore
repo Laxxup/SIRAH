@@ -11,3 +11,8 @@ build/
 htmlcov/
 tests/replay/data/
 firmware/sirah-eyes/tests/host/build/
+
+# Local tooling, agent sessions and internal reports (never published)
+.agents/
+skills-lock.json
+informes/
