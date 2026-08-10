@@ -45,25 +45,26 @@ async def test_ollama_client_sends_only_structured_request_and_parses_intent():
 
     async def post(url: str, headers: dict[str, str], body: bytes, timeout: float) -> bytes:
         calls.append((url, headers, body, timeout))
-        return b'{"message":{"content":"{\\"intent\\":\\"greet\\",\\"speech\\":\\"hola\\"}"}}'
+        return b'{"message":{"content":"{\\"intent\\":\\"answer\\",\\"speech\\":\\"hola\\",\\"emotion\\":\\"friendly\\",\\"action\\":\\"none\\"}"}}'
 
     proposer = OllamaIntentProposer.from_environment(
         environ=_environment(), timeout_s=10.0, budget=1, post=post
     )
     proposal = await proposer.propose(IntentRequest("person_arrived", "hola", 1.0))
 
-    assert proposal.intent is IntentName.GREET
+    assert proposal.intent is IntentName.ANSWER
     assert calls[0][0] == "https://example.invalid/api/chat"
     assert calls[0][1]["Authorization"] == "Bearer test-key"
     payload = json.loads(calls[0][2])
     assert payload["stream"] is False
+    assert "format" not in payload
     assert "audio" not in json.dumps(payload)
     assert "frame" not in json.dumps(payload)
 
 
 async def test_budget_prevents_a_second_cloud_proposal():
     async def post(url: str, headers: dict[str, str], body: bytes, timeout: float) -> bytes:
-        return b'{"message":{"content":"{\\"intent\\":\\"silent\\",\\"speech\\":null}"}}'
+        return b'{"message":{"content":"{\\"intent\\":\\"silent\\",\\"speech\\":null,\\"emotion\\":\\"neutral\\",\\"action\\":\\"none\\"}"}}'
 
     proposer = OllamaIntentProposer.from_environment(
         environ=_environment(), timeout_s=10.0, budget=1, post=post
@@ -103,7 +104,7 @@ async def test_single_flight_rejects_a_concurrent_proposal():
     async def post(url: str, headers: dict[str, str], body: bytes, timeout: float) -> bytes:
         started.set()
         await release.wait()
-        return b'{"message":{"content":"{\\"intent\\":\\"silent\\",\\"speech\\":null}"}}'
+        return b'{"message":{"content":"{\\"intent\\":\\"silent\\",\\"speech\\":null,\\"emotion\\":\\"neutral\\",\\"action\\":\\"none\\"}"}}'
 
     proposer = OllamaIntentProposer.from_environment(
         environ=_environment(), timeout_s=10.0, budget=2, post=post

@@ -19,6 +19,13 @@ perception = [
 ]
 serial = ["pyserial-asyncio>=0.6"]
 cli = ["pyyaml>=6"]
+audio = [
+    "sounddevice>=0.5.5",
+    "onnxruntime>=1.16.1",
+    "faster-whisper",
+]
+vad = ["silero-vad>=6.2.1", "onnxruntime>=1.16.1"]
+conversation = ["pydantic>=2"]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.24",
@@ -46,7 +53,7 @@ check_untyped_defs = true
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
-module = ["serial_asyncio", "serial.*", "cv2"]
+module = ["serial_asyncio", "serial.*", "cv2", "sounddevice", "faster_whisper"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

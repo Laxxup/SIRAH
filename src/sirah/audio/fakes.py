@@ -61,3 +61,41 @@ class FakeTTS:
         if self._failure is not None:
             raise self._failure
         self.spoken.append(text)
+
+
+class FakeOperationTTS:
+    """Operation-aware synthesis double for conversation replay."""
+
+    def __init__(
+        self, *, pcm: bytes = b"synthetic-pcm", failure: Exception | None = None
+    ) -> None:
+        self._pcm = pcm
+        self._failure = failure
+        self.requests: list[tuple[str, str]] = []
+        self.cancelled: list[str] = []
+
+    async def synthesize(self, operation_id: str, text: str) -> bytes:
+        self.requests.append((operation_id, text))
+        if self._failure is not None:
+            raise self._failure
+        return self._pcm
+
+    async def cancel(self, operation_id: str) -> None:
+        self.cancelled.append(operation_id)
+
+
+class FakePCMPlayer:
+    """In-memory PCM player that records playback without a device."""
+
+    def __init__(self, *, failure: Exception | None = None) -> None:
+        self._failure = failure
+        self.played: list[tuple[str, bytes]] = []
+        self.cancelled: list[str] = []
+
+    async def play(self, operation_id: str, pcm: bytes) -> None:
+        if self._failure is not None:
+            raise self._failure
+        self.played.append((operation_id, pcm))
+
+    async def cancel(self, operation_id: str) -> None:
+        self.cancelled.append(operation_id)

@@ -9,7 +9,13 @@ import urllib.request
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
-from sirah.conversation.contracts import IntentName, IntentProposal, IntentRequest
+from sirah.conversation.contracts import (
+    ActionName,
+    EmotionName,
+    IntentName,
+    IntentProposal,
+    IntentRequest,
+)
 from sirah.conversation.errors import (
     BudgetExhausted,
     ConfigurationError,
@@ -18,35 +24,32 @@ from sirah.conversation.errors import (
     ProposalInFlight,
     RemoteError,
 )
+from sirah.conversation.validator import ProposalValidator
 
 HttpPost = Callable[[str, dict[str, str], bytes, float], Awaitable[bytes]]
 _ENVIRONMENT_SENTINEL = object()
-
-_SCHEMA = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["intent", "speech"],
-    "properties": {
-        "intent": {"type": "string", "enum": [item.value for item in IntentName]},
-        "speech": {"type": ["string", "null"]},
-    },
-}
-
 
 def parse_intent_response(payload: bytes) -> IntentProposal:
     try:
         value = json.loads(payload, object_pairs_hook=_object_without_duplicate_keys)
     except (TypeError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise InvalidModelResponse("intent is not valid JSON") from exc
-    if not isinstance(value, dict) or set(value) != {"intent", "speech"}:
+    required = {"intent", "speech", "emotion", "action"}
+    if not isinstance(value, dict) or set(value) != required:
         raise InvalidModelResponse("intent schema keys are invalid")
     intent, speech = value["intent"], value["speech"]
-    if not isinstance(intent, str) or not isinstance(speech, (str, type(None))):
+    emotion, action = value["emotion"], value["action"]
+    if not all(isinstance(item, str) for item in (intent, emotion, action)):
+        raise InvalidModelResponse("intent schema values are invalid")
+    if not isinstance(speech, (str, type(None))):
         raise InvalidModelResponse("intent schema values are invalid")
     try:
-        return IntentProposal(IntentName(intent), speech)
-    except ValueError as exc:
+        proposal = IntentProposal(
+            IntentName(intent), speech, EmotionName(emotion), ActionName(action)
+        )
+    except (TypeError, ValueError) as exc:
         raise InvalidModelResponse("intent violates the closed schema") from exc
+    return ProposalValidator().validate(proposal)
 
 
 class OllamaIntentProposer:
@@ -132,8 +135,18 @@ def _request_payload(model: str, request: IntentRequest) -> bytes:
         {
             "model": model,
             "stream": False,
-            "format": _SCHEMA,
-            "messages": [{"role": "user", "content": json.dumps(context)}],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": (
+                        "Return only a JSON object with intent, speech, emotion, and action. "
+                        "Allowed intents: answer, clarify, acknowledge, silent. "
+                        "Allowed emotions: neutral, friendly, curious, concerned. "
+                        "Action must be none. Context: "
+                        + json.dumps(context, separators=(",", ":"))
+                    ),
+                }
+            ],
         },
         separators=(",", ":"),
     ).encode()

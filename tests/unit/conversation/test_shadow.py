@@ -8,7 +8,7 @@ from sirah.conversation.shadow import ShadowProposalLog
 def test_shadow_log_records_proposals_and_rejections_without_execution():
     log = ShadowProposalLog()
     request = IntentRequest("person_arrived", "hola", 1.0)
-    proposal = IntentProposal(IntentName.GREET, "hola")
+    proposal = IntentProposal(IntentName.ANSWER, "hola")
 
     log.record_proposal(request, proposal)
     log.record_rejection(request, BudgetExhausted("limit"))

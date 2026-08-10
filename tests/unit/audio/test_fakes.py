@@ -3,7 +3,13 @@ from __future__ import annotations
 import pytest
 
 from sirah.audio.contracts import AudioChunk, Transcript
-from sirah.audio.fakes import FakeAudioSource, FakeSTT, FakeTTS
+from sirah.audio.fakes import (
+    FakeAudioSource,
+    FakeOperationTTS,
+    FakePCMPlayer,
+    FakeSTT,
+    FakeTTS,
+)
 
 
 async def test_fake_audio_source_yields_chunks_in_timestamp_order_then_eof():
@@ -49,3 +55,18 @@ async def test_fake_tts_records_text_and_can_fail():
     failing = FakeTTS(failure=RuntimeError("speaker failed"))
     with pytest.raises(RuntimeError, match="speaker failed"):
         await failing.speak("hola")
+
+
+async def test_operation_audio_fakes_record_synthesis_playback_and_cancellation():
+    tts = FakeOperationTTS(pcm=b"synthetic-pcm")
+    player = FakePCMPlayer()
+
+    pcm = await tts.synthesize("conversation-1", "hola")
+    await player.play("conversation-1", pcm)
+    await tts.cancel("conversation-2")
+    await player.cancel("conversation-2")
+
+    assert tts.requests == [("conversation-1", "hola")]
+    assert player.played == [("conversation-1", b"synthetic-pcm")]
+    assert tts.cancelled == ["conversation-2"]
+    assert player.cancelled == ["conversation-2"]

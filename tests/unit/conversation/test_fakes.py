@@ -7,10 +7,10 @@ from sirah.conversation.fakes import FakeIntentProposer
 
 
 async def test_fake_intent_proposer_is_offline_and_records_requests():
-    proposer = FakeIntentProposer(IntentProposal(IntentName.GREET, "hola"))
+    proposer = FakeIntentProposer(IntentProposal(IntentName.ANSWER, "hola"))
     request = IntentRequest("person_arrived", "hola", 1.0)
 
-    assert await proposer.propose(request) == IntentProposal(IntentName.GREET, "hola")
+    assert await proposer.propose(request) == IntentProposal(IntentName.ANSWER, "hola")
     assert proposer.requests == [request]
 
 

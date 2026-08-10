@@ -9,10 +9,21 @@ from typing import Protocol, runtime_checkable
 
 
 class IntentName(str, Enum):
-    GREET = "greet"
+    ANSWER = "answer"
     ACKNOWLEDGE = "acknowledge"
     CLARIFY = "clarify"
     SILENT = "silent"
+
+
+class EmotionName(str, Enum):
+    NEUTRAL = "neutral"
+    FRIENDLY = "friendly"
+    CURIOUS = "curious"
+    CONCERNED = "concerned"
+
+
+class ActionName(str, Enum):
+    NONE = "none"
 
 
 @dataclass(frozen=True)
@@ -38,12 +49,18 @@ class IntentRequest:
 class IntentProposal:
     intent: IntentName
     speech: str | None
+    emotion: EmotionName = EmotionName.NEUTRAL
+    action: ActionName = ActionName.NONE
 
     def __post_init__(self) -> None:
         if not isinstance(self.intent, IntentName):
             raise TypeError("intent must be an IntentName")
         if not isinstance(self.speech, (str, type(None))):
             raise TypeError("speech must be text or None")
+        if not isinstance(self.emotion, EmotionName):
+            raise TypeError("emotion must be an EmotionName")
+        if not isinstance(self.action, ActionName):
+            raise TypeError("action must be an ActionName")
         if self.intent is IntentName.SILENT and self.speech is not None:
             raise ValueError("silent intent must not include speech")
         if self.intent is not IntentName.SILENT and not self.speech:
