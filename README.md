@@ -1,150 +1,84 @@
-# SIRAH v0.3.0
+# SIRAH
 
-## Sistema Inteligente Robótico de Asistencia Humana
+<p align="center">
+  <img src="logo/sirah.png" width="260" alt="SIRAH">
+</p>
 
-SIRAH es un **proyecto universitario del Instituto Tecnológico de Ciudad Madero (ITCM)**, desarrollado dentro del **Taller de Robótica**, con colaboración del **IPT de Tampico Centro**.
+<p align="center">
+  <a href="https://www.facebook.com/profile.php?id=61592100517778&amp;locale=es_LA"><img src="https://cdn.simpleicons.org/facebook/1877F2" width="22" alt="Facebook de Comunidad Robótica ITCM"></a>
+  &nbsp;
+  <a href="https://www.instagram.com/comunidadrobotica.itcm/"><img src="https://cdn.simpleicons.org/instagram/E4405F" width="22" alt="Instagram de Comunidad Robótica ITCM"></a>
+  &nbsp;
+  <a href="https://tiktok.com/@comunidadrobotica.itcm"><img src="https://cdn.simpleicons.org/tiktok/000000" width="22" alt="TikTok de Comunidad Robótica ITCM"></a>
+</p>
 
-El objetivo del proyecto es desarrollar un **robot humanoide educativo**, integrando robótica, electrónica, programación, control y sistemas embebidos.
+<p align="center">
+  <img src="https://img.shields.io/badge/license-Apache--2.0-4B8BBE" alt="Apache 2.0">
+  <img src="https://img.shields.io/badge/python-3.12%2B-3776AB" alt="Python 3.12 o superior">
+  <img src="https://img.shields.io/badge/status-prototipo%20en%20desarrollo-6A5ACD" alt="Prototipo en desarrollo">
+</p>
 
-Actualmente, SIRAH se encuentra en etapa de **prototipo en desarrollo**.
+## About SIRAH
 
----
+SIRAH significa **Sistema Inteligente Robótico de Asistencia Humana**. Es un
+proyecto universitario del Instituto Tecnológico de Ciudad Madero (ITCM),
+desarrollado en el Taller de Robótica con colaboración del IPT de Tampico
+Centro.
 
-## Current status
+El proyecto construye un robot humanoide educativo mediante electrónica,
+software, control y sistemas embebidos. Sigue en desarrollo: las funciones
+documentadas como experimentales no deben interpretarse como capacidades listas
+para producción.
 
-SIRAH se desarrolla progresivamente mediante diferentes subsistemas.
+## Estado actual
 
-Actualmente se encuentran implementados o en desarrollo:
+- Runtime Python con `asyncio`, protocolo PC ↔ ESP32 y `FakeESP32` para pruebas sin hardware.
+- Subsistema ocular con mirada 2D, párpados, límites y calibración.
+- Laboratorio conversacional con Ollama, capacidades locales, contexto corto y logs opt-in.
+- Conversación local experimental con Silero VAD, Faster-Whisper y Kokoro.
 
-* Runtime en Python con `asyncio`.
-* Comunicación PC ↔ ESP32 mediante protocolo v1.0.
-* Firmware ESP32.
-* Control de servomotores mediante PCA9685.
-* Sistema de ojos con movimiento 2D.
-* Parpadeo, easing, límites y pose segura.
-* Calibración de actuadores.
-* `FakeESP32` para pruebas sin hardware.
-* Pruebas unitarias, contract tests e integración offline.
-* Infraestructura inicial de percepción y comportamiento.
+La conversación no controla ojos, ESP32, servos ni otro hardware. El contrato
+de acción permanece limitado a `none`.
 
-En desarrollo:
+## Inicio rápido
 
-* Percepción mediante webcam.
-* Seguimiento visual.
-* Integración de los diferentes subsistemas del robot.
-* Nuevas capacidades de interacción.
-* Futuros subsistemas humanoides.
-
----
-
-## Eye subsystem
-
-El sistema de ojos es uno de los primeros subsistemas funcionales de SIRAH.
-
-Utiliza un **ESP32**, un **PCA9685** y seis servomotores:
-
-* Eye X.
-* Eye Y.
-* Cuatro párpados.
-
-El firmware mantiene la responsabilidad sobre el control físico de los actuadores, incluyendo parpadeo, easing, límites, watchdog y pose segura.
-
-El runtime en PC/Raspberry Pi se comunica con el ESP32 mediante un protocolo definido y también puede ejecutarse utilizando `FakeESP32`, permitiendo realizar pruebas sin hardware.
-
-La documentación específica del subsistema se encuentra en [`docs/hardware/`](docs/hardware/) y [`docs/components/protocol.md`](docs/components/protocol.md).
-
----
-
-## Getting started
-
-### Sin hardware
-
-El proyecto puede ejecutarse utilizando `FakeESP32`:
+Sin hardware:
 
 ```bash
 pip install -e ".[cli,serial]"
 sirah-runtime --fake --eyes
 ```
 
-Esto permite probar el runtime sin conectar un ESP32.
+Para conversación y sus requisitos locales, consulta
+[docs/conversation.md](docs/conversation.md). Antes de conectar hardware físico,
+lee [docs/hardware/](docs/hardware/).
 
-### Con hardware
-
-Con el ESP32, PCA9685 y los seis servomotores configurados:
-
-```bash
-sirah-runtime --eyes
-```
-
-Consulta [`docs/hardware/`](docs/hardware/) antes de utilizar el hardware físico.
-
----
-
-## Project structure
-
-```text
-SIRAH
-├── src/              Runtime y software principal
-├── firmware/         Firmware ESP32
-├── config/           Configuración del sistema
-├── tests/             Pruebas automatizadas
-├── docs/              Documentación técnica
-├── laboratory/        Componentes experimentales
-└── scripts/           Herramientas auxiliares
-```
-
-La estructura y las responsabilidades de cada componente están documentadas en [`docs/architecture.md`](docs/architecture.md).
-
----
-
-## Testing
-
-Las pruebas de Python pueden ejecutarse mediante:
+## Pruebas
 
 ```bash
-pytest tests -q
+uv run pytest -q
+uv run ruff check src/sirah tests
+uv run mypy src/sirah
 ```
 
-Las pruebas del firmware:
+También hay pruebas de firmware y protocolo:
 
 ```bash
 make -C firmware/sirah-eyes/tests/host core_tests
-```
-
-El contrato del protocolo:
-
-```bash
 make -C firmware/sirah-eyes/tests/host contract_checker
 ```
 
-El proyecto utiliza pruebas unitarias, contratos de protocolo e integración offline para validar sus componentes.
+## Documentación
 
----
+- [Arquitectura](docs/architecture.md)
+- [Inicio rápido](docs/quickstart.md)
+- [Conversación](docs/conversation.md)
+- [Roadmap](docs/roadmap.md)
+- [Prechecks de release](docs/release.md)
+- [Hardware y calibración](docs/hardware/)
+- [ADR](docs/adr/)
+- [Contribuir](CONTRIBUTING.md)
 
-## Documentation
+## Licencia
 
-La documentación técnica del proyecto se encuentra en [`docs/`](docs/).
-
-* [`architecture.md`](docs/architecture.md) — arquitectura general.
-* [`quickstart.md`](docs/quickstart.md) — instalación y primeros pasos.
-* [`roadmap.md`](docs/roadmap.md) — etapas de desarrollo.
-* [`components/protocol.md`](docs/components/protocol.md) — protocolo PC ↔ ESP32.
-* [`hardware/`](docs/hardware/) — hardware, conexiones y calibración.
-* [`adr/`](docs/adr/) — decisiones de arquitectura.
-* [`CHANGELOG.md`](CHANGELOG.md) — historial de cambios.
-* [`CONTRIBUTING.md`](CONTRIBUTING.md) — guía para contribuir.
-
----
-
-## Development
-
-Para conocer las decisiones técnicas y el estado de las diferentes etapas, consulta el [roadmap](docs/roadmap.md) y los [ADR](docs/adr/).
-
----
-
-## License
-
-SIRAH está disponible bajo la **Apache License 2.0**.
-
-Consulta [`LICENSE`](LICENSE) para los términos completos de la licencia.
-
+SIRAH se distribuye bajo [Apache License 2.0](LICENSE).
