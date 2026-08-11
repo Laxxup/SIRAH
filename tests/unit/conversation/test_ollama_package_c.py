@@ -33,7 +33,8 @@ async def test_ollama_prompt_requests_json_without_cloud_format_parameter():
     await proposer.propose(IntentRequest("speech_ended", "hola", 1.0))
 
     assert "format" not in requests[0]
-    assert "JSON object" in requests[0]["messages"][0]["content"]  # type: ignore[index]
+    assert "SIRAH" in requests[0]["messages"][0]["content"]  # type: ignore[index]
+    assert "JSON object" in requests[0]["messages"][1]["content"]  # type: ignore[index]
 
 
 def test_ollama_rejects_malformed_json_before_creating_a_proposal():

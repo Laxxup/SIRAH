@@ -131,12 +131,13 @@ class OllamaIntentProposer:
 
 
 def _request_payload(model: str, request: IntentRequest) -> bytes:
-    context = {"event": request.event, "text": request.text, "observed_at": request.observed_at}
+    context = {"event": request.event, "text": request.text, "recent_turns": request.context}
     return json.dumps(
         {
             "model": model,
             "stream": False,
             "messages": [
+                {"role": "system", "content": "Eres SIRAH, Sistema Inteligente Robótico de Asistencia Humana, un asistente robótico educativo universitario en desarrollo. Habla solo español. Responde breve, amable y tranquila: una o dos frases. Nunca digas que eres ChatGPT, OpenAI, Ollama ni gpt-oss. No inventes recuerdos ni capacidades físicas. action siempre es none."},
                 {
                     "role": "user",
                     "content": (

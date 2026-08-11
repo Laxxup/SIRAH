@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 from sirah.audio.capture import SoundDeviceAudioSource
+from sirah.audio.contracts import Transcript
 from sirah.audio.playback import SoundDevicePCMPlayer
 from sirah.audio.replay import load_replay
 from sirah.audio.stt import FasterWhisperSTT
@@ -21,6 +22,7 @@ from sirah.conversation.continuous import (
     ConversationState,
 )
 from sirah.conversation.contracts import IntentRequest
+from sirah.conversation.core import ConversationCore
 from sirah.conversation.ollama import OllamaIntentProposer
 from sirah.conversation.session import ConversationSession, OperationTTS
 
@@ -262,11 +264,13 @@ async def _listen(args: argparse.Namespace) -> int:
 
 
 async def _text_chat(model: str) -> int:
+    core = ConversationCore(_proposer(model))
     while True:
         text = await asyncio.to_thread(input, "you> ")
         if not text.strip():
             return 0
-        proposal = await _proposer(model).propose(IntentRequest("text", text, time.monotonic()))
+        observed_at = time.monotonic()
+        proposal = await core.respond(Transcript(text, observed_at, observed_at, 1.0))
         print(f"sirah> {proposal.speech or ''}")
 
 

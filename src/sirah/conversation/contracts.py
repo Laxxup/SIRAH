@@ -33,6 +33,7 @@ class IntentRequest:
     event: str
     text: str | None
     observed_at: float
+    context: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.event, str):
@@ -43,6 +44,8 @@ class IntentRequest:
             raise ValueError("event must not be empty")
         if not isfinite(self.observed_at):
             raise ValueError("observed_at must be finite")
+        if not all(isinstance(item, str) for item in self.context):
+            raise TypeError("context must contain text")
 
 
 @dataclass(frozen=True)
