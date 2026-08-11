@@ -42,7 +42,7 @@ class _TextOnlyResponder:
         if proposal.speech:
             print(f"sirah> {proposal.speech}")
         if self._log is not None:
-            self._log.write("response_validated", transcript=transcript.text, validated_speech=proposal.speech, intent=proposal.intent.value)
+            self._log.write("response_validated", transcript=transcript.text, validated_speech=proposal.speech, intent=proposal.intent.value, stt_confidence=transcript.confidence)
 
     async def interrupt(self) -> None:
         return None

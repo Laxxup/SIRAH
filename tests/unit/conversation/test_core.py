@@ -34,6 +34,16 @@ async def test_core_rejects_low_confidence_before_ollama():
     assert proposer.requests == []
 
 
+async def test_core_accepts_clear_local_time_pattern_at_reduced_confidence():
+    proposer = FakeIntentProposer(IntentProposal(IntentName.ANSWER, "ignored"))
+    core = ConversationCore(proposer, clock=lambda: datetime(2026, 8, 11, 22, 30, tzinfo=UTC))
+
+    response = await core.respond(_transcript("Y si puede decir la hora", confidence=0.51))
+
+    assert response.speech == "Son las 22:30."
+    assert proposer.requests == []
+
+
 async def test_core_repairs_english_response_once_then_uses_spanish_fallback():
     class EnglishTwice(FakeIntentProposer):
         async def propose(self, request):

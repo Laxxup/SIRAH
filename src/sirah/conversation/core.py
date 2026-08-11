@@ -35,12 +35,12 @@ class ConversationCore:
 
     async def respond(self, transcript: Transcript) -> IntentProposal:
         text = transcript.text.strip()
-        if transcript.confidence < self._minimum_confidence or not text or len(text) > 1_000:
-            return IntentProposal(IntentName.CLARIFY, "No entendí bien, ¿puedes repetirlo?", EmotionName.CONCERNED)
         local = self._local(text)
-        if local is not None:
+        if local is not None and transcript.confidence >= 0.45:
             self._context.append(text)
             return local
+        if transcript.confidence < self._minimum_confidence or not text or len(text) > 1_000:
+            return IntentProposal(IntentName.CLARIFY, "No entendí bien, ¿puedes repetirlo?", EmotionName.CONCERNED)
         request = IntentRequest("speech_ended", text, transcript.ended_at, tuple(self._context))
         proposal = await self._proposer.propose(request)
         if not _is_spanish(proposal.speech) or _claims_wrong_identity(proposal.speech):
