@@ -35,3 +35,19 @@ async def test_silero_adapter_uses_injected_official_model_and_threshold():
 
     assert await detector.is_speech(AudioChunk(b"\x00\x00" * 512, 16_000, 1, 1.0)) is True
     assert calls[0][1] == 16_000
+
+
+async def test_silero_adapter_resets_state_between_turns():
+    class Model:
+        def __call__(self, _samples, _rate):
+            return 0.0
+
+        def reset_states(self):
+            self.reset = True
+
+    model = Model()
+    detector = SileroVoiceActivityDetector(model, samples_factory=list)
+
+    await detector.reset()
+
+    assert model.reset is True

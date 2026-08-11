@@ -231,6 +231,9 @@ class ContinuousConversationSession:
                 return
             await self._set_state(ConversationState.SPEAKING)
             await self._conversation.respond(transcript)
+            reset = getattr(self._vad, "reset", None)
+            if reset is not None:
+                await reset()
             self._guard_until = self._now() + self._config.post_playback_guard_ms / 1000
         except asyncio.CancelledError:
             raise

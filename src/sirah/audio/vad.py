@@ -59,6 +59,11 @@ class SileroVoiceActivityDetector:
             raise ValueError("Silero VAD requires mono 8 kHz or 16 kHz PCM")
         return await asyncio.to_thread(self._classify, chunk, threshold)
 
+    async def reset(self) -> None:
+        reset = getattr(self._model, "reset_states", None)
+        if reset is not None:
+            await asyncio.to_thread(reset)
+
     def _classify(self, chunk: AudioChunk, threshold: float | None) -> bool:
         samples = array("h")
         samples.frombytes(chunk.pcm)

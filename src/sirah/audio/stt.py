@@ -22,7 +22,7 @@ class FasterWhisperSTT:
         self,
         model_name: str,
         *,
-        language: str | None = None,
+        language: str | None = "es",
         model_factory: _ModelFactory | None = None,
     ) -> None:
         self._model_name = model_name
@@ -47,7 +47,7 @@ class FasterWhisperSTT:
         pcm = b"".join(chunk.pcm for chunk in chunks)
         audio = _pcm_to_mono_float(pcm, first.channels)
         segments, _info = self._get_model().transcribe(  # type: ignore[attr-defined]
-            audio, language=self._language
+            audio, language=self._language, initial_prompt="Conversación breve en español con SIRAH."
         )
         result = tuple(segments)
         average_logprob = (
