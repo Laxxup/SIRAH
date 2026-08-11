@@ -9,6 +9,7 @@ from typing import Protocol
 from sirah.audio.contracts import Transcript
 from sirah.conversation.context import ConversationContext
 from sirah.conversation.contracts import IntentProposal, IntentProposer, IntentRequest
+from sirah.conversation.core import ConversationCore
 from sirah.conversation.personality import ConversationPersonality
 from sirah.conversation.validator import ProposalValidator
 
@@ -45,12 +46,14 @@ class ConversationSession:
         context_limit: int = 8,
         validator: ProposalValidator | None = None,
         personality: ConversationPersonality | None = None,
+        core: ConversationCore | None = None,
     ) -> None:
         self._proposer = proposer
         self._tts = tts
         self._player = player
         self._validator = validator or ProposalValidator()
         self._personality = personality or ConversationPersonality()
+        self._core = core
         self.context = ConversationContext(context_limit)
         self._turn_lock = asyncio.Lock()
         self._active_task: asyncio.Task[object] | None = None
@@ -87,6 +90,8 @@ class ConversationSession:
 
     async def _propose_safe(self, transcript: Transcript) -> IntentProposal:
         try:
+            if self._core is not None:
+                return self._validator.validate(await self._core.respond(transcript))
             proposal = await self._proposer.propose(
                 IntentRequest("speech_ended", transcript.text, transcript.ended_at)
             )

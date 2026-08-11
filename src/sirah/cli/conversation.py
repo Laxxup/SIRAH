@@ -257,10 +257,12 @@ async def _listen(args: argparse.Namespace) -> int:
         else:
             tts, sample_rate = _operation_tts(args.tts_provider)
         player = SoundDevicePCMPlayer(device=args.output_device, sample_rate=sample_rate)
+        proposer = _proposer(args.ollama_model)
         conversation = ConversationSession(
-            _proposer(args.ollama_model),
+            proposer,
             tts,
             player,
+            core=ConversationCore(proposer),
         )
 
     async def show_state(state: ConversationState) -> None:

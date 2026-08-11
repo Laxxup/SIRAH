@@ -11,6 +11,7 @@ from sirah.conversation.contracts import (
     IntentName,
     IntentProposal,
 )
+from sirah.conversation.core import ConversationCore
 from sirah.conversation.session import ConversationSession
 
 
@@ -147,3 +148,14 @@ async def test_interrupt_cancels_the_active_response_without_starting_another_tu
         await response
     assert tts.cancelled == ["conversation-1"]
     assert player.cancelled == ["conversation-1"]
+
+
+async def test_session_uses_core_for_local_time_without_calling_ollama():
+    proposer = FakeProposer(IntentProposal(IntentName.ANSWER, "ignored"))
+    session = ConversationSession(proposer, FakeTTS(), FakePlayer(), core=ConversationCore(proposer))
+
+    result = await session.respond(_transcript("dime la hora"))
+
+    assert result.proposal.speech is not None
+    assert "Son las" in result.proposal.speech
+    assert proposer.requests == []
