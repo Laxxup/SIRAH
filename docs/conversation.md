@@ -6,15 +6,19 @@ No controla ojos, ESP32, servos ni otro hardware fisico.
 ## Instalacion
 
 Python 3.12 es obligatorio. Instala los extras para captura, Faster-Whisper,
-Silero VAD y conversación:
+Silero VAD, conversación y voz local:
 
 ```bash
-pip install -e ".[audio,vad,conversation]"
+pip install -e ".[audio,vad,conversation,local-tts]"
 ```
 
 Silero VAD usa la distribución oficial y su backend ONNX. Faster-Whisper usa
 CPU con `int8` por defecto. El modelo `base` se guarda fuera del repositorio en
 `~/.cache/sirah/whisper`, o en la ruta de `SIRAH_WHISPER_CACHE`.
+
+La voz local requiere `espeak-ng` disponible en el sistema. Kokoro funciona en
+CPU y Python 3.12. La primera carga descarga los pesos; después trabaja sin red
+si la caché ya está completa.
 
 ## Comandos
 
@@ -35,12 +39,13 @@ al proveedor configurado. El operador debe ejecutarlos de forma explicita:
 sirah-conversation ollama-check --live
 sirah-conversation text-chat --live
 sirah-conversation push-to-talk --live --text-only --duration 5
-sirah-conversation tts-check --live
+sirah-conversation tts-check --live --provider local
 ```
 
 ## Modo manos libres
 
-El modo principal es una sesion continua, iniciada una sola vez:
+El modo principal es una sesión continua, iniciada una sola vez. Por defecto
+usa la voz local:
 
 ```bash
 sirah-conversation listen --live
@@ -73,6 +78,43 @@ usuario de su propia voz sin AEC real.
 manual pendiente requiere confirmar micrófono, bocina y comportamiento acústico.
 No se ha verificado la calidad de transcripción con voz humana.
 
+## Voz local
+
+SIRAH usa [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) con la voz
+española femenina `ef_dora`. El motor `kokoro`, los pesos y el repositorio del
+modelo están bajo Apache-2.0. Kokoro genera PCM mono de 24 kHz en memoria y el
+reproductor usa esa misma frecuencia.
+
+La voz se descarga desde el repositorio oficial a
+`~/.cache/sirah/kokoro`, o a `SIRAH_LOCAL_TTS_CACHE`. No se versiona ni se
+guarda audio generado. Piper se evaluó y no se adoptó: su motor oficial actual
+es GPL-3.0 y las fichas es_MX revisadas no identifican una voz femenina.
+
+Prueba la voz antes de abrir el micrófono:
+
+```bash
+SIRAH_LOCAL_TTS_CACHE="$HOME/.cache/sirah/kokoro" \
+sirah-conversation tts-check --live --provider local
+```
+
+Debe reproducir: `Hola, soy SIRAH. Mi voz local está funcionando.`
+
+Para conversación completa:
+
+```bash
+SIRAH_OLLAMA_HOST=http://127.0.0.1:11434 \
+SIRAH_OLLAMA_MODEL=gpt-oss:20b-cloud \
+SIRAH_LOCAL_TTS_CACHE="$HOME/.cache/sirah/kokoro" \
+sirah-conversation listen --live --tts-provider local \
+  --input-device "Default Source" --sample-rate 16000
+```
+
+La primera síntesis tarda por la descarga y carga del modelo. Kokoro expone
+generación por fragmentos, pero esta integración entrega el turno terminado a
+la cola PCM. Cancelar un turno evita que PCM obsoleto llegue al altavoz; no
+interrumpe una inferencia de CPU que ya está dentro de una llamada de biblioteca.
+No hay medición todavía en Raspberry Pi 4 de 8 GB.
+
 ## Configuracion
 
 ```text
@@ -84,6 +126,10 @@ SIRAH_WHISPER_DEVICE=cpu
 SIRAH_WHISPER_COMPUTE_TYPE=int8
 SIRAH_WHISPER_LANGUAGE=es
 SIRAH_WHISPER_CACHE=~/.cache/sirah/whisper
+SIRAH_TTS_PROVIDER=local
+SIRAH_LOCAL_TTS_MODEL=hexgrad/Kokoro-82M
+SIRAH_LOCAL_TTS_VOICE=ef_dora
+SIRAH_LOCAL_TTS_CACHE=~/.cache/sirah/kokoro
 SIRAH_AZURE_SPEECH_KEY=
 SIRAH_AZURE_SPEECH_REGION=
 SIRAH_AZURE_TTS_VOICE=es-MX-DaliaNeural
@@ -104,6 +150,6 @@ valida externamente intent, emotion, action y speech. Una salida invalida se
 convierte en silencio seguro. El contexto vive solo en RAM; no se guardan
 audio, transcripciones, perfiles ni prompts.
 
-Azure TTS es opcional. Sin `--text-only`, configura
+Azure TTS es opcional. Selecciónalo con `--tts-provider azure` y configura
 `SIRAH_AZURE_SPEECH_KEY` y `SIRAH_AZURE_SPEECH_REGION`. La voz
 `es-MX-DaliaNeural` sigue pendiente de prueba auditiva y medición de latencia.
