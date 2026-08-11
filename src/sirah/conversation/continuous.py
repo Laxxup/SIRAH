@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections import deque
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
@@ -42,11 +43,13 @@ class ContinuousSessionConfig:
     max_queue_chunks: int = 128
     barge_in_threshold: float = 0.75
     barge_in_min_speech_ms: int = 200
+    barge_in: bool = False
+    post_playback_guard_ms: int = 500
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.threshold <= 1.0 or not 0.0 <= self.barge_in_threshold <= 1.0:
             raise ValueError("threshold must be within [0, 1]")
-        if min(self.min_speech_ms, self.end_silence_ms, self.pre_roll_ms, self.barge_in_min_speech_ms) < 0:
+        if min(self.min_speech_ms, self.end_silence_ms, self.pre_roll_ms, self.barge_in_min_speech_ms, self.post_playback_guard_ms) < 0:
             raise ValueError("VAD durations must be non-negative")
         if self.max_turn_seconds <= 0:
             raise ValueError("max_turn_seconds must be positive")
@@ -91,6 +94,8 @@ class ContinuousConversationSession:
         self._started = False
         self._generation = 0
         self._processing_task: asyncio.Task[None] | None = None
+        self._now = clock or time.monotonic
+        self._guard_until = 0.0
 
     @property
     def state(self) -> ConversationState:
@@ -143,6 +148,9 @@ class ContinuousConversationSession:
 
     async def _handle_chunk(self, chunk: AudioChunk) -> None:
         if self._state is ConversationState.SPEAKING:
+            if not self._config.barge_in:
+                self._clear_buffers()
+                return
             speech = await self._vad.is_speech(chunk, threshold=self._config.barge_in_threshold)
             self._append_preroll(chunk)
             if speech and self._barge_started_at is None:
@@ -155,6 +163,9 @@ class ContinuousConversationSession:
                 self._barge_started_at = None
             return
         speech = await self._vad.is_speech(chunk, threshold=self._config.threshold)
+        if self._now() < self._guard_until:
+            self._clear_buffers()
+            return
         if self._state is ConversationState.PROCESSING:
             self._append_preroll(chunk)
             if speech:
@@ -220,6 +231,7 @@ class ContinuousConversationSession:
                 return
             await self._set_state(ConversationState.SPEAKING)
             await self._conversation.respond(transcript)
+            self._guard_until = self._now() + self._config.post_playback_guard_ms / 1000
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - failures enter a visible recovery state.

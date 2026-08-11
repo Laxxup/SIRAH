@@ -48,6 +48,9 @@ class FakePlayer:
     async def cancel(self, operation_id: str) -> None:
         self.cancelled.append(operation_id)
 
+    async def join(self) -> None:
+        return None
+
 
 def _transcript(text: str, ended_at: float = 1.5) -> Transcript:
     return Transcript(text, started_at=1.0, ended_at=ended_at, confidence=0.9)

@@ -172,7 +172,7 @@ async def test_processes_consecutive_turns_without_keyboard_input():
         FakeVAD({0.1, 0.5}),
         stt,
         conversation,
-        config=ContinuousSessionConfig(end_silence_ms=200, min_speech_ms=0),
+        config=ContinuousSessionConfig(end_silence_ms=200, min_speech_ms=0, post_playback_guard_ms=0),
     )
 
     await session.run()
@@ -253,7 +253,7 @@ async def test_new_voice_during_processing_invalidates_the_obsolete_turn():
         FakeVAD({0.1, 0.5, 0.6}),
         FakeSTT(["first", "latest"]),
         conversation,
-        config=ContinuousSessionConfig(end_silence_ms=200, min_speech_ms=0, barge_in_min_speech_ms=0),
+        config=ContinuousSessionConfig(end_silence_ms=200, min_speech_ms=0, barge_in=True, barge_in_min_speech_ms=0),
     )
 
     await asyncio.wait_for(session.run(), timeout=0.2)

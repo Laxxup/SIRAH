@@ -99,3 +99,6 @@ class FakePCMPlayer:
 
     async def cancel(self, operation_id: str) -> None:
         self.cancelled.append(operation_id)
+
+    async def join(self) -> None:
+        return None

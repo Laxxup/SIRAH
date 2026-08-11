@@ -24,6 +24,8 @@ class OperationPCMPlayer(Protocol):
 
     async def cancel(self, operation_id: str) -> None: ...
 
+    async def join(self) -> None: ...
+
 
 @dataclass(frozen=True)
 class SessionResponse:
@@ -72,6 +74,7 @@ class ConversationSession:
                 if proposal.speech is not None:
                     pcm = await self._tts.synthesize(operation_id, proposal.speech)
                     await self._player.play(operation_id, pcm)
+                    await self._player.join()
                 return SessionResponse(operation_id, proposal)
             finally:
                 if self._active_task is task:

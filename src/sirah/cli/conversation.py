@@ -58,6 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
     listen.add_argument("--language", default=os.getenv("SIRAH_WHISPER_LANGUAGE", "es"))
     listen.add_argument("--ollama-model", default=os.getenv("SIRAH_OLLAMA_MODEL", "gpt-oss:20b-cloud"))
     listen.add_argument("--text-only", action="store_true", help="print replies; do not initialize Azure or audio output")
+    listen.add_argument("--barge-in", action="store_true", help="experimental; acoustic echo cancellation is unavailable")
     listen.add_argument(
         "--tts-provider",
         choices=("local", "azure"),
@@ -193,13 +194,25 @@ async def _listen(args: argparse.Namespace) -> int:
         end_silence_ms=int(os.getenv("SIRAH_VAD_END_SILENCE_MS", "700")),
         max_turn_seconds=float(os.getenv("SIRAH_VAD_MAX_TURN_SECONDS", "15")),
         pre_roll_ms=int(os.getenv("SIRAH_VAD_PRE_ROLL_MS", "300")),
+        barge_in=args.barge_in or os.getenv("SIRAH_BARGE_IN", "false").lower() == "true",
+        post_playback_guard_ms=int(os.getenv("SIRAH_POST_PLAYBACK_GUARD_MS", "500")),
     )
     player: SoundDevicePCMPlayer | None = None
     conversation: ConversationSession | _TextOnlyResponder
+    tts: OperationTTS
     if args.text_only:
         conversation = _TextOnlyResponder(_proposer(args.ollama_model))
     else:
-        tts, sample_rate = _operation_tts(args.tts_provider)
+        if args.tts_provider == "local":
+            from sirah.audio.kokoro_tts import KokoroTextToSpeech
+
+            print("preparando voz")
+            local_tts = KokoroTextToSpeech.from_environment()
+            await local_tts.synthesize("Hola.")
+            tts, sample_rate = AsyncTTS(lambda: local_tts), local_tts.sample_rate
+            print("listo")
+        else:
+            tts, sample_rate = _operation_tts(args.tts_provider)
         player = SoundDevicePCMPlayer(device=args.output_device, sample_rate=sample_rate)
         conversation = ConversationSession(
             _proposer(args.ollama_model),
@@ -209,7 +222,7 @@ async def _listen(args: argparse.Namespace) -> int:
 
     async def show_state(state: ConversationState) -> None:
         labels = {
-            ConversationState.IDLE: "escuchando",
+            ConversationState.IDLE: "listo",
             ConversationState.LISTENING: "escuchando",
             ConversationState.PROCESSING: "procesando",
             ConversationState.SPEAKING: "hablando",
@@ -236,6 +249,8 @@ async def _listen(args: argparse.Namespace) -> int:
         on_error=show_error,
     )
     print("escuchando; Ctrl-C para detener")
+    if config.barge_in:
+        print("El barge-in es experimental porque no existe cancelación de eco acústico.")
     try:
         await session.run()
     except KeyboardInterrupt:
