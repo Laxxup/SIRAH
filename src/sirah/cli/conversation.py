@@ -251,7 +251,7 @@ async def _listen(args: argparse.Namespace) -> int:
 
             print("preparando voz")
             local_tts = KokoroTextToSpeech.from_environment()
-            await local_tts.synthesize("Hola.")
+            await local_tts.preload()
             tts, sample_rate = AsyncTTS(lambda: local_tts), local_tts.sample_rate
             print("listo")
         else:

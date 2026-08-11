@@ -50,6 +50,10 @@ class KokoroTextToSpeech:
             return b""
         return await asyncio.to_thread(self._synthesize, text)
 
+    async def preload(self) -> None:
+        """Load and warm the local model without retaining generated PCM."""
+        await self.synthesize("Hola.")
+
     def _synthesize(self, text: str) -> bytes:
         pipeline = self._pipeline
         if pipeline is None:

@@ -261,3 +261,14 @@ async def test_new_voice_during_processing_invalidates_the_obsolete_turn():
     assert [request.text for request in conversation.requests] == ["first", "latest"]
     assert conversation.interruptions == 1
     assert ConversationState.INTERRUPTING in session.transitions
+
+
+async def test_default_semiduplex_discards_microphone_frames_while_speaking():
+    conversation = FakeConversation()
+    session = ContinuousConversationSession(FakeSource([]), FakeVAD({1.0}), FakeSTT([]), conversation)
+    await session._set_state(ConversationState.SPEAKING)
+
+    await session._handle_chunk(_chunk(1.0))
+
+    assert conversation.interruptions == 0
+    assert session.buffered_chunks == 0

@@ -47,6 +47,22 @@ async def test_kokoro_rejects_a_missing_model_before_synthesis():
         await tts.synthesize("Hola")
 
 
+async def test_kokoro_preload_discards_warmup_pcm_but_keeps_one_model_load():
+    loaded = 0
+
+    def factory() -> FakePipeline:
+        nonlocal loaded
+        loaded += 1
+        return FakePipeline([0.0])
+
+    tts = KokoroTextToSpeech("model", "ef_dora", Path("/cache"), factory)
+
+    await tts.preload()
+    await tts.synthesize("Hola")
+
+    assert loaded == 1
+
+
 async def test_async_tts_cancellation_discards_a_blocked_local_synthesis():
     started = asyncio.Event()
 
