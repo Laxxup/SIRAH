@@ -51,6 +51,14 @@ def build_parser() -> argparse.ArgumentParser:
     check = commands.add_parser("ollama-check", help="check Cloud configuration without sending text")
     check.add_argument("--live", action="store_true", help="permit one diagnostic request")
     commands.add_parser("config", help="show effective configuration with secrets redacted")
+    logs = commands.add_parser("logs", help="inspect explicitly recorded SIRAH session logs")
+    log_commands = logs.add_subparsers(dest="logs_command", required=True)
+    log_commands.add_parser("list")
+    for name in ("latest", "show", "diagnose", "delete"):
+        command = log_commands.add_parser(name)
+        if name not in ("latest",):
+            command.add_argument("session_id", nargs="?", default="latest")
+    log_commands.add_parser("purge")
     listen = commands.add_parser("listen", help="hands-free local VAD conversation; requires --live")
     listen.add_argument("--live", action="store_true", help="acknowledge microphone and Cloud use")
     listen.add_argument("--input-device")
@@ -79,6 +87,8 @@ def build_parser() -> argparse.ArgumentParser:
     chat = commands.add_parser("text-chat", help="real Cloud text chat; no microphone")
     chat.add_argument("--live", action="store_true")
     chat.add_argument("--ollama-model", default=os.getenv("SIRAH_OLLAMA_MODEL", "gpt-oss:20b-cloud"))
+    chat.add_argument("--record-session", action="store_true")
+    chat.add_argument("--include-text", action="store_true")
     tts = commands.add_parser("tts-check", help="check Azure TTS configuration")
     tts.add_argument("--live", action="store_true")
     tts.add_argument("--provider", choices=("local", "azure"), default=os.getenv("SIRAH_TTS_PROVIDER", "local"))
@@ -87,7 +97,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
     if args.command == "devices":
         try:
             import sounddevice
@@ -103,6 +114,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "config":
         print(json.dumps(_safe_config(), sort_keys=True))
         return 0
+    if args.command == "logs":
+        return _logs(args)
     if args.command == "ollama-check":
         if not args.live:
             print(json.dumps({"configured": _ollama_configured(), "live": False}))
@@ -117,7 +130,9 @@ def main(argv: list[str] | None = None) -> int:
         except KeyboardInterrupt:
             return 0
     if args.command == "text-chat":
-        return asyncio.run(_text_chat(args.ollama_model))
+        if args.include_text and not args.record_session:
+            parser.error("--include-text requires --record-session")
+        return asyncio.run(_text_chat(args.ollama_model, args.record_session, args.include_text))
     if args.command == "tts-check":
         return asyncio.run(_tts_check(args.provider, args.output_device))
     print("Cloud transcripts may leave this device. Press Ctrl-C to stop after speaking.")
@@ -134,6 +149,32 @@ def _ollama_configured() -> bool:
 
 def _device_id(value: str | None) -> int | str | None:
     return int(value) if value is not None and value.isdecimal() else value
+
+
+def _logs(args: argparse.Namespace) -> int:
+    from sirah.conversation.session_log import diagnose, resolve_session, session_files
+    if args.logs_command == "list":
+        for path in session_files():
+            print(path.stem.split("_")[-1])
+        return 0
+    if args.logs_command == "purge":
+        for path in session_files()[20:]:
+            print(f"would delete {path.name}")
+        return 0
+    try:
+        path = resolve_session(getattr(args, "session_id", "latest"))
+    except FileNotFoundError as exc:
+        print(str(exc))
+        return 1
+    if args.logs_command == "latest":
+        print(path.stem.split("_")[-1])
+    elif args.logs_command == "show":
+        print(path.read_text(encoding="utf-8"), end="")
+    elif args.logs_command == "diagnose":
+        print(json.dumps(diagnose(path), ensure_ascii=False))
+    else:
+        print(f"would delete {path.name}")
+    return 0
 
 
 async def _ollama_diagnostic() -> int:
@@ -263,14 +304,24 @@ async def _listen(args: argparse.Namespace) -> int:
     return 0
 
 
-async def _text_chat(model: str) -> int:
+async def _text_chat(model: str, record_session: bool = False, include_text: bool = False) -> int:
     core = ConversationCore(_proposer(model))
+    log = None
+    if record_session:
+        from sirah.conversation.session_log import SessionLog
+        if include_text:
+            print("Esta sesión guardará transcripciones y respuestas para diagnóstico. No se guardará audio.")
+        log = SessionLog(include_text=include_text)
     while True:
         text = await asyncio.to_thread(input, "you> ")
         if not text.strip():
+            if log is not None:
+                log.close()
             return 0
         observed_at = time.monotonic()
         proposal = await core.respond(Transcript(text, observed_at, observed_at, 1.0))
+        if log is not None:
+            log.write("response_validated", turn_id=len(core._context), transcript=text, validated_speech=proposal.speech, intent=proposal.intent.value, emotion=proposal.emotion.value)
         print(f"sirah> {proposal.speech or ''}")
 
 
