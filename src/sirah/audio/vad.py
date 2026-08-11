@@ -49,7 +49,7 @@ class SileroVoiceActivityDetector:
     @classmethod
     def from_official_distribution(cls, *, threshold: float = 0.5) -> SileroVoiceActivityDetector:
         try:
-            from silero_vad import load_silero_vad  # type: ignore[import-untyped]
+            from silero_vad import load_silero_vad
         except ImportError as exc:
             raise RuntimeError('install VAD support: pip install -e ".[vad]"') from exc
         return cls(load_silero_vad(onnx=True), threshold=threshold)

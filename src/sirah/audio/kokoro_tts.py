@@ -69,7 +69,7 @@ class KokoroTextToSpeech:
         self._cache.mkdir(parents=True, exist_ok=True)
         try:
             from huggingface_hub import snapshot_download
-            from kokoro import KModel, KPipeline  # type: ignore[import-untyped]
+            from kokoro import KModel, KPipeline
         except ImportError as exc:
             raise RuntimeError('install local TTS support: pip install -e ".[local-tts]"') from exc
         snapshot = Path(

@@ -55,7 +55,17 @@ check_untyped_defs = true
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
-module = ["serial_asyncio", "serial.*", "cv2", "sounddevice", "faster_whisper"]
+module = [
+    "serial_asyncio",
+    "serial.*",
+    "cv2",
+    "sounddevice",
+    "faster_whisper",
+    "silero_vad",
+    "torch",
+    "huggingface_hub",
+    "kokoro",
+]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
