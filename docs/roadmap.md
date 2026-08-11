@@ -1,54 +1,55 @@
-# SIRAH v0.3.0 — Roadmap
+# Hoja de ruta de SIRAH v0.3.0
 
-SIRAH = **Sistema Inteligente Robótico de Asistencia Humana** (only in
-Spanish, never translated). Stages of the eyes subsystem, with status and
-exit criteria. Mostrar el estado real: lo que está hecho, lo que entra en
-v0.3.0 y lo que no.
+SIRAH significa **Sistema Inteligente Robótico de Asistencia Humana**. Esta es
+la situación del subsistema ocular: lo terminado, lo que falta para cerrar la
+versión y el trabajo que pertenece a fases posteriores.
 
-## Hecho (Milestone 1 — v0.3.0)
+## Ya disponible
 
-| Stage | Título | Estado | Evidencia |
+| Etapa | Trabajo realizado | Estado | Evidencia |
 |---|---|---|---|
-| 1 | Skeleton del monorepo | ✅ | ADR-0008 |
-| 2 | Especificación normativa del protocolo v1.0 | ✅ | docs/components/protocol.md |
-| 3 | Parsers Python + C++ + corpus golden (91 casos) | ✅ gate en CI | doble parser, test_parsers_contract |
-| 4 | Firmware 6 actuadores: core, platform, host tests + calibración V6.12 | ✅ VERIFIED 2026-08-09 | firmware/sirah-eyes, calibration.h |
-| 5 | Adapter serial (EyeTransport) | ✅ | serial_adapter.py, tests 45 |
-| 6 | FakeESP32 twin conductual | ✅ 22 tests | ADR-0009/0010 |
-| 7 | Runtime asyncio + registry + policies + CLI | ✅ 169 tests | app.py, cli/run.py |
+| 1 | Base del monorepo | ✅ | ADR-0008 |
+| 2 | Especificación del protocolo v1.0 | ✅ | `docs/components/protocol.md` |
+| 3 | Parsers en Python y C++ con corpus golden de 91 casos | ✅ | Doble parser y `test_parsers_contract` en CI |
+| 4 | Firmware para seis actuadores, pruebas host y calibración V6.12 | ✅ Validado el 2026-08-09 | `firmware/sirah-eyes` y `calibration.h` |
+| 5 | Adaptador serie `EyeTransport` | ✅ | `serial_adapter.py` y 45 pruebas |
+| 6 | Simulador conductual `FakeESP32` | ✅ | ADR-0009/0010 y 22 pruebas |
+| 7 | Runtime con `asyncio`, registro de componentes, políticas y CLI | ✅ | `app.py`, `cli/run.py` y 169 pruebas |
+| 8 | Seguimiento 2D con fuente de cámara, detector facial y comportamiento de mirada | ✅ | Pipeline cableado, OpenCV/YuNet opcional, E2E offline y `lost_face_center_s` |
 
-## Planeado
+## En curso y próximo trabajo
 
-| Stage | Título | Estado | Criterios de salida |
+| Etapa | Objetivo | Estado actual | Criterio para cerrarla |
 |---|---|---|---|
-| 8 | Tracking 2D: percepción (camera_source, face_detector) + gaze_behavior | ✅ | Protocolos nominales, pipeline cableado, OpenCV/YuNet opcional, E2E offline y `lost_face_center_s` |
-| 9 | Harness replay + datasets | 🟡 En curso | JSONL e `.mp4` replay; fixtures mínimas activas; falta captura de datasets reales y Git LFS |
-| 10 | Robustez de enlace (watchdog de link, degradación en vivo) | ⏳ | HIL unplug test |
-| 11 | Heartbeat timeout/read timeout cableados | ⏳ | runtime.toml sin settings muertos |
-| 12–14 | — | ⏳ | — |
-| 15/16 | Consistency formalizado como gate de release | ⏳ | — |
-| Futuro | Comportamiento por eventos e intentos estructurados | 📄 Diseñado | ADR, shadow mode, replay y métricas antes de cualquier control |
+| 9 | Reproducción de sesiones y conjuntos de datos | 🟡 En curso | Ya hay JSONL, reproducción de `.mp4` y fixtures mínimos; faltan capturas reales y Git LFS |
+| 10 | Supervisión del enlace y degradación en ejecución | ⏳ Pendiente | Prueba HIL desconectando el enlace |
+| 11 | Timeouts de heartbeat y lectura conectados a la configuración | ⏳ Pendiente | `runtime.toml` sin parámetros sin efecto |
+| 12–14 | Pendiente de definición | ⏳ Pendiente | — |
+| 15/16 | Convertir la consistencia en requisito de release | ⏳ Pendiente | — |
+| Futuro | Comportamiento guiado por eventos e intenciones estructuradas | 📄 Diseñado | ADR, modo sombra, reproducción y métricas antes de autorizar cualquier control |
 
-## Fuera del alcance de v0.3.0
+## Límites de v0.3.0
 
-- **Inteligencia conversacional / LLM / STT / TTS** — laboratorio ADR-0007
-  (OFF por defecto). Investigación hecha (memoria, intents estructurados),
-  cero código estable.
-- **ROS2** — no se implementa hasta que el robot tenga cuello/brazos/audio
-  (ADR-0001; seam documentado: `EyeTransport`).
-- **Modalidades nuevas (audio, brazos)** — nuevos slots de registry +
-  protocolo con límites estrictos por hardware.
+- La conversación, los LLM, STT y TTS siguen siendo un laboratorio de
+  ADR-0007, desactivado por defecto. Hay investigación sobre memoria e
+  intenciones estructuradas, pero no código estable incluido en esta versión.
+- ROS2 queda para cuando el robot incorpore cuello, brazos y audio. La unión
+  prevista con el runtime actual es `EyeTransport` (ADR-0001).
+- Audio, brazos y otras modalidades requerirán nuevos componentes de registro y
+  un protocolo con límites de seguridad definidos para su hardware.
 
-## Decisiones registradas
+## Decisiones que condicionan el camino
 
-- `src/sirah/transport/` (huérfano, Stage 1) se queda hasta Stage 8,
-  cuando se decida su papel (decisión del director, 2026-08-09).
-- Percepción real (OpenCV + YuNet) llega DESPUÉS de los contratos y las
-  fuentes fake/replay (base de instalación sin dependencias, ADR-0006).
-- Los informes de investigación/auditoría (directorio local `informes/`)
-  no se versionan en el repo; sus decisiones viven en ADRs y en este
-  roadmap.
-- La arquitectura futura de comportamiento/LLM está documentada en
-  `docs/behavior-llm-architecture.md`; no añade dependencias ni autoridad física.
-- `PerceptionSnapshot` es la frontera semántica para eventos y shadow mode;
-  conserva los frames crudos fuera del dominio de comportamiento.
+- `src/sirah/transport/`, creado en la etapa 1 y sin uso actual, se conserva
+  hasta decidir su función tras la etapa 8 (decisión del director, 2026-08-09).
+- La cámara física con OpenCV y YuNet se incorporará después de validar los
+  contratos y las fuentes fake o de reproducción. La instalación base no exige
+  OpenCV ni el modelo; véase ADR-0006.
+- Los informes de investigación y auditoría del directorio local `informes/`
+  no se guardan en el repositorio. Las decisiones se documentan en los ADR y en
+  esta hoja de ruta.
+- La arquitectura futura de comportamiento y LLM está en
+  `docs/behavior-llm-architecture.md`; no añade dependencias ni autoridad sobre
+  el hardware.
+- `PerceptionSnapshot` marca el límite semántico para eventos y modo sombra.
+  Los frames sin procesar permanecen fuera del dominio de comportamiento.
