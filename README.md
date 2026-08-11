@@ -8,8 +8,6 @@
   <a href="https://www.facebook.com/profile.php?id=61592100517778&amp;locale=es_LA"><img src="https://cdn.simpleicons.org/facebook/1877F2" width="22" alt="Facebook de Comunidad Robótica ITCM"></a>
   &nbsp;
   <a href="https://www.instagram.com/comunidadrobotica.itcm/"><img src="https://cdn.simpleicons.org/instagram/E4405F" width="22" alt="Instagram de Comunidad Robótica ITCM"></a>
-  &nbsp;
-  <a href="https://tiktok.com/@comunidadrobotica.itcm"><img src="https://cdn.simpleicons.org/tiktok/000000" width="22" alt="TikTok de Comunidad Robótica ITCM"></a>
 </p>
 
 <p align="center">
