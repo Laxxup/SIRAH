@@ -71,6 +71,7 @@ class ContinuousConversationSession:
         config: ContinuousSessionConfig | None = None,
         clock: Callable[[], float] | None = None,
         on_state_change: Callable[[ConversationState], Awaitable[None] | None] | None = None,
+        on_error: Callable[[Exception], Awaitable[None] | None] | None = None,
     ) -> None:
         self._source = source
         self._vad = vad
@@ -79,6 +80,7 @@ class ContinuousConversationSession:
         self._config = config or ContinuousSessionConfig()
         self._clock = clock
         self._on_state_change = on_state_change
+        self._on_error = on_error
         self._state = ConversationState.IDLE
         self._transitions = [self._state]
         self._preroll: deque[AudioChunk] = deque(maxlen=self._config.max_queue_chunks)
@@ -120,8 +122,8 @@ class ContinuousConversationSession:
         await self._set_state(ConversationState.STOPPED)
 
     async def run(self) -> None:
-        await self.start()
         try:
+            await self.start()
             while True:
                 chunk = await self._source.next_chunk()
                 if chunk is None:
@@ -133,7 +135,8 @@ class ContinuousConversationSession:
                 await self._handle_chunk(chunk)
         except asyncio.CancelledError:
             raise
-        except Exception:  # noqa: BLE001 - capture providers are external.
+        except Exception as exc:  # noqa: BLE001 - capture providers are external.
+            await self._report_error(exc)
             await self._set_state(ConversationState.RECOVERING)
         finally:
             await self.stop()
@@ -219,7 +222,8 @@ class ContinuousConversationSession:
             await self._conversation.respond(transcript)
         except asyncio.CancelledError:
             raise
-        except Exception:  # noqa: BLE001 - failures enter a visible recovery state.
+        except Exception as exc:  # noqa: BLE001 - failures enter a visible recovery state.
+            await self._report_error(exc)
             await self._set_state(ConversationState.RECOVERING)
         finally:
             if generation == self._generation and self._state is not ConversationState.RECOVERING:
@@ -260,3 +264,10 @@ class ContinuousConversationSession:
             result = self._on_state_change(state)
             if result is not None:
                 await result
+
+    async def _report_error(self, error: Exception) -> None:
+        if self._on_error is None:
+            return
+        result = self._on_error(error)
+        if result is not None:
+            await result

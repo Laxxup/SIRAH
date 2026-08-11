@@ -13,6 +13,7 @@ from sirah.audio.capture import SoundDeviceAudioSource
 from sirah.audio.playback import SoundDevicePCMPlayer
 from sirah.audio.replay import load_replay
 from sirah.audio.stt import FasterWhisperSTT
+from sirah.audio.tts import AsyncTTS
 from sirah.audio.vad import SileroVoiceActivityDetector
 from sirah.conversation.continuous import (
     ContinuousConversationSession,
@@ -21,7 +22,7 @@ from sirah.conversation.continuous import (
 )
 from sirah.conversation.contracts import IntentRequest
 from sirah.conversation.ollama import OllamaIntentProposer
-from sirah.conversation.session import ConversationSession
+from sirah.conversation.session import ConversationSession, OperationTTS
 
 
 class _TextOnlyResponder:
@@ -57,6 +58,11 @@ def build_parser() -> argparse.ArgumentParser:
     listen.add_argument("--language", default=os.getenv("SIRAH_WHISPER_LANGUAGE", "es"))
     listen.add_argument("--ollama-model", default=os.getenv("SIRAH_OLLAMA_MODEL", "gpt-oss:20b-cloud"))
     listen.add_argument("--text-only", action="store_true", help="print replies; do not initialize Azure or audio output")
+    listen.add_argument(
+        "--tts-provider",
+        choices=("local", "azure"),
+        default=os.getenv("SIRAH_TTS_PROVIDER", "local"),
+    )
     talk = commands.add_parser("push-to-talk", help="run real microphone capture only with --live")
     talk.add_argument("--live", action="store_true", help="acknowledge microphone and Cloud use")
     talk.add_argument("--input-device")
@@ -72,6 +78,8 @@ def build_parser() -> argparse.ArgumentParser:
     chat.add_argument("--ollama-model", default=os.getenv("SIRAH_OLLAMA_MODEL", "gpt-oss:20b-cloud"))
     tts = commands.add_parser("tts-check", help="check Azure TTS configuration")
     tts.add_argument("--live", action="store_true")
+    tts.add_argument("--provider", choices=("local", "azure"), default=os.getenv("SIRAH_TTS_PROVIDER", "local"))
+    tts.add_argument("--output-device")
     return parser
 
 
@@ -101,11 +109,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{args.command} is real microphone and Cloud mode; rerun with --live")
         return 2
     if args.command == "listen":
-        return asyncio.run(_listen(args))
+        try:
+            return asyncio.run(_listen(args))
+        except KeyboardInterrupt:
+            return 0
     if args.command == "text-chat":
         return asyncio.run(_text_chat(args.ollama_model))
     if args.command == "tts-check":
-        return asyncio.run(_tts_check())
+        return asyncio.run(_tts_check(args.provider, args.output_device))
     print("Cloud transcripts may leave this device. Press Ctrl-C to stop after speaking.")
     return asyncio.run(_push_to_talk(args))
 
@@ -116,6 +127,10 @@ def _safe_config() -> dict[str, str]:
 
 def _ollama_configured() -> bool:
     return bool(os.getenv("SIRAH_OLLAMA_HOST") and os.getenv("SIRAH_OLLAMA_MODEL"))
+
+
+def _device_id(value: str | None) -> int | str | None:
+    return int(value) if value is not None and value.isdecimal() else value
 
 
 async def _ollama_diagnostic() -> int:
@@ -184,12 +199,11 @@ async def _listen(args: argparse.Namespace) -> int:
     if args.text_only:
         conversation = _TextOnlyResponder(_proposer(args.ollama_model))
     else:
-        from sirah.audio.azure_tts import AzureOperationTextToSpeech, AzureTextToSpeech
-
-        player = SoundDevicePCMPlayer(device=args.output_device)
+        tts, sample_rate = _operation_tts(args.tts_provider)
+        player = SoundDevicePCMPlayer(device=args.output_device, sample_rate=sample_rate)
         conversation = ConversationSession(
             _proposer(args.ollama_model),
-            AzureOperationTextToSpeech(AzureTextToSpeech.from_environment()),
+            tts,
             player,
         )
 
@@ -205,13 +219,21 @@ async def _listen(args: argparse.Namespace) -> int:
         }
         print(labels[state])
 
+    async def show_error(error: Exception) -> None:
+        print(f"error de sesion: {error}")
+
     session = ContinuousConversationSession(
-        SoundDeviceAudioSource(sample_rate=args.sample_rate, device=args.input_device),
+        SoundDeviceAudioSource(
+            sample_rate=args.sample_rate,
+            blocksize=512 if args.sample_rate == 16_000 else 256,
+            device=_device_id(args.input_device),
+        ),
         SileroVoiceActivityDetector.from_official_distribution(threshold=config.threshold),
         FasterWhisperSTT(args.whisper_model, language=args.language),
         conversation,
         config=config,
         on_state_change=show_state,
+        on_error=show_error,
     )
     print("escuchando; Ctrl-C para detener")
     try:
@@ -233,12 +255,39 @@ async def _text_chat(model: str) -> int:
         print(f"sirah> {proposal.speech or ''}")
 
 
-async def _tts_check() -> int:
-    from sirah.audio.azure_tts import AzureTextToSpeech
+def _operation_tts(provider: str) -> tuple[OperationTTS, int]:
+    if provider == "local":
+        from sirah.audio.kokoro_tts import KokoroTextToSpeech
+
+        return AsyncTTS(KokoroTextToSpeech.from_environment), KokoroTextToSpeech.sample_rate
+    from sirah.audio.azure_tts import AzureOperationTextToSpeech, AzureTextToSpeech
+
+    return AzureOperationTextToSpeech(AzureTextToSpeech.from_environment()), 16_000
+
+
+async def _tts_check(provider: str, output_device: str | None) -> int:
+    if provider == "azure":
+        from sirah.audio.azure_tts import AzureTextToSpeech
+
+        try:
+            AzureTextToSpeech.from_environment()
+        except Exception as exc:  # noqa: BLE001
+            print(f"Azure TTS unavailable: {type(exc).__name__}")
+            return 1
+        print("Azure TTS is configured; no synthesis was requested")
+        return 0
+    tts, sample_rate = _operation_tts("local")
+    player = SoundDevicePCMPlayer(device=output_device, sample_rate=sample_rate)
+    operation_id = "tts-check"
+    phrase = "Hola, soy SIRAH. Mi voz local está funcionando."
     try:
-        AzureTextToSpeech.from_environment()
+        pcm = await tts.synthesize(operation_id, phrase)
+        await player.play(operation_id, pcm)
+        await player.join()
     except Exception as exc:  # noqa: BLE001
-        print(f"Azure TTS unavailable: {type(exc).__name__}")
+        print(f"Local TTS unavailable: {type(exc).__name__}: {exc}")
         return 1
-    print("Azure TTS is configured; no synthesis was requested")
+    finally:
+        await player.close()
+    print(phrase)
     return 0

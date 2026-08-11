@@ -26,6 +26,7 @@ audio = [
 ]
 vad = ["silero-vad>=6.2.1", "onnxruntime>=1.16.1"]
 conversation = ["pydantic>=2"]
+local-tts = ["kokoro==0.9.4"]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.24",

@@ -44,12 +44,15 @@ class FakeSource:
 
 
 class FakeSTT:
-    def __init__(self, texts: list[str]) -> None:
+    def __init__(self, texts: list[str], *, failure: Exception | None = None) -> None:
         self.texts = texts
+        self.failure = failure
         self.requests: list[tuple[AudioChunk, ...]] = []
 
     async def transcribe(self, chunks: list[AudioChunk]) -> Transcript:
         self.requests.append(tuple(chunks))
+        if self.failure is not None:
+            raise self.failure
         text = self.texts.pop(0)
         return Transcript(text, chunks[0].observed_at, chunks[-1].observed_at, 0.9)
 
@@ -187,6 +190,36 @@ async def test_source_failure_recovers_then_stops_without_persisting_buffers():
     assert session.state is ConversationState.STOPPED
     assert session.buffered_chunks == 0
     assert source.stopped == 1
+
+
+async def test_source_failure_reports_the_underlying_error_to_the_operator_callback():
+    errors: list[str] = []
+    session = ContinuousConversationSession(
+        FakeSource([], failure=OSError("invalid VAD block size")),
+        FakeVAD(set()),
+        FakeSTT([]),
+        FakeConversation(),
+        on_error=lambda error: errors.append(str(error)),
+    )
+
+    await session.run()
+
+    assert errors == ["invalid VAD block size"]
+
+
+async def test_processing_failure_reports_the_underlying_error_to_the_operator_callback():
+    errors: list[str] = []
+    session = ContinuousConversationSession(
+        FakeSource([_chunk(0.0), _chunk(0.1), _chunk(0.4)]),
+        FakeVAD({0.1}),
+        FakeSTT(["unused"], failure=RuntimeError("Azure rejected credentials")),
+        FakeConversation(),
+        config=ContinuousSessionConfig(end_silence_ms=200, min_speech_ms=0),
+        on_error=lambda error: errors.append(str(error)),
+    )
+    await session.run()
+
+    assert errors == ["Azure rejected credentials"]
 
 
 async def test_start_and_stop_are_idempotent():

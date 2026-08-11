@@ -65,3 +65,17 @@ async def test_capture_discards_oldest_chunk_when_queue_is_full():
     await asyncio.sleep(0)
 
     assert (await source.next_chunk()).pcm == b"new"
+
+
+async def test_capture_passes_the_requested_fixed_block_size_to_the_stream():
+    created: list[dict[str, object]] = []
+
+    def stream_factory(**kwargs: object) -> FakeStream:
+        created.append(kwargs)
+        return FakeStream(**kwargs)
+
+    source = SoundDeviceAudioSource(blocksize=512, stream_factory=stream_factory)
+
+    await source.start()
+
+    assert created[0]["blocksize"] == 512

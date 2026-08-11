@@ -102,8 +102,11 @@ class PCMPlayer:
 class SoundDevicePCMPlayer:
     """Operation-aware 16 kHz mono PCM playback through sounddevice."""
 
-    def __init__(self, *, device: int | str | None = None) -> None:
+    def __init__(self, *, device: int | str | None = None, sample_rate: int = 16_000) -> None:
+        if sample_rate <= 0:
+            raise ValueError("sample_rate must be positive")
         self._device = device
+        self._sample_rate = sample_rate
         self._player = PCMPlayer(self._sink)
 
     async def play(self, operation_id: str, pcm: bytes) -> None:
@@ -112,6 +115,9 @@ class SoundDevicePCMPlayer:
     async def cancel(self, operation_id: str) -> None:
         await self._player.cancel(operation_id)
         await asyncio.to_thread(self._stop)
+
+    async def join(self) -> None:
+        await self._player.join()
 
     async def close(self) -> None:
         await self._player.close()
@@ -126,7 +132,9 @@ class SoundDevicePCMPlayer:
             import sounddevice
         except ImportError as exc:
             raise RuntimeError('install audio support: pip install -e ".[audio]"') from exc
-        sounddevice.play(numpy.frombuffer(pcm, dtype=numpy.int16), 16_000, device=self._device)
+        sounddevice.play(
+            numpy.frombuffer(pcm, dtype=numpy.int16), self._sample_rate, device=self._device
+        )
         sounddevice.wait()
 
     def _stop(self) -> None:
