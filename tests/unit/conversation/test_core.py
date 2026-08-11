@@ -44,6 +44,29 @@ async def test_core_accepts_clear_local_time_pattern_at_reduced_confidence():
     assert proposer.requests == []
 
 
+async def test_core_answers_how_are_you_without_claiming_human_feelings():
+    proposer = FakeIntentProposer(IntentProposal(IntentName.ANSWER, "ignored"))
+    response = await ConversationCore(proposer).respond(_transcript("¿Cómo estás?", confidence=0.6))
+
+    assert response.speech == "Estoy disponible para ayudarte. ¿Qué necesitas?"
+    assert proposer.requests == []
+
+
+async def test_core_confirms_listening_at_reduced_confidence():
+    proposer = FakeIntentProposer(IntentProposal(IntentName.ANSWER, "ignored"))
+    response = await ConversationCore(proposer).respond(_transcript("Hola SIRAH, me escuchas", confidence=0.58))
+
+    assert response.speech == "Sí, te escucho. ¿En qué puedo ayudarte?"
+    assert proposer.requests == []
+
+
+async def test_core_accepts_valid_spanish_listening_response_from_cloud():
+    proposer = FakeIntentProposer(IntentProposal(IntentName.ANSWER, "Sí, te escucho."))
+    response = await ConversationCore(proposer).respond(_transcript("Háblame normalmente", confidence=0.8))
+
+    assert response.speech == "Sí, te escucho."
+
+
 async def test_core_repairs_english_response_once_then_uses_spanish_fallback():
     class EnglishTwice(FakeIntentProposer):
         async def propose(self, request):

@@ -286,11 +286,20 @@ async def _listen(args: argparse.Namespace) -> int:
             tts, sample_rate = _operation_tts(args.tts_provider)
         player = SoundDevicePCMPlayer(device=args.output_device, sample_rate=sample_rate)
         proposer = _proposer(args.ollama_model)
+
+        async def observe_response(transcript, proposal) -> None:
+            if args.show_text:
+                print(f"tú> {transcript.text} (confianza {transcript.confidence:.2f})")
+                print(f"sirah> {proposal.speech or ''}")
+            if log is not None:
+                log.write("response_validated", transcript=transcript.text, validated_speech=proposal.speech, intent=proposal.intent.value, emotion=proposal.emotion.value, stt_confidence=transcript.confidence)
+
         conversation = ConversationSession(
             proposer,
             tts,
             player,
             core=ConversationCore(proposer),
+            on_response=observe_response,
         )
 
     async def show_state(state: ConversationState) -> None:

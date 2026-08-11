@@ -159,3 +159,14 @@ async def test_session_uses_core_for_local_time_without_calling_ollama():
     assert result.proposal.speech is not None
     assert "Son las" in result.proposal.speech
     assert proposer.requests == []
+
+
+async def test_session_notifies_turn_observer_with_transcript_and_response():
+    seen = []
+    transcript = _transcript("hola")
+    proposal = IntentProposal(IntentName.ANSWER, "Hola")
+    session = ConversationSession(FakeProposer(proposal), FakeTTS(), FakePlayer(), on_response=lambda item, reply: seen.append((item, reply)))
+
+    await session.respond(transcript)
+
+    assert seen == [(transcript, proposal)]

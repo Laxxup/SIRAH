@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -47,6 +48,7 @@ class ConversationSession:
         validator: ProposalValidator | None = None,
         personality: ConversationPersonality | None = None,
         core: ConversationCore | None = None,
+        on_response: Callable[[Transcript, IntentProposal], Awaitable[None] | None] | None = None,
     ) -> None:
         self._proposer = proposer
         self._tts = tts
@@ -54,6 +56,7 @@ class ConversationSession:
         self._validator = validator or ProposalValidator()
         self._personality = personality or ConversationPersonality()
         self._core = core
+        self._on_response = on_response
         self.context = ConversationContext(context_limit)
         self._turn_lock = asyncio.Lock()
         self._active_task: asyncio.Task[object] | None = None
@@ -78,6 +81,10 @@ class ConversationSession:
                     pcm = await self._tts.synthesize(operation_id, proposal.speech)
                     await self._player.play(operation_id, pcm)
                     await self._player.join()
+                if self._on_response is not None:
+                    result = self._on_response(transcript, proposal)
+                    if result is not None:
+                        await result
                 return SessionResponse(operation_id, proposal)
             finally:
                 if self._active_task is task:

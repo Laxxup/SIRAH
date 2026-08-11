@@ -58,8 +58,12 @@ class ConversationCore:
             return IntentProposal(IntentName.ANSWER, "Me llamo SIRAH, Sistema Inteligente Robótico de Asistencia Humana.", EmotionName.FRIENDLY)
         if "hora" in normalized:
             return IntentProposal(IntentName.ANSWER, f"Son las {self._clock():%H:%M}.", EmotionName.FRIENDLY)
+        if "me escuchas" in normalized or "si me escuchas" in normalized:
+            return IntentProposal(IntentName.ANSWER, "Sí, te escucho. ¿En qué puedo ayudarte?", EmotionName.FRIENDLY)
         if "fecha" in normalized or "día" in normalized or "dia" in normalized:
             return IntentProposal(IntentName.ANSWER, f"Hoy es {self._clock():%Y-%m-%d}.", EmotionName.FRIENDLY)
+        if "cómo estás" in normalized or "como estas" in normalized:
+            return IntentProposal(IntentName.ANSWER, "Estoy disponible para ayudarte. ¿Qué necesitas?", EmotionName.FRIENDLY)
         return None
 
 
@@ -67,7 +71,7 @@ def _is_spanish(speech: str | None) -> bool:
     if not speech:
         return True
     words = {word.strip(".,¿?¡!").lower() for word in speech.split()}
-    return bool(words & {"el", "la", "de", "que", "no", "puedes", "sirah", "son", "hola", "tienes", "manzanas", "gracias", "puedo"})
+    return bool(words & {"el", "la", "de", "que", "no", "puedes", "sirah", "son", "hola", "tienes", "manzanas", "gracias", "puedo", "sí", "te", "escucho", "ayudarte"})
 
 
 def _claims_wrong_identity(speech: str | None) -> bool:
