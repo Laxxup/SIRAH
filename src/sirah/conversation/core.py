@@ -35,7 +35,7 @@ class ConversationCore:
 
     async def respond(self, transcript: Transcript) -> IntentProposal:
         text = transcript.text.strip()
-        if transcript.confidence < self._minimum_confidence or not text:
+        if transcript.confidence < self._minimum_confidence or not text or len(text) > 1_000:
             return IntentProposal(IntentName.CLARIFY, "No entendí bien, ¿puedes repetirlo?", EmotionName.CONCERNED)
         local = self._local(text)
         if local is not None:
