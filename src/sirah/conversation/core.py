@@ -67,7 +67,7 @@ def _is_spanish(speech: str | None) -> bool:
     if not speech:
         return True
     words = {word.strip(".,¿?¡!").lower() for word in speech.split()}
-    return bool(words & {"el", "la", "de", "que", "no", "puedes", "sirah", "son", "hola"})
+    return bool(words & {"el", "la", "de", "que", "no", "puedes", "sirah", "son", "hola", "tienes", "manzanas", "gracias", "puedo"})
 
 
 def _claims_wrong_identity(speech: str | None) -> bool:
