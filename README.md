@@ -1,7 +1,7 @@
 # SIRAH
 
 <p align="center">
-  <img src="logo/sirah.png" width="260" alt="SIRAH">
+  <img src="https://raw.githubusercontent.com/Laxxup/SIRAH/main/logo/sirah.png" width="260" alt="SIRAH">
 </p>
 
 <p align="center">
