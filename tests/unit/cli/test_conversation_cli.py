@@ -47,3 +47,9 @@ def test_local_provider_selection_does_not_read_azure_configuration():
 
     assert isinstance(tts, AsyncTTS)
     assert sample_rate == 24_000
+
+
+def test_listen_exposes_opt_in_diagnostics_flags():
+    args = build_parser().parse_args(("listen", "--live", "--lab", "--show-text", "--record-session", "--include-text"))
+
+    assert args.lab and args.show_text and args.record_session and args.include_text

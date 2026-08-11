@@ -30,13 +30,19 @@ from sirah.conversation.session import ConversationSession, OperationTTS
 class _TextOnlyResponder:
     """Print validated model speech without initializing TTS or playback."""
 
-    def __init__(self, proposer: OllamaIntentProposer) -> None:
-        self._proposer = proposer
+    def __init__(self, core: ConversationCore, *, show_text: bool = False, log=None) -> None:
+        self._core = core
+        self._show_text = show_text
+        self._log = log
 
     async def respond(self, transcript) -> None:
-        proposal = await self._proposer.propose(IntentRequest("speech_ended", transcript.text, transcript.ended_at))
+        proposal = await self._core.respond(transcript)
+        if self._show_text:
+            print(f"tú> {transcript.text} (confianza {transcript.confidence:.2f})")
         if proposal.speech:
             print(f"sirah> {proposal.speech}")
+        if self._log is not None:
+            self._log.write("response_validated", transcript=transcript.text, validated_speech=proposal.speech, intent=proposal.intent.value)
 
     async def interrupt(self) -> None:
         return None
@@ -69,6 +75,10 @@ def build_parser() -> argparse.ArgumentParser:
     listen.add_argument("--ollama-model", default=os.getenv("SIRAH_OLLAMA_MODEL", "gpt-oss:20b-cloud"))
     listen.add_argument("--text-only", action="store_true", help="print replies; do not initialize Azure or audio output")
     listen.add_argument("--barge-in", action="store_true", help="experimental; acoustic echo cancellation is unavailable")
+    listen.add_argument("--lab", action="store_true", help="show states and metrics without saving content")
+    listen.add_argument("--show-text", action="store_true", help="show recognized text; terminal scrollback may retain it")
+    listen.add_argument("--record-session", action="store_true")
+    listen.add_argument("--include-text", action="store_true")
     listen.add_argument(
         "--tts-provider",
         choices=("local", "azure"),
@@ -125,6 +135,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{args.command} is real microphone and Cloud mode; rerun with --live")
         return 2
     if args.command == "listen":
+        if args.show_text and not args.lab:
+            parser.error("--show-text requires --lab")
+        if args.include_text and not args.record_session:
+            parser.error("--include-text requires --record-session")
         try:
             return asyncio.run(_listen(args))
         except KeyboardInterrupt:
@@ -247,11 +261,18 @@ async def _listen(args: argparse.Namespace) -> int:
         barge_in=args.barge_in or os.getenv("SIRAH_BARGE_IN", "false").lower() == "true",
         post_playback_guard_ms=int(os.getenv("SIRAH_POST_PLAYBACK_GUARD_MS", "500")),
     )
+    log = None
+    if args.record_session:
+        from sirah.conversation.session_log import SessionLog
+        if args.include_text:
+            print("Esta sesión guardará transcripciones y respuestas para diagnóstico. No se guardará audio.")
+        log = SessionLog(include_text=args.include_text)
     player: SoundDevicePCMPlayer | None = None
     conversation: ConversationSession | _TextOnlyResponder
     tts: OperationTTS
     if args.text_only:
-        conversation = _TextOnlyResponder(_proposer(args.ollama_model))
+        proposer = _proposer(args.ollama_model)
+        conversation = _TextOnlyResponder(ConversationCore(proposer), show_text=args.show_text, log=log)
     else:
         if args.tts_provider == "local":
             from sirah.audio.kokoro_tts import KokoroTextToSpeech
@@ -282,7 +303,8 @@ async def _listen(args: argparse.Namespace) -> int:
             ConversationState.RECOVERING: "recuperandose",
             ConversationState.STOPPED: "detenido",
         }
-        print(labels[state])
+        if args.lab or state is not ConversationState.IDLE:
+            print(labels[state])
 
     async def show_error(error: Exception) -> None:
         print(f"error de sesion: {error}")
@@ -308,6 +330,8 @@ async def _listen(args: argparse.Namespace) -> int:
     except KeyboardInterrupt:
         await session.stop()
     finally:
+        if log is not None:
+            log.close()
         if player is not None:
             await player.close()
     return 0
