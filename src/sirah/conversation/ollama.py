@@ -90,9 +90,11 @@ class OllamaIntentProposer:
         values = os.environ if environ is None else environ
         host = values.get("SIRAH_OLLAMA_HOST")
         model = values.get("SIRAH_OLLAMA_MODEL")
-        api_key = values.get("SIRAH_OLLAMA_API_KEY")
-        if not host or not model or not api_key:
-            raise ConfigurationError("SIRAH_OLLAMA_HOST, MODEL, and API_KEY are required")
+        api_key = values.get("SIRAH_OLLAMA_API_KEY", "")
+        if not host or not model:
+            raise ConfigurationError("SIRAH_OLLAMA_HOST and MODEL are required")
+        if not api_key and not host.startswith(("http://127.0.0.1", "http://localhost")):
+            raise ConfigurationError("SIRAH_OLLAMA_API_KEY is required for a remote host")
         return cls(
             host,
             model,
@@ -111,10 +113,9 @@ class OllamaIntentProposer:
                 raise BudgetExhausted("conversation proposal budget is exhausted")
             self._remaining -= 1
             payload = _request_payload(self._model, request)
-            headers = {
-                "Authorization": f"Bearer {self._api_key}",
-                "Content-Type": "application/json",
-            }
+            headers = {"Content-Type": "application/json"}
+            if self._api_key:
+                headers["Authorization"] = f"Bearer {self._api_key}"
             try:
                 response = await asyncio.wait_for(
                     self._post(f"{self._host}/api/chat", headers, payload, self._timeout_s),

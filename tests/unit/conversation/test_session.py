@@ -121,3 +121,26 @@ async def test_new_turn_cancels_an_obsolete_response_before_starting_its_own():
     assert current.operation_id == "conversation-2"
     assert tts.cancelled == ["conversation-1"]
     assert player.cancelled == ["conversation-1"]
+
+
+async def test_interrupt_cancels_the_active_response_without_starting_another_turn():
+    started = asyncio.Event()
+
+    class BlockingProposer(FakeProposer):
+        async def propose(self, request):
+            self.requests.append(request)
+            started.set()
+            await asyncio.Event().wait()
+
+    tts = FakeTTS()
+    player = FakePlayer()
+    session = ConversationSession(BlockingProposer(IntentProposal(IntentName.SILENT, None)), tts, player)
+    response = asyncio.create_task(session.respond(_transcript("first")))
+    await started.wait()
+
+    await session.interrupt()
+
+    with pytest.raises(asyncio.CancelledError):
+        await response
+    assert tts.cancelled == ["conversation-1"]
+    assert player.cancelled == ["conversation-1"]

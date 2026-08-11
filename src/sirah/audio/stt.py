@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import threading
 from array import array
@@ -97,4 +98,10 @@ def _faster_whisper_model(model_name: str) -> object:
         from faster_whisper import WhisperModel
     except ImportError as exc:
         raise RuntimeError('install audio support: pip install -e ".[audio]"') from exc
-    return WhisperModel(model_name)
+    cache = os.getenv("SIRAH_WHISPER_CACHE", os.path.expanduser("~/.cache/sirah/whisper"))
+    return WhisperModel(
+        model_name,
+        device=os.getenv("SIRAH_WHISPER_DEVICE", "cpu"),
+        compute_type=os.getenv("SIRAH_WHISPER_COMPUTE_TYPE", "int8"),
+        download_root=cache,
+    )

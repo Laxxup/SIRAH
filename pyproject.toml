@@ -38,6 +38,7 @@ dev = [
 sirah-runtime = "sirah.cli.run:main"
 sirah-calibrate = "sirah.cli.calibrate:main"
 sirah-models = "sirah.cli.models:main"
+sirah-conversation = "sirah.cli.conversation:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

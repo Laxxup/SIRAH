@@ -78,6 +78,10 @@ class ConversationSession:
                     self._active_task = None
                     self._active_operation = None
 
+    async def interrupt(self) -> None:
+        """Cancel the current proposal or playback without beginning another turn."""
+        await self._cancel_obsolete()
+
     async def _propose_safe(self, transcript: Transcript) -> IntentProposal:
         try:
             proposal = await self._proposer.propose(

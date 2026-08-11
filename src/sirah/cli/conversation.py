@@ -1,0 +1,244 @@
+"""Conversation CLI; real Cloud and audio actions require explicit --live."""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import os
+import time
+from pathlib import Path
+
+from sirah.audio.capture import SoundDeviceAudioSource
+from sirah.audio.playback import SoundDevicePCMPlayer
+from sirah.audio.replay import load_replay
+from sirah.audio.stt import FasterWhisperSTT
+from sirah.audio.vad import SileroVoiceActivityDetector
+from sirah.conversation.continuous import (
+    ContinuousConversationSession,
+    ContinuousSessionConfig,
+    ConversationState,
+)
+from sirah.conversation.contracts import IntentRequest
+from sirah.conversation.ollama import OllamaIntentProposer
+from sirah.conversation.session import ConversationSession
+
+
+class _TextOnlyResponder:
+    """Print validated model speech without initializing TTS or playback."""
+
+    def __init__(self, proposer: OllamaIntentProposer) -> None:
+        self._proposer = proposer
+
+    async def respond(self, transcript) -> None:
+        proposal = await self._proposer.propose(IntentRequest("speech_ended", transcript.text, transcript.ended_at))
+        if proposal.speech:
+            print(f"sirah> {proposal.speech}")
+
+    async def interrupt(self) -> None:
+        return None
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="sirah-conversation")
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("devices", help="list real audio devices when audio support is installed")
+    replay = commands.add_parser("replay", help="inspect an offline audio replay; never opens hardware")
+    replay.add_argument("path", type=Path)
+    check = commands.add_parser("ollama-check", help="check Cloud configuration without sending text")
+    check.add_argument("--live", action="store_true", help="permit one diagnostic request")
+    commands.add_parser("config", help="show effective configuration with secrets redacted")
+    listen = commands.add_parser("listen", help="hands-free local VAD conversation; requires --live")
+    listen.add_argument("--live", action="store_true", help="acknowledge microphone and Cloud use")
+    listen.add_argument("--input-device")
+    listen.add_argument("--output-device")
+    listen.add_argument("--sample-rate", type=int, default=16000)
+    listen.add_argument("--whisper-model", default=os.getenv("SIRAH_WHISPER_MODEL", "base"))
+    listen.add_argument("--language", default=os.getenv("SIRAH_WHISPER_LANGUAGE", "es"))
+    listen.add_argument("--ollama-model", default=os.getenv("SIRAH_OLLAMA_MODEL", "gpt-oss:20b-cloud"))
+    listen.add_argument("--text-only", action="store_true", help="print replies; do not initialize Azure or audio output")
+    talk = commands.add_parser("push-to-talk", help="run real microphone capture only with --live")
+    talk.add_argument("--live", action="store_true", help="acknowledge microphone and Cloud use")
+    talk.add_argument("--input-device")
+    talk.add_argument("--output-device")
+    talk.add_argument("--sample-rate", type=int, default=16000)
+    talk.add_argument("--duration", type=float)
+    talk.add_argument("--whisper-model", default=os.getenv("SIRAH_WHISPER_MODEL", "base"))
+    talk.add_argument("--language", default=os.getenv("SIRAH_WHISPER_LANGUAGE", "es"))
+    talk.add_argument("--ollama-model", default=os.getenv("SIRAH_OLLAMA_MODEL", "gpt-oss:20b-cloud"))
+    talk.add_argument("--text-only", action="store_true")
+    chat = commands.add_parser("text-chat", help="real Cloud text chat; no microphone")
+    chat.add_argument("--live", action="store_true")
+    chat.add_argument("--ollama-model", default=os.getenv("SIRAH_OLLAMA_MODEL", "gpt-oss:20b-cloud"))
+    tts = commands.add_parser("tts-check", help="check Azure TTS configuration")
+    tts.add_argument("--live", action="store_true")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    if args.command == "devices":
+        try:
+            import sounddevice
+        except (ImportError, OSError) as exc:
+            print(f"audio support unavailable: {exc}")
+            return 1
+        print(sounddevice.query_devices())
+        return 0
+    if args.command == "replay":
+        replay = load_replay(args.path)
+        print(json.dumps({"mode": "offline", "chunks": len(replay.chunks), "transcripts": len(replay.transcripts)}))
+        return 0
+    if args.command == "config":
+        print(json.dumps(_safe_config(), sort_keys=True))
+        return 0
+    if args.command == "ollama-check":
+        if not args.live:
+            print(json.dumps({"configured": _ollama_configured(), "live": False}))
+            return 0
+        return asyncio.run(_ollama_diagnostic())
+    if not args.live:
+        print(f"{args.command} is real microphone and Cloud mode; rerun with --live")
+        return 2
+    if args.command == "listen":
+        return asyncio.run(_listen(args))
+    if args.command == "text-chat":
+        return asyncio.run(_text_chat(args.ollama_model))
+    if args.command == "tts-check":
+        return asyncio.run(_tts_check())
+    print("Cloud transcripts may leave this device. Press Ctrl-C to stop after speaking.")
+    return asyncio.run(_push_to_talk(args))
+
+
+def _safe_config() -> dict[str, str]:
+    return {key: ("configured" if any(word in key for word in ("KEY", "TOKEN", "SECRET", "PASSWORD")) else value) for key, value in os.environ.items() if key.startswith("SIRAH_")}
+
+
+def _ollama_configured() -> bool:
+    return bool(os.getenv("SIRAH_OLLAMA_HOST") and os.getenv("SIRAH_OLLAMA_MODEL"))
+
+
+async def _ollama_diagnostic() -> int:
+    if not _ollama_configured():
+        print("Ollama is not configured; no request was sent")
+        return 1
+    started = time.monotonic()
+    try:
+        proposal = await _proposer().propose(IntentRequest("diagnostic", "Responde JSON con Hola", 0.0))
+    except Exception as exc:  # noqa: BLE001
+        print(json.dumps({"success": False, "error": type(exc).__name__}))
+        return 1
+    print(json.dumps({"success": True, "intent": proposal.intent.value, "latency_s": round(time.monotonic() - started, 3)}))
+    return 0
+
+
+def _proposer(model: str | None = None) -> OllamaIntentProposer:
+    env = dict(os.environ)
+    if model:
+        env["SIRAH_OLLAMA_MODEL"] = model
+    return OllamaIntentProposer.from_environment(environ=env)
+
+
+async def _push_to_talk(args: argparse.Namespace) -> int:
+    if not _ollama_configured():
+        print("Ollama is not configured; no audio was captured")
+        return 1
+    source = SoundDeviceAudioSource(sample_rate=args.sample_rate, device=args.input_device)
+    await source.start()
+    try:
+        if args.duration is None:
+            await asyncio.to_thread(input, "Press Enter to start recording, then Enter again to stop. ")
+            stop_task = asyncio.create_task(asyncio.to_thread(input, "Recording. Press Enter to stop. "))
+            stop_at = None
+        else:
+            stop_at = time.monotonic() + args.duration
+            stop_task = None
+        chunks = []
+        while (stop_task is not None and not stop_task.done()) or (stop_at is not None and time.monotonic() < stop_at):
+            chunks.append(await asyncio.wait_for(source.next_chunk(), timeout=1.0))
+        if stop_task is not None:
+            await stop_task
+        transcript = await FasterWhisperSTT(args.whisper_model, language=args.language).transcribe(chunks)
+        print(f"transcript: {transcript.text}")
+        if args.text_only:
+            proposal = await _proposer(args.ollama_model).propose(IntentRequest("speech_ended", transcript.text, transcript.ended_at))
+            print(f"speech: {proposal.speech or ''}")
+        return 0
+    finally:
+        await source.stop()
+
+
+async def _listen(args: argparse.Namespace) -> int:
+    if not _ollama_configured():
+        print("Ollama is not configured; no audio was captured")
+        return 1
+    config = ContinuousSessionConfig(
+        threshold=float(os.getenv("SIRAH_VAD_THRESHOLD", "0.5")),
+        min_speech_ms=int(os.getenv("SIRAH_VAD_MIN_SPEECH_MS", "250")),
+        end_silence_ms=int(os.getenv("SIRAH_VAD_END_SILENCE_MS", "700")),
+        max_turn_seconds=float(os.getenv("SIRAH_VAD_MAX_TURN_SECONDS", "15")),
+        pre_roll_ms=int(os.getenv("SIRAH_VAD_PRE_ROLL_MS", "300")),
+    )
+    player: SoundDevicePCMPlayer | None = None
+    conversation: ConversationSession | _TextOnlyResponder
+    if args.text_only:
+        conversation = _TextOnlyResponder(_proposer(args.ollama_model))
+    else:
+        from sirah.audio.azure_tts import AzureOperationTextToSpeech, AzureTextToSpeech
+
+        player = SoundDevicePCMPlayer(device=args.output_device)
+        conversation = ConversationSession(
+            _proposer(args.ollama_model),
+            AzureOperationTextToSpeech(AzureTextToSpeech.from_environment()),
+            player,
+        )
+
+    async def show_state(state: ConversationState) -> None:
+        labels = {
+            ConversationState.IDLE: "escuchando",
+            ConversationState.LISTENING: "escuchando",
+            ConversationState.PROCESSING: "procesando",
+            ConversationState.SPEAKING: "hablando",
+            ConversationState.INTERRUPTING: "interrumpido",
+            ConversationState.RECOVERING: "recuperandose",
+            ConversationState.STOPPED: "detenido",
+        }
+        print(labels[state])
+
+    session = ContinuousConversationSession(
+        SoundDeviceAudioSource(sample_rate=args.sample_rate, device=args.input_device),
+        SileroVoiceActivityDetector.from_official_distribution(threshold=config.threshold),
+        FasterWhisperSTT(args.whisper_model, language=args.language),
+        conversation,
+        config=config,
+        on_state_change=show_state,
+    )
+    print("escuchando; Ctrl-C para detener")
+    try:
+        await session.run()
+    except KeyboardInterrupt:
+        await session.stop()
+    finally:
+        if player is not None:
+            await player.close()
+    return 0
+
+
+async def _text_chat(model: str) -> int:
+    while True:
+        text = await asyncio.to_thread(input, "you> ")
+        if not text.strip():
+            return 0
+        proposal = await _proposer(model).propose(IntentRequest("text", text, time.monotonic()))
+        print(f"sirah> {proposal.speech or ''}")
+
+
+async def _tts_check() -> int:
+    from sirah.audio.azure_tts import AzureTextToSpeech
+    try:
+        AzureTextToSpeech.from_environment()
+    except Exception as exc:  # noqa: BLE001
+        print(f"Azure TTS unavailable: {type(exc).__name__}")
+        return 1
+    print("Azure TTS is configured; no synthesis was requested")
+    return 0
