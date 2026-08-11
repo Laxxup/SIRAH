@@ -40,6 +40,7 @@ sirah-conversation ollama-check --live
 sirah-conversation text-chat --live
 sirah-conversation push-to-talk --live --text-only --duration 5
 sirah-conversation tts-check --live --provider local
+sirah-conversation logs list
 ```
 
 ## Modo manos libres
@@ -73,6 +74,10 @@ La primera version usa umbrales mas estrictos y una ventana de confirmacion
 para una nueva voz durante TTS. Esto reduce disparos falsos, pero no sustituye
 la cancelacion de eco acustico: SIRAH no puede distinguir perfectamente al
 usuario de su propia voz sin AEC real.
+
+El modo predeterminado es semidúplex: mientras SIRAH reproduce una respuesta,
+descarta frames del micrófono y aplica una guarda corta antes de volver a VAD.
+`--barge-in` es experimental y muestra una advertencia porque no hay AEC.
 
 `push-to-talk` queda para diagnostico, accesibilidad y como fallback. La prueba
 manual pendiente requiere confirmar micrófono, bocina y comportamiento acústico.
@@ -114,6 +119,27 @@ generación por fragmentos, pero esta integración entrega el turno terminado a
 la cola PCM. Cancelar un turno evita que PCM obsoleto llegue al altavoz; no
 interrumpe una inferencia de CPU que ya está dentro de una llamada de biblioteca.
 No hay medición todavía en Raspberry Pi 4 de 8 GB.
+
+## Sesiones de diagnóstico
+
+Por defecto no se escribe ningún registro. En `text-chat`, `--record-session`
+crea un JSONL con eventos y métricas; `--include-text` autoriza incluir la
+transcripción y la respuesta. Esta segunda opción muestra un aviso: el archivo
+es explícito, pero el scrollback de la terminal también puede conservar texto.
+
+Los archivos viven fuera del repositorio en `$XDG_STATE_HOME/sirah/sessions/`
+o `~/.local/state/sirah/sessions/`, con permisos `0600`. Nunca incluyen audio,
+PCM, claves, tokens, headers ni variables de entorno.
+
+```bash
+sirah-conversation logs list
+sirah-conversation logs latest
+sirah-conversation logs show latest
+sirah-conversation logs diagnose latest
+```
+
+Los comandos de borrado solo reconocen identificadores de archivos de sesión
+en ese directorio; no aceptan rutas arbitrarias.
 
 ## Configuracion
 

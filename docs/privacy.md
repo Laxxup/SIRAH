@@ -11,6 +11,11 @@ The hands-free VAD loop never sends continuous or discarded audio to Cloud.
 Local Kokoro TTS receives only the response text in process memory. It sends no
 text or audio to a provider and does not write generated PCM to disk.
 
+Diagnostic session files are opt-in. `--record-session` stores events and
+metrics only; `--include-text` also stores text for debugging after an explicit
+warning. Session JSONL files use mode `0600` outside the repository. Terminal
+scrollback is outside SIRAH's retention controls.
+
 Camera work remains outside the conversational prototype. Obtain consent before
 recording or publishing identifiable people. Any future persistence requires a
 documented retention period, deletion method and operator controls.
