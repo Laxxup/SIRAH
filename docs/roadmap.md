@@ -8,25 +8,25 @@ versión y el trabajo que pertenece a fases posteriores.
 
 | Etapa | Trabajo realizado | Estado | Evidencia |
 |---|---|---|---|
-| 1 | Base del monorepo | ✅ | ADR-0008 |
-| 2 | Especificación del protocolo v1.0 | ✅ | `docs/components/protocol.md` |
-| 3 | Parsers en Python y C++ con corpus golden de 91 casos | ✅ | Doble parser y `test_parsers_contract` en CI |
-| 4 | Firmware para seis actuadores, pruebas host y calibración V6.12 | ✅ Validado el 2026-08-09 | `firmware/sirah-eyes` y `calibration.h` |
-| 5 | Adaptador serie `EyeTransport` | ✅ | `serial_adapter.py` y 45 pruebas |
-| 6 | Simulador conductual `FakeESP32` | ✅ | ADR-0009/0010 y 22 pruebas |
-| 7 | Runtime con `asyncio`, registro de componentes, políticas y CLI | ✅ | `app.py`, `cli/run.py` y 169 pruebas |
-| 8 | Seguimiento 2D con fuente de cámara, detector facial y comportamiento de mirada | ✅ | Pipeline cableado, OpenCV/YuNet opcional, E2E offline y `lost_face_center_s` |
+| 1 | Base del monorepo | Completado | ADR-0008 |
+| 2 | Especificación del protocolo v1.0 | Completado | `docs/components/protocol.md` |
+| 3 | Parsers en Python y C++ con corpus golden de 91 casos | Completado | Doble parser y `test_parsers_contract` en CI |
+| 4 | Firmware para seis actuadores, pruebas host y calibración V6.12 | Validado el 2026-08-09 | `firmware/sirah-eyes` y `calibration.h` |
+| 5 | Adaptador serie `EyeTransport` | Completado | `serial_adapter.py` y 45 pruebas |
+| 6 | Simulador conductual `FakeESP32` | Completado | ADR-0009/0010 y 22 pruebas |
+| 7 | Runtime con `asyncio`, registro de componentes, políticas y CLI | Completado | `app.py`, `cli/run.py` y 169 pruebas |
+| 8 | Seguimiento 2D con fuente de cámara, detector facial y comportamiento de mirada | Completado | Pipeline cableado, OpenCV/YuNet opcional, E2E offline y `lost_face_center_s` |
 
 ## En curso y próximo trabajo
 
 | Etapa | Objetivo | Estado actual | Criterio para cerrarla |
 |---|---|---|---|
-| 9 | Reproducción de sesiones y conjuntos de datos | 🟡 En curso | Ya hay JSONL, reproducción de `.mp4` y fixtures mínimos; faltan capturas reales y Git LFS |
-| 10 | Supervisión del enlace y degradación en ejecución | ⏳ Pendiente | Prueba HIL desconectando el enlace |
-| 11 | Timeouts de heartbeat y lectura conectados a la configuración | ⏳ Pendiente | `runtime.toml` sin parámetros sin efecto |
-| 12–14 | Pendiente de definición | ⏳ Pendiente | — |
-| 15/16 | Convertir la consistencia en requisito de release | ⏳ Pendiente | — |
-| Futuro | Comportamiento guiado por eventos e intenciones estructuradas | 📄 Diseñado | ADR, modo sombra, reproducción y métricas antes de autorizar cualquier control |
+| 9 | Reproducción de sesiones y conjuntos de datos | En curso | Ya hay JSONL, reproducción de `.mp4` y fixtures mínimos; faltan capturas reales y Git LFS |
+| 10 | Supervisión del enlace y degradación en ejecución | Pendiente | Prueba HIL desconectando el enlace |
+| 11 | Timeouts de heartbeat y lectura conectados a la configuración | Pendiente | `runtime.toml` sin parámetros sin efecto |
+| 12–14 | Pendiente de definición | Pendiente | — |
+| 15/16 | Convertir la consistencia en requisito de release | Pendiente | — |
+| Futuro | Comportamiento guiado por eventos e intenciones estructuradas | Diseñado | ADR, modo sombra, reproducción y métricas antes de autorizar cualquier control |
 
 ## Límites de v0.3.0
 
