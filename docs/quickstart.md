@@ -64,3 +64,9 @@ Comprueba que `config/actuators.yaml` espeja sin divergencias
 | Falta PyYAML al cargar config | Extra `[cli]` no instalado | `pip install -e ".[cli,serial]"` |
 | `eyes: DEGRADED` al bootear | Serial ocupada o ESP32 sin flash | Cerrar otros programas, verificar cable |
 | Servos no responden | Falta la fuente 5 V / brownout | Fuente externa + GND común (ADR-0011) |
+
+## 5. Prototipo conversacional experimental
+
+El prototipo conversacional no controla los ojos ni requiere el ESP32. Consulta
+[conversation.md](conversation.md) para ejecutar el replay offline y conocer
+los requisitos de microfono, Ollama y TTS.
