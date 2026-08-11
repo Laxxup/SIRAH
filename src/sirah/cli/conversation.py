@@ -152,14 +152,20 @@ def _device_id(value: str | None) -> int | str | None:
 
 
 def _logs(args: argparse.Namespace) -> int:
-    from sirah.conversation.session_log import diagnose, resolve_session, session_files
+    from sirah.conversation.session_log import (
+        delete_session,
+        diagnose,
+        purge_sessions,
+        resolve_session,
+        session_files,
+    )
     if args.logs_command == "list":
         for path in session_files():
             print(path.stem.split("_")[-1])
         return 0
     if args.logs_command == "purge":
-        for path in session_files()[20:]:
-            print(f"would delete {path.name}")
+        for path in purge_sessions():
+            print(f"deleted {path.name}")
         return 0
     try:
         path = resolve_session(getattr(args, "session_id", "latest"))
@@ -173,7 +179,8 @@ def _logs(args: argparse.Namespace) -> int:
     elif args.logs_command == "diagnose":
         print(json.dumps(diagnose(path), ensure_ascii=False))
     else:
-        print(f"would delete {path.name}")
+        delete_session(getattr(args, "session_id", "latest"))
+        print(f"deleted {path.name}")
     return 0
 
 

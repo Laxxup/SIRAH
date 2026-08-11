@@ -71,3 +71,17 @@ def diagnose(path: Path) -> list[dict[str, str]]:
     findings.append({"check": "low_confidence", "result": "WARN" if "transcript_rejected" in events else "NOT_EVALUATED"})
     findings.append({"check": "duplicate_states", "result": "WARN" if any(a == b for a, b in pairwise(events)) else "PASS"})
     return findings
+
+
+def delete_session(identifier: str, state_home: Path | None = None) -> Path:
+    path = resolve_session(identifier, state_home)
+    path.unlink()
+    return path
+
+
+def purge_sessions(state_home: Path | None = None, *, keep: int = 20) -> list[Path]:
+    removed: list[Path] = []
+    for path in session_files(state_home)[keep:]:
+        path.unlink()
+        removed.append(path)
+    return removed

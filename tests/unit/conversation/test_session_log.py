@@ -3,7 +3,12 @@ from __future__ import annotations
 import json
 import stat
 
-from sirah.conversation.session_log import SessionLog, resolve_session
+from sirah.conversation.session_log import (
+    SessionLog,
+    delete_session,
+    purge_sessions,
+    resolve_session,
+)
 
 
 def test_session_log_uses_private_jsonl_and_redacts_content_by_default(tmp_path):
@@ -23,3 +28,13 @@ def test_session_log_records_text_only_when_explicitly_authorized(tmp_path):
     log.close()
 
     assert "hola" in log.path.read_text()
+
+
+def test_delete_and_purge_only_remove_recognized_session_files(tmp_path):
+    logs = [SessionLog(state_home=tmp_path) for _ in range(3)]
+    for log in logs:
+        log.close()
+
+    deleted = delete_session(logs[0].session_id, tmp_path)
+    assert not deleted.exists()
+    assert len(purge_sessions(tmp_path, keep=1)) == 1
