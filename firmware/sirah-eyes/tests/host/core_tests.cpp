@@ -16,32 +16,32 @@ namespace {
 bool near(float a, float b, float eps = 1e-3F) { return std::fabs(a - b) <= eps; }
 
 void test_mapping_corners() {
-  assert(sirah::eyes::core::map_eye_x(-1.0F) == 140.0F);
+  assert(sirah::eyes::core::map_eye_x(-1.0F) == 150.0F);
   assert(sirah::eyes::core::map_eye_x(0.0F) == 110.0F);
-  assert(sirah::eyes::core::map_eye_x(1.0F) == 70.0F);
-  assert(sirah::eyes::core::map_eye_y(-1.0F) == 60.0F);
-  assert(sirah::eyes::core::map_eye_y(0.0F) == 75.0F);
-  assert(sirah::eyes::core::map_eye_y(1.0F) == 85.0F);
+  assert(sirah::eyes::core::map_eye_x(1.0F) == 50.0F);
+  assert(sirah::eyes::core::map_eye_y(-1.0F) == 40.0F);
+  assert(sirah::eyes::core::map_eye_y(0.0F) == 70.0F);
+  assert(sirah::eyes::core::map_eye_y(1.0F) == 110.0F);
 }
 
 void test_mapping_midpoints() {
-  assert(near(sirah::eyes::core::map_eye_x(-0.5F), 125.0F));
-  assert(near(sirah::eyes::core::map_eye_x(0.5F), 90.0F));
-  assert(near(sirah::eyes::core::map_eye_y(-0.5F), 67.5F));
-  assert(near(sirah::eyes::core::map_eye_y(0.5F), 80.0F));
+  assert(near(sirah::eyes::core::map_eye_x(-0.5F), 130.0F));
+  assert(near(sirah::eyes::core::map_eye_x(0.5F), 80.0F));
+  assert(near(sirah::eyes::core::map_eye_y(-0.5F), 55.0F));
+  assert(near(sirah::eyes::core::map_eye_y(0.5F), 90.0F));
 }
 
 void test_mapping_clamps() {
-  assert(sirah::eyes::core::map_eye_x(2.0F) == 70.0F);
-  assert(sirah::eyes::core::map_eye_x(-2.0F) == 140.0F);
-  assert(sirah::eyes::core::map_eye_y(2.0F) == 85.0F);
-  assert(sirah::eyes::core::map_eye_y(-2.0F) == 60.0F);
+  assert(sirah::eyes::core::map_eye_x(2.0F) == 50.0F);
+  assert(sirah::eyes::core::map_eye_x(-2.0F) == 150.0F);
+  assert(sirah::eyes::core::map_eye_y(2.0F) == 110.0F);
+  assert(sirah::eyes::core::map_eye_y(-2.0F) == 40.0F);
   assert(sirah::eyes::core::clamp_deg_x(110.0F) == 110.0F);
-  assert(sirah::eyes::core::clamp_deg_x(200.0F) == 140.0F);
-  assert(sirah::eyes::core::clamp_deg_x(-10.0F) == 70.0F);
-  assert(sirah::eyes::core::clamp_deg_y(75.0F) == 75.0F);
-  assert(sirah::eyes::core::clamp_deg_y(120.0F) == 85.0F);
-  assert(sirah::eyes::core::clamp_deg_y(0.0F) == 60.0F);
+  assert(sirah::eyes::core::clamp_deg_x(200.0F) == 150.0F);
+  assert(sirah::eyes::core::clamp_deg_x(-10.0F) == 50.0F);
+  assert(sirah::eyes::core::clamp_deg_y(70.0F) == 70.0F);
+  assert(sirah::eyes::core::clamp_deg_y(120.0F) == 110.0F);
+  assert(sirah::eyes::core::clamp_deg_y(0.0F) == 40.0F);
 }
 
 void test_mapping_monotonic() {
@@ -63,25 +63,25 @@ void test_mapping_monotonic() {
 void test_eyelid_moves() {
   using sirah::eyes::core::EyelidMove;
   const EyelidMove sup_r = sirah::eyes::core::kEyelidSupRight;
-  assert(near(sup_r.position(0.0F), 110.0F));
-  assert(near(sup_r.position(1.0F), 70.0F));
-  assert(near(sup_r.position(0.5F), 90.0F));
-  assert(near(sup_r.position(1.5F), 70.0F));  // clamped
-  assert(near(sup_r.clamp(50.0F), 70.0F));
-  assert(near(sup_r.clamp(120.0F), 110.0F));
+  assert(near(sup_r.position(0.0F), 157.0F));
+  assert(near(sup_r.position(1.0F), 80.0F));
+  assert(near(sup_r.position(0.5F), 118.5F));
+  assert(near(sup_r.position(1.5F), 80.0F));  // clamped
+  assert(near(sup_r.clamp(50.0F), 80.0F));
+  assert(near(sup_r.clamp(200.0F), 157.0F));
 
   const EyelidMove inf_r = sirah::eyes::core::kEyelidInfRight;
-  assert(near(inf_r.position(0.0F), 10.0F));
-  assert(near(inf_r.position(1.0F), 70.0F));
+  assert(near(inf_r.position(0.0F), 20.0F));
+  assert(near(inf_r.position(1.0F), 69.0F));
 
   const EyelidMove sup_l = sirah::eyes::core::kEyelidSupLeft;
-  assert(near(sup_l.position(0.0F), 145.0F));
-  assert(near(sup_l.position(1.0F), 170.0F));
+  assert(near(sup_l.position(0.0F), 87.0F));
+  assert(near(sup_l.position(1.0F), 150.0F));
 
   const EyelidMove inf_l = sirah::eyes::core::kEyelidInfLeft;
-  assert(near(inf_l.position(0.5F), 67.5F));
-  assert(near(inf_l.clamp(0.0F), 40.0F));
-  assert(near(inf_l.clamp(200.0F), 95.0F));
+  assert(near(inf_l.position(0.5F), 100.0F));
+  assert(near(inf_l.clamp(0.0F), 70.0F));
+  assert(near(inf_l.clamp(200.0F), 130.0F));
 }
 
 void test_easing_single_tick() {

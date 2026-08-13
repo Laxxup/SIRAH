@@ -17,3 +17,12 @@ firmware/sirah-eyes/tests/host/build/
 skills-lock.json
 informes/
 models/
+
+# Local laboratory calibration measurements (never published)
+laboratory/calibration/
+
+# Third-party EyeMech reference materials are CC BY-NC-SA 4.0, not SIRAH assets.
+EyeMech_3.2/
+
+# Local deployment secrets
+*.env

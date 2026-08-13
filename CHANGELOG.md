@@ -26,6 +26,12 @@ español). Histórico de releases. Formato: Conventional Commits.
   con bloques de 32 ms, en vez de truncar turnos largos cerca de cuatro segundos.
 - `docs`: guía de conversación, plantilla de configuración privada, protocolo
   de laboratorio, documentación de arquitectura, release y contribución.
+- `feat(hardware)`: calibrador PCA9685 con etiquetas de ángulos, perfil temporal
+  en NVS y exportación para actualizar la calibración oficial versionada.
+- `fix(hardware)`: pruebas de firmware sincronizadas con los ángulos medidos de
+  ojos y párpados.
+- `docs(hardware)`: guía de diagnóstico, alimentación, Arduino CLI/IDE y
+  atribución de la referencia mecánica EyeMech epsilon 3.2 de @WillCogley.
 
 ### Límites conocidos
 - La conversación sigue siendo experimental, opt-in y no controla hardware.
