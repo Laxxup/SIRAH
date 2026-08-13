@@ -26,3 +26,6 @@ EyeMech_3.2/
 
 # Local deployment secrets
 *.env
+
+# Isolated local development worktrees
+.worktrees/
