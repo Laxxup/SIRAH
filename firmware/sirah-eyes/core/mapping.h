@@ -58,8 +58,7 @@ inline EyelidMove eyelid_move(float open_deg, float closed_deg) {
   return {open_deg, closed_deg};
 }
 
-// The four registered eyelid movements (open/closed corners, squint pose
-// is a calibration-data pose, not part of the wire contract).
+// The four registered eyelid movements use only open/closed corners.
 constexpr const EyelidMove kEyelidSupRight = EyelidMove{calibration::kEyelidSupRightOpenDeg, calibration::kEyelidSupRightClosedDeg};
 constexpr const EyelidMove kEyelidInfRight = EyelidMove{calibration::kEyelidInfRightOpenDeg, calibration::kEyelidInfRightClosedDeg};
 constexpr const EyelidMove kEyelidSupLeft = EyelidMove{calibration::kEyelidSupLeftOpenDeg, calibration::kEyelidSupLeftClosedDeg};

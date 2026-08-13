@@ -62,14 +62,6 @@ class EyelidsConfig:
 
 
 @dataclass(frozen=True)
-class SquintConfig:
-    inf_right_deg: float
-    sup_right_deg: float
-    inf_left_deg: float
-    sup_left_deg: float
-
-
-@dataclass(frozen=True)
 class PwmConfig:
     freq_hz: int
     pulse_us_min: int
@@ -84,7 +76,6 @@ class ActuatorConfig:
     eyes_x: EyeXConfig
     eyes_y: EyeYConfig
     eyelids: EyelidsConfig
-    squint: SquintConfig
     pwm: PwmConfig
     channels: dict[str, int] = field(default_factory=dict)
 
@@ -162,14 +153,6 @@ def load_actuator_config(path: str | Path | None = None) -> ActuatorConfig:
         )
     eyelids = EyelidsConfig(**eyelid_configs)
 
-    squint_raw = data.get("squint_deg", {})
-    squint = SquintConfig(
-        inf_right_deg=_require_float(squint_raw, "inf_right", "squint_deg"),
-        sup_right_deg=_require_float(squint_raw, "sup_right", "squint_deg"),
-        inf_left_deg=_require_float(squint_raw, "inf_left", "squint_deg"),
-        sup_left_deg=_require_float(squint_raw, "sup_left", "squint_deg"),
-    )
-
     pwm_raw = data.get("pwm", {})
     pulse = pwm_raw.get("pulse_us", {})
     i2c = pwm_raw.get("i2c", {})
@@ -188,7 +171,6 @@ def load_actuator_config(path: str | Path | None = None) -> ActuatorConfig:
         eyes_x=eye_x,
         eyes_y=eye_y,
         eyelids=eyelids,
-        squint=squint,
         pwm=pwm,
         channels=channels,
     )

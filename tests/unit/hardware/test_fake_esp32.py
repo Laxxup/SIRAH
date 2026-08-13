@@ -116,12 +116,12 @@ async def test_corpus_noncommands_produce_no_reply(fake: FakeESP32) -> None:
 def test_mapping_corners_from_yaml(fake: FakeESP32) -> None:
     cfg = fake.config
     assert cfg.eyes_x.direction == "inverted"
-    assert cfg.eyes_x.left_deg == 140.0
+    assert cfg.eyes_x.left_deg == 150.0
     assert cfg.eyes_x.center_deg == 110.0
-    assert cfg.eyes_x.right_deg == 70.0
-    assert cfg.eyes_y.down_deg == 60.0
-    assert cfg.eyes_y.center_deg == 75.0
-    assert cfg.eyes_y.up_deg == 85.0
+    assert cfg.eyes_x.right_deg == 50.0
+    assert cfg.eyes_y.down_deg == 40.0
+    assert cfg.eyes_y.center_deg == 70.0
+    assert cfg.eyes_y.up_deg == 110.0
 
 
 def test_mapping_clamps_degree_span() -> None:
@@ -131,18 +131,18 @@ def test_mapping_clamps_degree_span() -> None:
     deg_x = map_piecewise(
         -1.0, -1.0, cfg.eyes_x.left_deg, 0.0, cfg.eyes_x.center_deg, 1.0, cfg.eyes_x.right_deg
     )
-    assert deg_x == 140.0
+    assert deg_x == 150.0
     deg_x_right = map_piecewise(
         1.0, -1.0, cfg.eyes_x.left_deg, 0.0, cfg.eyes_x.center_deg, 1.0, cfg.eyes_x.right_deg
     )
-    assert deg_x_right == 70.0
+    assert deg_x_right == 50.0
     # beyond the calibrated corners -> hard clamp to the spanned range
-    assert clamp_deg(deg_x, cfg.eyes_x.right_deg, cfg.eyes_x.left_deg) == 140.0
+    assert clamp_deg(deg_x, cfg.eyes_x.right_deg, cfg.eyes_x.left_deg) == 150.0
     assert (
         map_piecewise(
             2.0, -1.0, cfg.eyes_x.left_deg, 0.0, cfg.eyes_x.center_deg, 1.0, cfg.eyes_x.right_deg
         )
-        == 70.0
+        == 50.0
     )
 
 
@@ -344,8 +344,8 @@ def test_default_config_loads_from_repo_yaml() -> None:
     assert cfg.pwm.pulse_us_max == 2400
     assert cfg.channels["eye_x"] == 0
     assert cfg.channels["inf_left"] == 5
-    assert cfg.squint.inf_left_deg == 70.0
-    assert cfg.squint.sup_left_deg == 146.0
+    assert cfg.eyelids.sup_right.open_deg == 157.0
+    assert cfg.eyelids.inf_left.closed_deg == 70.0
 
 
 def test_config_validation_rejects_bad_yaml(tmp_path) -> None:
@@ -354,13 +354,12 @@ def test_config_validation_rejects_bad_yaml(tmp_path) -> None:
         """
 eyes:
   x: {direction: inverted, left_deg: 10.0, center_deg: 110.0, right_deg: 70.0}
-  y: {up_deg: 85.0, center_deg: 75.0, down_deg: 60.0}
+  y: {up_deg: 110.0, center_deg: 70.0, down_deg: 40.0}
 eyelids:
-  sup_right: {open_deg: 110.0, closed_deg: 70.0}
-  inf_right: {open_deg: 10.0, closed_deg: 70.0}
-  sup_left: {open_deg: 145.0, closed_deg: 170.0}
-  inf_left: {open_deg: 95.0, closed_deg: 40.0}
-squint_deg: {inf_right: 30.0, sup_right: 90.0, inf_left: 70.0, sup_left: 146.0}
+  sup_right: {open_deg: 135.0, closed_deg: 80.0}
+  inf_right: {open_deg: 20.0, closed_deg: 69.0}
+  sup_left: {open_deg: 105.0, closed_deg: 150.0}
+  inf_left: {open_deg: 130.0, closed_deg: 70.0}
 """,
         encoding="utf-8",
     )

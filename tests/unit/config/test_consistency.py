@@ -45,10 +45,9 @@ def test_header_parser_extracts_key_constants():
     values = parse_calibration_header(HEADER_PATH)
     assert values["kPwmUsMin"] == 500
     assert values["kPwmUsMax"] == 2400
-    assert values["kEyeXLeftDeg"] == 140.0
-    assert values["kEyeXRightDeg"] == 70.0
-    assert values["kSquintSupLeftDeg"] == 146.0
-    assert values["kEyelidInfLeftOpenDeg"] == 95.0
+    assert values["kEyeXLeftDeg"] == 150.0
+    assert values["kEyeXRightDeg"] == 50.0
+    assert values["kEyelidInfLeftOpenDeg"] == 130.0
 
 
 def test_divergence_is_detected(monkeypatch):

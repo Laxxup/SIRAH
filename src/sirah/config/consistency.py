@@ -59,10 +59,6 @@ _EXPECTED: dict[str, tuple[str, str]] = {
     "kEyelidSupLeftClosedDeg": ("eyelids.sup_left.closed_deg", "float"),
     "kEyelidInfLeftOpenDeg": ("eyelids.inf_left.open_deg", "float"),
     "kEyelidInfLeftClosedDeg": ("eyelids.inf_left.closed_deg", "float"),
-    "kSquintInfRightDeg": ("squint.inf_right_deg", "float"),
-    "kSquintSupRightDeg": ("squint.sup_right_deg", "float"),
-    "kSquintInfLeftDeg": ("squint.inf_left_deg", "float"),
-    "kSquintSupLeftDeg": ("squint.sup_left_deg", "float"),
 }
 
 

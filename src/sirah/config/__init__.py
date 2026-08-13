@@ -7,7 +7,6 @@ from sirah.config.schema import (
     EyeXConfig,
     EyeYConfig,
     PwmConfig,
-    SquintConfig,
     load_actuator_config,
 )
 
@@ -18,6 +17,5 @@ __all__ = [
     "EyelidConfig",
     "EyelidsConfig",
     "PwmConfig",
-    "SquintConfig",
     "load_actuator_config",
 ]

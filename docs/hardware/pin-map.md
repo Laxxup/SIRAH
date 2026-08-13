@@ -27,12 +27,12 @@ responded on the channels above; no wrong-channel findings.
 
 | Channel | Actuator | Sweep result (2026-08-09) | Verdict |
 |---|---|---|---|
-| 0 | Ojo X | moves inside 70–140°, center 110° | VERIFIED |
-| 1 | Ojo Y | moves inside 60–85°, center 75° | VERIFIED |
-| 2 | Sup der | 110 abierto / 70 cerrado | VERIFIED |
-| 3 | Inf der | 10 abierto / 70 cerrado | VERIFIED |
-| 4 | Sup izq | 145 abierto / 170 cerrado | VERIFIED |
-| 5 | Inf izq | 95 abierto / 40 cerrado | VERIFIED |
+| 0 | Ojo X | izquierda 150, centro 110, derecha 50 | MEDIDO 2026-08-12 |
+| 1 | Ojo Y | arriba 110, centro 70, abajo 40 | MEDIDO 2026-08-12 |
+| 2 | Sup der | 157 abierto / 80 cerrado | MEDIDO 2026-08-12 |
+| 3 | Inf der | 20 abierto / 69 cerrado | MEDIDO 2026-08-12 |
+| 4 | Sup izq | 87 abierto / 150 cerrado | MEDIDO 2026-08-12 |
+| 5 | Inf izq | 130 abierto / 70 cerrado | MEDIDO 2026-08-12 |
 
 The corresponding corners live in `firmware/sirah-eyes/config/calibration.h`
 (the registered hardware asset). `platform/pins.h` holds the channel map
@@ -42,9 +42,10 @@ and `config/calibration.h` in the same commit — physical evidence wins (A5).
 ## Behavioral constraints recorded during verification (2026-08-09)
 
 - Eyes must never move while the eyelids are not 100% open (mechanical
-  jam risk). Squint/lowered-lid poses keep the eyes centered and frozen.
+  jam risk). The firmware only uses fully open and blink positions.
 - A blink needs ~300 ms of sustained closed position to complete physical
-  travel before reopening (blink_fsm.h `closed_ms = 300`).
+  travel before reopening (blink_fsm.h `closed_ms = 300`). No entrecerrado
+  pose is defined or used.
 - Calibration drifted repeatedly during the session (horn screw loose):
   treat recorded corners as a snapshot, not a constant; re-verify after
   any mechanical intervention.
