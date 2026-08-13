@@ -55,7 +55,7 @@ async def test_transcript_replay_plays_approved_ollama_response_and_reports_metr
     assert player.played == [("conversation-1", b"synthetic-pcm")]
 
 
-async def test_malformed_ollama_json_falls_back_to_silence_without_playback():
+async def test_malformed_ollama_json_plays_spoken_recovery():
     async def post(_url: str, _headers: dict[str, str], _body: bytes, _timeout: float) -> bytes:
         return b'{"message":{"content":"not json"}}'
 
@@ -72,12 +72,12 @@ async def test_malformed_ollama_json_falls_back_to_silence_without_playback():
     metrics = await replay_transcripts(load_replay(FIXTURES / "malformed.jsonl").transcripts, session)
 
     assert metrics.turns == 1
-    assert metrics.accepted == 0
-    assert metrics.fallback == 1
-    assert metrics.played == 0
+    assert metrics.accepted == 1
+    assert metrics.fallback == 0
+    assert metrics.played == 1
     assert metrics.cancelled == 0
-    assert tts.requests == []
-    assert player.played == []
+    assert tts.requests == [("conversation-1", "No entendí bien, ¿puedes repetirlo?")]
+    assert player.played == [("conversation-1", b"synthetic-pcm")]
 
 
 def test_conversation_fixtures_store_transcripts_without_raw_pcm():

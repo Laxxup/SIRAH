@@ -54,40 +54,16 @@ class ConversationCore:
 
     def _local(self, text: str) -> IntentProposal | None:
         normalized = text.lower()
-        if normalized.strip(".,¡!¿? ") in {"ah ok", "ah ok ok", "ok", "okay", "está bien", "esta bien", "bueno", "gracias"}:
-            return IntentProposal(
-                IntentName.ACKNOWLEDGE,
-                "Me alegra. Si quieres, podemos seguir conversando o probar otra cosa.",
-                EmotionName.FRIENDLY,
-            )
-        if "tec" in normalized and any(word in normalized for word in ("taller", "curso", "club", "actividad", "evento")):
-            return IntentProposal(
-                IntentName.CLARIFY,
-                "No tengo confirmación de actividades específicas del Tec. Te recomiendo preguntar en tu facultad o revisar sus canales oficiales; seguro encontrarás opciones para explorar robótica.",
-                EmotionName.CURIOUS,
-            )
-        if any(phrase in normalized for phrase in ("te puedes presentar", "puedes presentarte", "quién eres", "quien eres")):
-            return IntentProposal(
-                IntentName.ANSWER,
-                "Soy SIRAH, un proyecto universitario de robótica e inteligencia artificial. Puedo escucharte y conversar contigo por voz; si te interesa conocer cómo estoy construida, mi repositorio está en GitHub: github.com/Laxxup/SIRAH.",
-                EmotionName.FRIENDLY,
-            )
-        if any(phrase in normalized for phrase in ("quiero probarte", "probar el proyecto", "aportar ideas", "quiero colaborar", "ver el repositorio", "tu repositorio")):
-            return IntentProposal(
-                IntentName.ANSWER,
-                "Me alegra que quieras conocerme mejor. Puedes probar mi proyecto, revisar cómo está construido y aportar ideas en github.com/Laxxup/SIRAH.",
-                EmotionName.CURIOUS,
-            )
         if "cómo te llamas" in normalized or "que significa sirah" in normalized or "qué significa sirah" in normalized:
-            return IntentProposal(IntentName.ANSWER, "Me llamo SIRAH, Sistema Inteligente Robótico de Asistencia Humana.", EmotionName.FRIENDLY)
+            return IntentProposal(
+                IntentName.ANSWER,
+                "Me llamo SIRAH, Sistema Inteligente Robótico de Asistencia Humana.",
+                EmotionName.FRIENDLY,
+            )
         if "hora" in normalized:
             return IntentProposal(IntentName.ANSWER, f"Son las {self._clock():%H:%M}.", EmotionName.FRIENDLY)
-        if "me escuchas" in normalized or "si me escuchas" in normalized:
-            return IntentProposal(IntentName.ANSWER, "Sí, te escucho. ¿En qué puedo ayudarte?", EmotionName.FRIENDLY)
         if "fecha" in normalized or "día" in normalized or "dia" in normalized:
             return IntentProposal(IntentName.ANSWER, f"Hoy es {self._clock():%Y-%m-%d}.", EmotionName.FRIENDLY)
-        if "cómo estás" in normalized or "como estas" in normalized:
-            return IntentProposal(IntentName.ANSWER, "Estoy disponible para ayudarte. ¿Qué necesitas?", EmotionName.FRIENDLY)
         if any(phrase in normalized for phrase in ("qué puedes hacer", "que puedes hacer", "qué te falta", "que te falta", "qué quieres lograr", "que quieres lograr", "tus capacidades", "tus limitaciones")):
             return IntentProposal(
                 IntentName.ANSWER,

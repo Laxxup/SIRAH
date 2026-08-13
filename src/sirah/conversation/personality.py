@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from sirah.conversation.contracts import IntentName, IntentProposal
+from sirah.conversation.contracts import EmotionName, IntentName, IntentProposal
 
 
 class ConversationPersonality:
-    """Provides the non-speaking fallback used for rejected model output."""
+    """Provides a spoken recovery response for rejected model output."""
 
     def fallback(self) -> IntentProposal:
-        return IntentProposal(IntentName.SILENT, None)
+        return IntentProposal(
+            IntentName.CLARIFY,
+            "No entendí bien, ¿puedes repetirlo?",
+            EmotionName.CONCERNED,
+        )

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
+
 from sirah.audio.contracts import Transcript
-from sirah.conversation.contracts import IntentName, IntentProposal
+from sirah.conversation.contracts import EmotionName, IntentName, IntentProposal
 from sirah.conversation.core import ConversationCore
 from sirah.conversation.fakes import FakeIntentProposer
 
@@ -44,39 +46,24 @@ async def test_core_accepts_clear_local_time_pattern_at_reduced_confidence():
     assert proposer.requests == []
 
 
-async def test_core_answers_how_are_you_without_claiming_human_feelings():
-    proposer = FakeIntentProposer(IntentProposal(IntentName.ANSWER, "ignored"))
-    response = await ConversationCore(proposer).respond(_transcript("¿Cómo estás?", confidence=0.6))
+@pytest.mark.parametrize(
+    ("text", "response"),
+    [
+        ("¿Cómo estás?", "Puedo conversar contigo."),
+        ("Hola SIRAH, me escuchas", "Sí, te escucho."),
+        ("ah ok ok", "Perfecto, puedo esperar."),
+        ("¿Hay taller de robótica en el Tec?", "No tengo ese dato confirmado."),
+        ("¿Te puedes presentar?", "Soy SIRAH, un proyecto del ITCM."),
+        ("Quiero probarte y aportar ideas", "Puedes conocer el proyecto en GitHub."),
+    ],
+)
+async def test_core_delegates_social_turns_to_the_proposer(text: str, response: str):
+    proposer = FakeIntentProposer(IntentProposal(IntentName.ANSWER, response, EmotionName.FRIENDLY))
 
-    assert response.speech == "Estoy disponible para ayudarte. ¿Qué necesitas?"
-    assert proposer.requests == []
+    result = await ConversationCore(proposer).respond(_transcript(text, confidence=0.9))
 
-
-async def test_core_confirms_listening_at_reduced_confidence():
-    proposer = FakeIntentProposer(IntentProposal(IntentName.ANSWER, "ignored"))
-    response = await ConversationCore(proposer).respond(_transcript("Hola SIRAH, me escuchas", confidence=0.58))
-
-    assert response.speech == "Sí, te escucho. ¿En qué puedo ayudarte?"
-    assert proposer.requests == []
-
-
-async def test_core_acknowledges_brief_confirmations_without_cloud():
-    proposer = FakeIntentProposer(IntentProposal(IntentName.ANSWER, "ignored"))
-    response = await ConversationCore(proposer).respond(_transcript("ah ok ok"))
-
-    assert response.speech == "Me alegra. Si quieres, podemos seguir conversando o probar otra cosa."
-    assert proposer.requests == []
-
-
-async def test_core_handles_unverified_tec_activities_warmly_without_inventing():
-    proposer = FakeIntentProposer(IntentProposal(IntentName.ANSWER, "ignored"))
-    response = await ConversationCore(proposer).respond(
-        _transcript("¿Hay taller de robótica en el Tec?")
-    )
-
-    assert "No tengo confirmación" in response.speech
-    assert "facultad" in response.speech
-    assert proposer.requests == []
+    assert result.speech == response
+    assert proposer.requests[0].text == text
 
 
 async def test_core_describes_current_capabilities_and_development_goals_locally():
@@ -88,28 +75,6 @@ async def test_core_describes_current_capabilities_and_development_goals_locally
     assert "conversar" in response.speech
     assert "sistema visual" in response.speech
     assert "seguir rostros" in response.speech
-    assert proposer.requests == []
-
-
-async def test_core_introduces_its_open_source_project_locally():
-    proposer = FakeIntentProposer(IntentProposal(IntentName.ANSWER, "ignored"))
-    core = ConversationCore(proposer)
-
-    response = await core.respond(_transcript("¿Te puedes presentar?"))
-
-    assert "SIRAH" in response.speech
-    assert "GitHub" in response.speech
-    assert "github.com/Laxxup/SIRAH" in response.speech
-    assert proposer.requests == []
-
-
-async def test_core_shares_repository_when_someone_wants_to_try_or_contribute():
-    proposer = FakeIntentProposer(IntentProposal(IntentName.ANSWER, "ignored"))
-    core = ConversationCore(proposer)
-
-    response = await core.respond(_transcript("Quiero probarte y aportar ideas"))
-
-    assert "github.com/Laxxup/SIRAH" in response.speech
     assert proposer.requests == []
 
 

@@ -18,6 +18,11 @@ español). Histórico de releases. Formato: Conventional Commits.
 - `feat(conversation)`: `SIRAH_OLLAMA_THINK=low` permite evaluar un presupuesto
   reducido de razonamiento para Ollama Cloud; su impacto debe compararse en el
   entorno de laboratorio antes de adoptarlo.
+- `feat(conversation)`: política de turnos más natural: las charlas sociales
+  pasan al modelo, evita preguntas automáticas y comparte GitHub solo ante
+  preguntas sobre colaboración, pruebas o construcción.
+- `fix(conversation)`: una respuesta de Ollama que no cumple el contrato JSON
+  produce una solicitud hablada para repetir, en lugar de silencio.
 
 ### Robustez y documentación
 - `fix(audio)`: propiedad serializada del stream de salida para evitar cerrar

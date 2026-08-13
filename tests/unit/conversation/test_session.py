@@ -76,16 +76,20 @@ async def test_session_plays_accepted_none_action_response_under_its_operation_i
     assert player.calls == [("conversation-1", b"pcm")]
 
 
-async def test_session_uses_safe_silence_for_malformed_proposal():
+async def test_session_uses_spoken_recovery_for_malformed_proposal():
     tts = FakeTTS()
     player = FakePlayer()
     session = ConversationSession(FakeProposer(object()), tts, player)
 
     result = await session.respond(_transcript("hola"))
 
-    assert result.proposal == IntentProposal(IntentName.SILENT, None)
-    assert tts.calls == []
-    assert player.calls == []
+    assert result.proposal == IntentProposal(
+        IntentName.CLARIFY,
+        "No entendí bien, ¿puedes repetirlo?",
+        EmotionName.CONCERNED,
+    )
+    assert tts.calls == [("conversation-1", "No entendí bien, ¿puedes repetirlo?")]
+    assert player.calls == [("conversation-1", b"pcm")]
 
 
 async def test_session_keeps_only_the_configured_number_of_transcripts():
@@ -227,7 +231,7 @@ async def test_session_starts_playback_from_a_tts_pcm_stream():
     assert player.calls == []
 
 
-async def test_session_reports_rejected_proposal_category_without_response_text():
+async def test_session_recovers_from_a_rejected_proposal_without_response_text():
     diagnostics: list[str] = []
 
     class BrokenCore:
@@ -244,7 +248,11 @@ async def test_session_reports_rejected_proposal_category_without_response_text(
 
     result = await session.respond(_transcript("hola"))
 
-    assert result.proposal == IntentProposal(IntentName.SILENT, None)
+    assert result.proposal == IntentProposal(
+        IntentName.CLARIFY,
+        "No entendí bien, ¿puedes repetirlo?",
+        EmotionName.CONCERNED,
+    )
     assert diagnostics == ["propuesta descartada: ValueError"]
 
 
