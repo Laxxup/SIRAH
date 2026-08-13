@@ -102,7 +102,7 @@ SIRAH se distribuye bajo [Apache License 2.0](LICENSE).
 ## Créditos de referencia
 
 El mecanismo ocular toma como referencia conceptual el modelaje 3D de
-[@WillCogley](https://github.com/willcogley), autor de
+[@WillCogley en YouTube](https://www.youtube.com/@WillCogley), autor de
 [EyeMech epsilon 3.2](https://www.youtube.com/watch?v=bAvuMn8QTo4&t=186s).
 EyeMech se licencia bajo
 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).

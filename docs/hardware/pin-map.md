@@ -42,7 +42,7 @@ and `config/calibration.h` in the same commit — physical evidence wins (A5).
 ## Referencia mecánica y licencia
 
 El prototipo ocular toma como referencia conceptual el modelaje 3D de
-[@WillCogley](https://github.com/willcogley) para
+[@WillCogley en YouTube](https://www.youtube.com/@WillCogley) para
 [EyeMech epsilon 3.2](https://www.youtube.com/watch?v=bAvuMn8QTo4&t=186s).
 EyeMech está disponible bajo
 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
