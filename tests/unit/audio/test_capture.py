@@ -65,6 +65,8 @@ async def test_capture_discards_oldest_chunk_when_queue_is_full():
     await asyncio.sleep(0)
 
     assert (await source.next_chunk()).pcm == b"new"
+    assert source.dropped_chunks == 1
+    assert source.queue_high_water_mark == 1
 
 
 async def test_capture_passes_the_requested_fixed_block_size_to_the_stream():

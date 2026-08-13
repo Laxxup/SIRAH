@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 
 import pytest
 
@@ -13,6 +14,7 @@ from sirah.conversation.contracts import (
 )
 from sirah.conversation.core import ConversationCore
 from sirah.conversation.session import ConversationSession
+from sirah.conversation.timing import TurnTiming
 
 
 class FakeProposer:
@@ -170,3 +172,95 @@ async def test_session_notifies_turn_observer_with_transcript_and_response():
     await session.respond(transcript)
 
     assert seen == [(transcript, proposal)]
+
+
+async def test_session_reports_ollama_and_tts_timings_for_a_cloud_response():
+    lines: list[str] = []
+    timing = TurnTiming(write=lines.append)
+    proposal = IntentProposal(IntentName.ANSWER, "Hola")
+    session = ConversationSession(
+        FakeProposer(proposal),
+        FakeTTS(),
+        FakePlayer(),
+        timing=timing,
+    )
+
+    await session.respond(_transcript("hola"))
+
+    assert [line.split("] ", 1)[1].split(" |", 1)[0] for line in lines] == [
+        "Ollama: iniciando",
+        "Ollama: respuesta lista",
+        "TTS: iniciando",
+        "TTS: PCM listo",
+        "Altavoz: iniciando",
+        "Altavoz: reproducción terminada",
+    ]
+
+
+async def test_session_starts_playback_from_a_tts_pcm_stream():
+    class StreamingTTS(FakeTTS):
+        async def stream(self, operation_id: str, text: str) -> AsyncIterator[bytes]:
+            self.calls.append((operation_id, text))
+            yield b"first"
+            yield b"last"
+
+    class StreamingPlayer(FakePlayer):
+        def __init__(self) -> None:
+            super().__init__()
+            self.stream_calls: list[tuple[str, list[bytes]]] = []
+
+        async def play_stream(self, operation_id: str, pcm_stream: AsyncIterator[bytes]) -> None:
+            self.stream_calls.append((operation_id, [chunk async for chunk in pcm_stream]))
+
+    tts = StreamingTTS()
+    player = StreamingPlayer()
+    session = ConversationSession(
+        FakeProposer(IntentProposal(IntentName.ANSWER, "Hola")),
+        tts,
+        player,
+    )
+
+    await session.respond(_transcript("hola"))
+
+    assert tts.calls == [("conversation-1", "Hola")]
+    assert player.stream_calls == [("conversation-1", [b"first", b"last"])]
+    assert player.calls == []
+
+
+async def test_session_reports_rejected_proposal_category_without_response_text():
+    diagnostics: list[str] = []
+
+    class BrokenCore:
+        async def respond(self, _transcript: Transcript) -> IntentProposal:
+            raise ValueError("provider response contained private text")
+
+    session = ConversationSession(
+        FakeProposer(IntentProposal(IntentName.SILENT, None)),
+        FakeTTS(),
+        FakePlayer(),
+        core=BrokenCore(),
+        on_diagnostic=diagnostics.append,
+    )
+
+    result = await session.respond(_transcript("hola"))
+
+    assert result.proposal == IntentProposal(IntentName.SILENT, None)
+    assert diagnostics == ["propuesta descartada: ValueError"]
+
+
+async def test_session_marks_silent_response_before_returning_to_idle():
+    lines: list[str] = []
+    session = ConversationSession(
+        FakeProposer(IntentProposal(IntentName.SILENT, None)),
+        FakeTTS(),
+        FakePlayer(),
+        timing=TurnTiming(write=lines.append),
+    )
+
+    await session.respond(_transcript("hola"))
+
+    assert [line.split("] ", 1)[1].split(" |", 1)[0] for line in lines] == [
+        "Ollama: iniciando",
+        "Ollama: respuesta lista",
+        "Respuesta: silenciosa",
+    ]

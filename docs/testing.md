@@ -1,4 +1,4 @@
-# Testing
+# Pruebas
 
 Run the complete software gate:
 
@@ -17,3 +17,8 @@ make -C firmware/sirah-eyes/tests/host core_tests
   annotations. Keep real recordings in `tests/replay/data/`, outside normal Git
   or managed with Git LFS.
 - HIL tests require explicit operator approval and are not CI prerequisites.
+- Las pruebas conversacionales usan fakes para STT, Ollama, TTS, `ffmpeg` y
+  reproducción; no requieren micrófono, bocina, Edge, Groq ni Ollama Cloud.
+- Las pruebas live de conversación siguen el protocolo de
+  [laboratorio](laboratory/voice-latency-baseline.md). Registra solo métricas,
+  no contenido de usuarios o proveedores.

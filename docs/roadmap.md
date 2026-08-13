@@ -1,8 +1,7 @@
-# Hoja de ruta de SIRAH v0.3.0
+# Hoja de ruta de SIRAH v0.3.1
 
 SIRAH significa **Sistema Inteligente Robótico de Asistencia Humana**. Esta es
-la situación del subsistema ocular: lo terminado, lo que falta para cerrar la
-versión y el trabajo que pertenece a fases posteriores.
+la situación de los ojos, el laboratorio conversacional y el trabajo posterior.
 
 ## Ya disponible
 
@@ -16,23 +15,28 @@ versión y el trabajo que pertenece a fases posteriores.
 | 6 | Simulador conductual `FakeESP32` | Completado | ADR-0009/0010 y 22 pruebas |
 | 7 | Runtime con `asyncio`, registro de componentes, políticas y CLI | Completado | `app.py`, `cli/run.py` y 169 pruebas |
 | 8 | Seguimiento 2D con fuente de cámara, detector facial y comportamiento de mirada | Completado | Pipeline cableado, OpenCV/YuNet opcional, E2E offline y `lost_face_center_s` |
+| 9 | Laboratorio conversacional con VAD, STT, LLM, TTS y medición de latencia | Experimental validado en software y laboratorio | `sirah-conversation`, 401 pruebas, `docs/conversation.md` y protocolo de laboratorio |
 
 ## En curso y próximo trabajo
 
 | Etapa | Objetivo | Estado actual | Criterio para cerrarla |
 |---|---|---|---|
-| 9 | Reproducción de sesiones y conjuntos de datos | En curso | Ya hay JSONL, reproducción de `.mp4` y fixtures mínimos; faltan capturas reales y Git LFS |
-| 10 | Supervisión del enlace y degradación en ejecución | Pendiente | Prueba HIL desconectando el enlace |
-| 11 | Timeouts de heartbeat y lectura conectados a la configuración | Pendiente | `runtime.toml` sin parámetros sin efecto |
-| 12–14 | Pendiente de definición | Pendiente | — |
-| 15/16 | Convertir la consistencia en requisito de release | Pendiente | — |
-| Futuro | Comportamiento guiado por eventos e intenciones estructuradas | Diseñado | ADR, modo sombra, reproducción y métricas antes de autorizar cualquier control |
+| 10 | Reproducción de sesiones y conjuntos de datos | En curso | Ya hay JSONL, reproducción de `.mp4` y fixtures mínimos; faltan capturas reales y Git LFS |
+| 11 | Supervisión del enlace y degradación en ejecución | Pendiente | Prueba HIL desconectando el enlace |
+| 12 | Métricas comparables de conversación y evaluación de TTS incremental | En investigación | Línea base de 30 turnos, p50/p95, calidad de STT y prueba de barge-in |
+| 13–15 | Pendiente de definición | Pendiente | — |
+| Futuro | Música, navegación y acciones físicas | Diseñado, no implementado | Requiere contratos separados, reproducción autorizada, AEC y revisión de seguridad |
 
-## Límites de v0.3.0
+## Límites de v0.3.1
 
-- La conversación, los LLM, STT y TTS siguen siendo un laboratorio de
-  ADR-0007, desactivado por defecto. Hay investigación sobre memoria e
-  intenciones estructuradas, pero no código estable incluido en esta versión.
+- La conversación, los LLM, STT y TTS son un laboratorio opt-in. La ruta cloud
+  puede enviar la transcripción final a Groq y Ollama; no guarda audio ni texto
+  por defecto y no controla hardware.
+- No hay cancelación de eco acústico. El barge-in es experimental y debe
+  validarse con la bocina y micrófono del despliegue final.
+- Música, YouTube Music, Spotify y control de reproductores no forman parte de
+  esta versión. La API de YouTube permite metadatos, no un servicio oficial de
+  streaming de YouTube Music para este caso.
 - ROS2 queda para cuando el robot incorpore cuello, brazos y audio. La unión
   prevista con el runtime actual es `EyeTransport` (ADR-0001).
 - Audio, brazos y otras modalidades requerirán nuevos componentes de registro y

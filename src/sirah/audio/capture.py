@@ -34,6 +34,16 @@ class SoundDeviceAudioSource:
         self._stream_factory = stream_factory
         self._stream: object | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._dropped_chunks = 0
+        self._queue_high_water_mark = 0
+
+    @property
+    def dropped_chunks(self) -> int:
+        return self._dropped_chunks
+
+    @property
+    def queue_high_water_mark(self) -> int:
+        return self._queue_high_water_mark
 
     async def start(self) -> None:
         if self._stream is not None:
@@ -80,7 +90,9 @@ class SoundDeviceAudioSource:
     def _enqueue(self, chunk: AudioChunk) -> None:
         if self._queue.full():
             self._queue.get_nowait()
+            self._dropped_chunks += 1
         self._queue.put_nowait(chunk)
+        self._queue_high_water_mark = max(self._queue_high_water_mark, self._queue.qsize())
 
 
 def _sounddevice_input_stream(**kwargs: Any) -> object:

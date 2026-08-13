@@ -1,15 +1,49 @@
-# Prototipo conversacional
+# Laboratorio conversacional v0.3.1
 
-SIRAH incluye una base conversacional experimental separada del runtime ocular.
-No controla ojos, ESP32, servos ni otro hardware fisico.
+SIRAH incluye un laboratorio conversacional experimental separado del runtime
+ocular. Puede escuchar un turno, reconocerlo, generar una respuesta validada y
+hablarla; no controla ojos, ESP32, servos, música ni otro hardware físico.
 
-## Instalacion
+La personalidad de demostración presenta a SIRAH como una anfitriona robótica
+cálida y honesta, proyecto del Instituto Tecnológico de Ciudad Madero (ITCM),
+desarrollado por una persona en colaboración con el equipo de robótica del Tec.
+Puede explicar que conversa por voz y que sus
+capacidades visuales siguen en desarrollo, sin afirmar reconocimiento de
+personas, seguimiento facial ni control de objetos. Mantiene los últimos seis
+intercambios completos solo durante la sesión activa y no conserva recuerdos
+entre ejecuciones. Cuando alguien quiere conocer, probar o colaborar con el
+proyecto, comparte `github.com/Laxxup/SIRAH`.
 
-Python 3.12 es obligatorio. Instala los extras para captura, Faster-Whisper,
-Silero VAD, conversación y voz local:
+## Capacidades y límites
+
+| Capacidad | Estado |
+|---|---|
+| Conversación manos libres con VAD local | Experimental |
+| STT local Faster-Whisper | Disponible como alternativa local |
+| STT cloud Groq Whisper | Experimental, opt-in |
+| LLM Ollama local o cloud | Experimental, opt-in |
+| TTS Kokoro, Azure o Edge | Experimental |
+| Edge TTS con primer PCM streaming | Validado en laboratorio |
+| Métricas de latencia `--lab` | Disponible |
+| Barge-in | Experimental, sin AEC |
+| Control de ojos, ESP32 o servos | No implementado |
+| Música, YouTube Music, Spotify o reproductores | No implementado |
+
+## Instalación
+
+Python 3.12 es obligatorio. Instala lo necesario según la ruta elegida.
+
+Ruta local con Faster-Whisper y Kokoro:
 
 ```bash
 pip install -e ".[audio,vad,conversation,local-tts]"
+```
+
+Ruta cloud medida en laboratorio con Groq y Edge:
+
+```bash
+pip install -e ".[audio,vad,conversation,edge-tts]"
+sudo apt install ffmpeg
 ```
 
 Silero VAD usa la distribución oficial y su backend ONNX. Faster-Whisper usa
@@ -20,6 +54,38 @@ La voz local requiere `espeak-ng` disponible en el sistema. Kokoro funciona en
 CPU y Python 3.12. La primera carga descarga los pesos; después trabaja sin red
 si la caché ya está completa.
 
+## Inicio recomendado: cloud con métricas
+
+1. Crea el archivo privado desde la plantilla:
+
+```bash
+mkdir -p ~/.config/sirah
+cp config/conversation.env.example ~/.config/sirah/conversation.env
+chmod 600 ~/.config/sirah/conversation.env
+```
+
+2. Edita el archivo y completa `SIRAH_OLLAMA_HOST`,
+`SIRAH_OLLAMA_MODEL`, `SIRAH_OLLAMA_API_KEY` cuando el host remoto lo requiera,
+y `SIRAH_GROQ_API_KEY`. Para la configuración de latencia probada, usa:
+
+```text
+SIRAH_STT_PROVIDER=groq
+SIRAH_TTS_PROVIDER=edge
+SIRAH_OLLAMA_THINK=low
+```
+
+3. Carga el archivo y arranca:
+
+```bash
+set -a
+source ~/.config/sirah/conversation.env
+set +a
+sirah-conversation listen --live --stt-provider groq --tts-provider edge --lab
+```
+
+`SIRAH_OLLAMA_THINK=low` es una opción de laboratorio: compara al menos diez
+turnos con `default` antes de adoptarla en otro entorno.
+
 ## Comandos
 
 ```bash
@@ -27,6 +93,7 @@ sirah-conversation devices
 sirah-conversation replay tests/fixtures/conversation/approved.jsonl
 sirah-conversation config
 sirah-conversation ollama-check
+sirah-conversation ollama-stream-probe --live --think low
 ```
 
 `replay` es completamente offline: usa transcripciones de fixture, Ollama falso,
@@ -52,6 +119,19 @@ usa la voz local:
 sirah-conversation listen --live
 ```
 
+Para usar Groq Whisper Cloud en vez de Faster-Whisper local, crea una clave en
+<https://console.groq.com/keys> y guárdala solo en
+`~/.config/sirah/conversation.env`:
+
+```bash
+SIRAH_STT_PROVIDER=groq
+SIRAH_GROQ_API_KEY=tu_clave
+```
+
+Luego inicia la conversación con `--stt-provider groq`. Groq recibe cada turno
+cerrado de audio como WAV mono de 16 kHz; nunca se guarda audio en el repositorio.
+Faster-Whisper sigue disponible con `--stt-provider local` como respaldo.
+
 Para preparar la prueba sin Azure, TTS ni bocina, usa el modo de texto:
 
 ```bash
@@ -65,6 +145,48 @@ Muestra `escuchando`, `procesando`, `hablando`, `interrumpido`,
 turno. `Ctrl-C` detiene la captura, cancela el trabajo pendiente y libera los
 buffers. `push-to-talk` queda como diagnostico, alternativa de accesibilidad y
 fallback cuando VAD no este disponible.
+
+Para medir la latencia real sin guardar texto ni audio, añade `--lab`:
+
+```bash
+sirah-conversation listen --live --stt-provider groq --tts-provider edge --lab
+```
+
+La terminal muestra la hora y duración acumulada de cada etapa: cierre de voz,
+STT, Ollama, síntesis, inicio de altavoz y fin de reproducción. Para aislar
+solo TTS, reproduce una frase de prueba:
+
+```bash
+sirah-conversation tts-check --live --provider edge --lab
+```
+
+Compara el valor `turno` de `Altavoz: iniciando` entre pruebas. La mejora
+porcentual se calcula como `(referencia_ms - prueba_ms) / referencia_ms * 100`.
+Los diagnósticos se imprimen únicamente en la terminal; usa `--record-session`
+si también quieres guardar eventos de sesión autorizados.
+
+Si una propuesta cloud no llega a TTS, `--lab` indica `Respuesta: silenciosa`.
+Cuando la respuesta se descarta por formato, validación o proveedor, imprime
+solo la categoría de excepción bajo `diagnóstico:`; nunca el texto de la
+transcripción ni la respuesta.
+
+Para investigar solo Ollama Cloud sin micrófono ni texto de respuesta, usa:
+
+```bash
+sirah-conversation ollama-stream-probe --live --context-limit 0
+```
+
+Imprime tiempos de primer evento, primer fragmento de contenido y respuesta
+final, junto con contadores de tokens y de razonamiento que el servidor
+entregue. Para comparar modelos con razonamiento, añade `--think false` o
+`--think low`; `default` conserva el comportamiento del endpoint.
+
+Para evaluar `low` en la conversación real sin tocar el comando, establece
+`SIRAH_OLLAMA_THINK=low` en el archivo privado de configuración. Mantén
+`default` como referencia y compara al menos diez turnos de cada condición.
+
+El protocolo de línea base y estrés para la computadora de laboratorio está en
+[`docs/laboratory/voice-latency-baseline.md`](laboratory/voice-latency-baseline.md).
 
 El microfono se analiza continuamente solo en memoria. Solo se transcribe un
 turno cerrado y solo una transcripcion final no vacia se envia al LLM. Los
@@ -120,6 +242,22 @@ la cola PCM. Cancelar un turno evita que PCM obsoleto llegue al altavoz; no
 interrumpe una inferencia de CPU que ya está dentro de una llamada de biblioteca.
 No hay medición todavía en Raspberry Pi 4 de 8 GB.
 
+## Voz Edge
+
+Edge TTS usa las voces neuronales de Microsoft sin configurar una clave Azure.
+Instala el extra y `ffmpeg` para usarlo:
+
+```bash
+pip install -e ".[audio,conversation,edge-tts]"
+sudo apt install ffmpeg
+```
+
+Con `--tts-provider edge`, SIRAH entrega a `ffmpeg` los fragmentos recibidos y
+reproduce PCM desde un único flujo de salida. No espera a descargar ni a
+decodificar el turno completo antes de empezar a hablar. El búfer del sistema
+de audio se configura inicialmente en 300 ms para priorizar continuidad. Esa
+configuración no se expone todavía como opción del CLI ni variable de entorno.
+
 ## Sesiones de diagnóstico
 
 Por defecto no se escribe ningún registro. En `text-chat`, `--record-session`
@@ -143,16 +281,41 @@ en ese directorio; no aceptan rutas arbitrarias.
 
 ## Configuracion
 
+Para conversación cloud, crea tu archivo privado a partir de la plantilla:
+
+```bash
+mkdir -p ~/.config/sirah
+cp config/conversation.env.example ~/.config/sirah/conversation.env
+chmod 600 ~/.config/sirah/conversation.env
+```
+
+Edita `~/.config/sirah/conversation.env`, añade las claves y carga las
+variables antes de ejecutar el CLI:
+
+```bash
+set -a
+source ~/.config/sirah/conversation.env
+set +a
+sirah-conversation listen --live --stt-provider groq --tts-provider edge --lab
+```
+
+El CLI no carga ese archivo de forma automática: se mantiene explícito para no
+leer ni exponer claves sin autorización del operador.
+
 ```text
 SIRAH_OLLAMA_HOST=http://127.0.0.1:11434
 SIRAH_OLLAMA_MODEL=gpt-oss:20b-cloud
 SIRAH_OLLAMA_API_KEY=              # solo para host remoto directo
+SIRAH_OLLAMA_THINK=default         # default, false o low
 SIRAH_WHISPER_MODEL=base
 SIRAH_WHISPER_DEVICE=cpu
 SIRAH_WHISPER_COMPUTE_TYPE=int8
 SIRAH_WHISPER_LANGUAGE=es
 SIRAH_WHISPER_CACHE=~/.cache/sirah/whisper
-SIRAH_TTS_PROVIDER=local
+SIRAH_STT_PROVIDER=local
+SIRAH_GROQ_API_KEY=
+SIRAH_TTS_PROVIDER=local            # local, azure o edge
+SIRAH_EDGE_TTS_VOICE=es-MX-DaliaNeural
 SIRAH_LOCAL_TTS_MODEL=hexgrad/Kokoro-82M
 SIRAH_LOCAL_TTS_VOICE=ef_dora
 SIRAH_LOCAL_TTS_CACHE=~/.cache/sirah/kokoro
@@ -179,3 +342,9 @@ audio, transcripciones, perfiles ni prompts.
 Azure TTS es opcional. Selecciónalo con `--tts-provider azure` y configura
 `SIRAH_AZURE_SPEECH_KEY` y `SIRAH_AZURE_SPEECH_REGION`. La voz
 `es-MX-DaliaNeural` sigue pendiente de prueba auditiva y medición de latencia.
+
+YouTube Data API permite buscar metadatos de videos y playlists, pero no es una
+API oficial de reproducción de YouTube Music para este laboratorio. No uses
+extractores no oficiales de audio como parte de SIRAH. Una futura integración de
+música requerirá un reproductor autorizado, controles de pausa/ducking y AEC
+para no degradar VAD, STT ni barge-in.

@@ -1,16 +1,24 @@
-# SIRAH v0.3.0 — Architecture
+# SIRAH v0.3.1 — Arquitectura
 
 SIRAH = **Sistema Inteligente Robótico de Asistencia Humana** (only in
 Spanish, never translated). This document describes the architecture of the
-**eyes subsystem** in this repository: layers, boundaries, dependency
-direction and the physical frontiers.
+runtime físico y del laboratorio conversacional: capas, límites, dirección de
+dependencias y fronteras físicas.
 
-## 1. Layers
+## 1. Sistemas separados
+
+SIRAH mantiene dos sistemas con límites explícitos:
+
+- El runtime físico controla ojos mediante el protocolo PC ↔ ESP32.
+- El laboratorio conversacional recibe y genera audio, pero su contrato de
+  acción sigue limitado a `none`; no envía comandos al runtime físico.
+
+## 2. Runtime físico
 
 ```
- percepción (Stage 8, planificada)      webcam USB → camera_source → face_detector
+ percepción (Stage 8)                   webcam USB → camera_source → face_detector
               ↓ GazeTarget (x, y, conf)
- comportamiento (Stage 8, planificado)  gaze_behavior → Setpoint + LostFacePolicy
+ comportamiento (Stage 8)               gaze_behavior → Setpoint + LostFacePolicy
               ↓ Setpoint (normalizado)
  runtime estable (PC / Raspberry Pi)    RuntimeApp (lifecycle + registry) ·
                                         HeartbeatWriter · SetpointGate
@@ -27,7 +35,7 @@ Dependency direction is always toward stable layers: `cli → runtime →
 (config, hardware)` and `hardware → protocol + config`; `protocol/`,
 `runtime/policies.py` and `transport.py` have zero external dependencies.
 
-## 2. Frontiers (stables runtime ↔ ESP32)
+## 3. Frontera estable runtime ↔ ESP32
 
 | | Runtime (PC) | ESP32 firmware (sirah-eyes) |
 |---|---|---|
@@ -43,7 +51,7 @@ Dependency direction is always toward stable layers: `cli → runtime →
 - Laboratorio (ADR-0007): `laboratory/` no importa ni es importado por el
   runtime; acceso físico SOLO vía `LabProposalGate`, OFF por defecto.
 
-## 3. Runtime details
+## 4. Detalles del runtime físico
 
 - `RuntimeApp.from_config` fusiona `runtime.toml` (A9) + `actuators.yaml`.
 - Arranque: `_start_eyes()` (transport.connect, falla → DEGRADED, la app
@@ -53,7 +61,31 @@ Dependency direction is always toward stable layers: `cli → runtime →
   frame → detect → behavior → gate → TARGET llega en Stage 8 con
   Protocol nominales en `src/sirah/perception|behavior`.
 
-## 4. Simulación y tests
+## 5. Laboratorio conversacional
+
+```
+micrófono → SoundDeviceAudioSource → Silero VAD local
+          → turno cerrado PCM 16 kHz mono
+          → STT: Faster-Whisper local o Groq Whisper cloud
+          → ConversationCore → Ollama Cloud o respuestas locales
+          → validación externa: intent, emotion, action=none, speech
+          → TTS: Kokoro local, Azure PCM o Edge TTS streaming
+          → reproducción PCM → bocina
+```
+
+- La captura usa colas acotadas y descarta audio antiguo al saturarse; `--lab`
+  reporta descartes y ocupación máxima.
+- Edge TTS entrega MP3 incrementalmente, `ffmpeg` lo convierte a PCM y un
+  propietario único serializa el ciclo de vida del stream PortAudio.
+- Cada turno puede cancelarse por parada o barge-in. No hay AEC, por lo que el
+  barge-in sigue siendo experimental.
+- Los diagnósticos de latencia no guardan audio ni texto: miden fin de voz, STT,
+  Ollama, primer PCM y reproducción. La sonda de Ollama mide primer contenido y
+  razonamiento sin retener la respuesta.
+- `SIRAH_OLLAMA_THINK=low` es una configuración de laboratorio para reducir
+  razonamiento del endpoint. No altera la validación ni autoriza acciones.
+
+## 6. Simulación y pruebas
 
 | Suite | Contenido | Gate |
 |---|---|---|
@@ -67,7 +99,7 @@ Dependency direction is always toward stable layers: `cli → runtime →
 mapping/easing/blink con las mismas constantes y calibración que el
 runtime — probar sin hardware no es un mock improvisado.
 
-## 5. Decisiones arquitectónicas relevantes
+## 7. Decisiones arquitectónicas relevantes
 
 - ADR-0001: núcleo ROS2-agnóstico; bridge solo si el robot crece (cuello/
   brazos/audio). No se implementa ahora.
@@ -80,3 +112,5 @@ runtime — probar sin hardware no es un mock improvisado.
 - ADR-0010: estrategia fake/replay/HIL.
 - ADR-0011: PCA9685 + fuente externa 5 V para el rail de servos; canales
   VERIFIED 2026-08-09.
+- La conversación, incluidos STT, LLM, TTS y reproducción, permanece aislada
+  del runtime físico hasta una decisión explícita y pruebas de seguridad.

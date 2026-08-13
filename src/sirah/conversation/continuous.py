@@ -11,6 +11,7 @@ from enum import Enum
 from typing import Protocol
 
 from sirah.audio.contracts import AudioChunk, AudioSource, SpeechToText, Transcript
+from sirah.conversation.timing import TurnTiming
 
 
 class ConversationState(str, Enum):
@@ -40,7 +41,8 @@ class ContinuousSessionConfig:
     end_silence_ms: int = 700
     max_turn_seconds: float = 15.0
     pre_roll_ms: int = 300
-    max_queue_chunks: int = 128
+    # At 16 kHz / 512 frames, 512 chunks retain 16.384 seconds of a turn.
+    max_queue_chunks: int = 512
     barge_in_threshold: float = 0.75
     barge_in_min_speech_ms: int = 200
     barge_in: bool = False
@@ -75,6 +77,8 @@ class ContinuousConversationSession:
         clock: Callable[[], float] | None = None,
         on_state_change: Callable[[ConversationState], Awaitable[None] | None] | None = None,
         on_error: Callable[[Exception], Awaitable[None] | None] | None = None,
+        timing: TurnTiming | None = None,
+        stt_label: str = "STT",
     ) -> None:
         self._source = source
         self._vad = vad
@@ -84,6 +88,8 @@ class ContinuousConversationSession:
         self._clock = clock
         self._on_state_change = on_state_change
         self._on_error = on_error
+        self._timing = timing
+        self._stt_label = stt_label
         self._state = ConversationState.IDLE
         self._transitions = [self._state]
         self._preroll: deque[AudioChunk] = deque(maxlen=self._config.max_queue_chunks)
@@ -167,6 +173,9 @@ class ContinuousConversationSession:
             self._clear_buffers()
             return
         if self._state is ConversationState.PROCESSING:
+            if not self._config.barge_in:
+                self._clear_buffers()
+                return
             self._append_preroll(chunk)
             if speech:
                 await self._interrupt_for_new_voice(chunk)
@@ -219,6 +228,9 @@ class ContinuousConversationSession:
         if speech_ms < self._config.min_speech_ms:
             await self._set_state(ConversationState.IDLE)
             return
+        if self._timing is not None:
+            self._timing.reset()
+            self._timing.mark("Fin de voz detectado")
         await self._set_state(ConversationState.PROCESSING)
         self._processing_task = asyncio.create_task(self._process_turn(generation, chunks))
         # Give the task one scheduling point so capture can continue while it waits on I/O.
@@ -226,7 +238,9 @@ class ContinuousConversationSession:
 
     async def _process_turn(self, generation: int, chunks: Sequence[AudioChunk]) -> None:
         try:
+            self._mark(f"{self._stt_label}: iniciando")
             transcript = await self._stt.transcribe(chunks)
+            self._mark(f"{self._stt_label}: listo")
             if generation != self._generation or not transcript.text.strip():
                 return
             await self._set_state(ConversationState.SPEAKING)
@@ -286,3 +300,7 @@ class ContinuousConversationSession:
         result = self._on_error(error)
         if result is not None:
             await result
+
+    def _mark(self, label: str) -> None:
+        if self._timing is not None:
+            self._timing.mark(label)

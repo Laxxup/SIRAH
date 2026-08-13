@@ -16,27 +16,32 @@
   <img src="https://img.shields.io/badge/status-prototipo%20en%20desarrollo-6A5ACD" alt="Prototipo en desarrollo">
 </p>
 
-## About SIRAH
+## Qué es SIRAH
 
 SIRAH significa **Sistema Inteligente Robótico de Asistencia Humana**. Es un
 proyecto universitario del Instituto Tecnológico de Ciudad Madero (ITCM),
 desarrollado en el Taller de Robótica con colaboración del IPT de Tampico
 Centro.
 
-El proyecto construye un robot humanoide educativo mediante electrónica,
-software, control y sistemas embebidos. Sigue en desarrollo: las funciones
-documentadas como experimentales no deben interpretarse como capacidades listas
-para producción.
+El proyecto integra electrónica, software, control e inteligencia artificial
+para construir un robot humanoide educativo. Sigue en desarrollo: las funciones
+experimentales no son capacidades listas para producción ni controlan el robot
+sin supervisión.
 
 ## Estado actual
 
 - Runtime Python con `asyncio`, protocolo PC ↔ ESP32 y `FakeESP32` para pruebas sin hardware.
-- Subsistema ocular con mirada 2D, párpados, límites y calibración.
-- Laboratorio conversacional con Ollama, capacidades locales, contexto corto y logs opt-in.
-- Conversación local experimental con Silero VAD, Faster-Whisper y Kokoro.
+- Subsistema ocular con mirada 2D, párpados, límites físicos y calibración.
+- Laboratorio conversacional de manos libres con VAD local, STT local o Groq,
+  Ollama y TTS local, Azure o Edge.
+- Edge TTS entrega audio por streaming; el pipeline mide STT, Ollama, primer
+  PCM y salida de audio mediante `--lab`.
+- `SIRAH_OLLAMA_THINK=low` es una configuración de laboratorio para comparar
+  el presupuesto de razonamiento cloud sin cambiar el contrato de respuesta.
 
 La conversación no controla ojos, ESP32, servos ni otro hardware. El contrato
-de acción permanece limitado a `none`.
+de acción permanece limitado a `none`; música, navegación y acciones físicas
+no están implementadas.
 
 ## Inicio rápido
 
@@ -48,8 +53,20 @@ sirah-runtime --fake --eyes
 ```
 
 Para conversación y sus requisitos locales, consulta
-[docs/conversation.md](docs/conversation.md). Antes de conectar hardware físico,
-lee [docs/hardware/](docs/hardware/).
+[docs/conversation.md](docs/conversation.md). Para probar la ruta cloud
+validada en laboratorio:
+
+```bash
+pip install -e ".[audio,vad,conversation,edge-tts]"
+sudo apt install ffmpeg
+mkdir -p ~/.config/sirah
+cp config/conversation.env.example ~/.config/sirah/conversation.env
+# Edita el archivo privado con Ollama y Groq; nunca subas las claves.
+set -a && source ~/.config/sirah/conversation.env && set +a
+sirah-conversation listen --live --stt-provider groq --tts-provider edge --lab
+```
+
+Antes de conectar hardware físico, lee [docs/hardware/](docs/hardware/).
 
 ## Pruebas
 
@@ -68,14 +85,15 @@ make -C firmware/sirah-eyes/tests/host contract_checker
 
 ## Documentación
 
-- [Arquitectura](docs/architecture.md)
-- [Inicio rápido](docs/quickstart.md)
-- [Conversación](docs/conversation.md)
+- [Inicio rápido: ojos y conversación](docs/quickstart.md)
+- [Guía conversacional: instalación, configuración y diagnóstico](docs/conversation.md)
+- [Línea base de latencia en laboratorio](docs/laboratory/voice-latency-baseline.md)
+- [Arquitectura: runtime físico y laboratorio conversacional](docs/architecture.md)
 - [Roadmap](docs/roadmap.md)
 - [Prechecks de release](docs/release.md)
 - [Hardware y calibración](docs/hardware/)
 - [ADR](docs/adr/)
-- [Contribuir](CONTRIBUTING.md)
+- [Contribuir de forma segura](CONTRIBUTING.md)
 
 ## Licencia
 

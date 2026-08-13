@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 
 import pytest
 
@@ -48,3 +49,17 @@ async def test_cancelling_operation_cancels_inflight_synthesis():
 
     with pytest.raises(asyncio.CancelledError):
         await synthesis
+
+
+async def test_tts_relays_provider_pcm_stream_under_its_operation_id():
+    class StreamingClient:
+        async def synthesize(self, _text: str) -> bytes:
+            raise AssertionError("streaming provider must not synthesize a complete response")
+
+        async def stream(self, _text: str) -> AsyncIterator[bytes]:
+            yield b"first"
+            yield b"last"
+
+    tts = AsyncTTS(StreamingClient)
+
+    assert [chunk async for chunk in tts.stream("reply-1", "hola")] == [b"first", b"last"]

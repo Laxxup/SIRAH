@@ -1,8 +1,8 @@
-# SIRAH v0.3.0 — Quickstart
+# SIRAH v0.3.1 — Inicio rápido
 
-SIRAH = **Sistema Inteligente Robótico de Asistencia Humana** (only in
-Spanish, never translated). Two paths: **no hardware** (FakeESP32 twin,
-under 3 minutes) and **real hardware** (under 5 minutes on top).
+SIRAH = **Sistema Inteligente Robótico de Asistencia Humana**. Hay dos rutas
+independientes: ojos con `FakeESP32` o hardware físico, y conversación por voz
+en laboratorio. La conversación no mueve el robot.
 
 Prerequisitos: Python ≥ 3.12 en PC o Raspberry Pi 4.
 
@@ -65,8 +65,29 @@ Comprueba que `config/actuators.yaml` espeja sin divergencias
 | `eyes: DEGRADED` al bootear | Serial ocupada o ESP32 sin flash | Cerrar otros programas, verificar cable |
 | Servos no responden | Falta la fuente 5 V / brownout | Fuente externa + GND común (ADR-0011) |
 
-## 5. Prototipo conversacional experimental
+## 5. Conversación experimental por voz
 
-El prototipo conversacional no controla los ojos ni requiere el ESP32. Consulta
-[conversation.md](conversation.md) para ejecutar el replay offline y conocer
-los requisitos de microfono, Ollama y TTS.
+El laboratorio conversacional no requiere ojos ni ESP32. Instala audio, VAD,
+conversación y Edge TTS, además de `ffmpeg`:
+
+```bash
+pip install -e ".[audio,vad,conversation,edge-tts]"
+sudo apt install ffmpeg
+mkdir -p ~/.config/sirah
+cp config/conversation.env.example ~/.config/sirah/conversation.env
+chmod 600 ~/.config/sirah/conversation.env
+```
+
+Completa Ollama y Groq en el archivo privado, cárgalo y abre la conversación:
+
+```bash
+set -a
+source ~/.config/sirah/conversation.env
+set +a
+sirah-conversation listen --live --stt-provider groq --tts-provider edge --lab
+```
+
+La ruta local usa Faster-Whisper y Kokoro; la ruta cloud probada en laboratorio
+usa Groq para STT, Ollama para intención y Edge para voz. Consulta
+[conversation.md](conversation.md) para privacidad, comandos, diagnóstico,
+barge-in y límites acústicos.

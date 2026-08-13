@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from typing import Protocol
 
 
@@ -30,6 +30,23 @@ class AsyncTTS:
         self._active[operation_id] = task
         try:
             return await self._get_client().synthesize(text)
+        finally:
+            if self._active.get(operation_id) is task:
+                self._active.pop(operation_id, None)
+
+    async def stream(self, operation_id: str, text: str) -> AsyncIterator[bytes]:
+        """Yield provider PCM incrementally when its adapter supports streaming."""
+        task = asyncio.current_task()
+        if task is None:
+            raise RuntimeError("synthesis requires an asyncio task")
+        self._active[operation_id] = task
+        try:
+            stream = getattr(self._get_client(), "stream", None)
+            if stream is None:
+                yield await self._get_client().synthesize(text)
+                return
+            async for pcm in stream(text):
+                yield pcm
         finally:
             if self._active.get(operation_id) is task:
                 self._active.pop(operation_id, None)

@@ -22,5 +22,8 @@ async def test_core_suite_handles_identity_time_context_and_safe_fallbacks():
     assert "22:30" in hour.speech
     assert first.speech == "Tienes cinco manzanas."
     assert follow_up.speech == "Tienes cinco manzanas."
-    assert proposer.requests[-1].context[-1] == "Tengo tres manzanas."
+    assert proposer.requests[-1].context[-2:] == (
+        "Persona: Tengo tres manzanas.",
+        "SIRAH: Tienes cinco manzanas.",
+    )
     assert unclear.intent is IntentName.CLARIFY

@@ -60,6 +60,95 @@ async def test_core_confirms_listening_at_reduced_confidence():
     assert proposer.requests == []
 
 
+async def test_core_acknowledges_brief_confirmations_without_cloud():
+    proposer = FakeIntentProposer(IntentProposal(IntentName.ANSWER, "ignored"))
+    response = await ConversationCore(proposer).respond(_transcript("ah ok ok"))
+
+    assert response.speech == "Me alegra. Si quieres, podemos seguir conversando o probar otra cosa."
+    assert proposer.requests == []
+
+
+async def test_core_handles_unverified_tec_activities_warmly_without_inventing():
+    proposer = FakeIntentProposer(IntentProposal(IntentName.ANSWER, "ignored"))
+    response = await ConversationCore(proposer).respond(
+        _transcript("¿Hay taller de robótica en el Tec?")
+    )
+
+    assert "No tengo confirmación" in response.speech
+    assert "facultad" in response.speech
+    assert proposer.requests == []
+
+
+async def test_core_describes_current_capabilities_and_development_goals_locally():
+    proposer = FakeIntentProposer(IntentProposal(IntentName.ANSWER, "ignored"))
+    core = ConversationCore(proposer)
+
+    response = await core.respond(_transcript("¿Qué puedes hacer y qué te falta?"))
+
+    assert "conversar" in response.speech
+    assert "sistema visual" in response.speech
+    assert "seguir rostros" in response.speech
+    assert proposer.requests == []
+
+
+async def test_core_introduces_its_open_source_project_locally():
+    proposer = FakeIntentProposer(IntentProposal(IntentName.ANSWER, "ignored"))
+    core = ConversationCore(proposer)
+
+    response = await core.respond(_transcript("¿Te puedes presentar?"))
+
+    assert "SIRAH" in response.speech
+    assert "GitHub" in response.speech
+    assert "github.com/Laxxup/SIRAH" in response.speech
+    assert proposer.requests == []
+
+
+async def test_core_shares_repository_when_someone_wants_to_try_or_contribute():
+    proposer = FakeIntentProposer(IntentProposal(IntentName.ANSWER, "ignored"))
+    core = ConversationCore(proposer)
+
+    response = await core.respond(_transcript("Quiero probarte y aportar ideas"))
+
+    assert "github.com/Laxxup/SIRAH" in response.speech
+    assert proposer.requests == []
+
+
+async def test_core_retains_sirah_response_in_cloud_context():
+    proposer = FakeIntentProposer(IntentProposal(IntentName.ANSWER, "Sí, puedo conocerte."))
+    core = ConversationCore(proposer)
+
+    await core.respond(_transcript("Hola"))
+    await core.respond(_transcript("¿Qué piensas de eso?"))
+
+    assert proposer.requests[1].context == (
+        "Persona: Hola",
+        "SIRAH: Sí, puedo conocerte.",
+    )
+
+
+async def test_core_retains_six_complete_turns_for_cloud_follow_ups():
+    proposer = FakeIntentProposer(IntentProposal(IntentName.ANSWER, "Sí, sigamos con ese tema."))
+    core = ConversationCore(proposer)
+
+    for number in range(7):
+        await core.respond(_transcript(f"Tema {number}"))
+
+    assert proposer.requests[-1].context == (
+        "Persona: Tema 0",
+        "SIRAH: Sí, sigamos con ese tema.",
+        "Persona: Tema 1",
+        "SIRAH: Sí, sigamos con ese tema.",
+        "Persona: Tema 2",
+        "SIRAH: Sí, sigamos con ese tema.",
+        "Persona: Tema 3",
+        "SIRAH: Sí, sigamos con ese tema.",
+        "Persona: Tema 4",
+        "SIRAH: Sí, sigamos con ese tema.",
+        "Persona: Tema 5",
+        "SIRAH: Sí, sigamos con ese tema.",
+    )
+
+
 async def test_core_accepts_valid_spanish_listening_response_from_cloud():
     proposer = FakeIntentProposer(IntentProposal(IntentName.ANSWER, "Sí, te escucho."))
     response = await ConversationCore(proposer).respond(_transcript("Háblame normalmente", confidence=0.8))

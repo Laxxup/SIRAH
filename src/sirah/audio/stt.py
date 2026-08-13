@@ -34,6 +34,10 @@ class FasterWhisperSTT:
     async def transcribe(self, chunks: Sequence[AudioChunk]) -> Transcript:
         return await asyncio.to_thread(self._transcribe, tuple(chunks))
 
+    async def preload(self) -> None:
+        """Load the model before the first spoken turn."""
+        await asyncio.to_thread(self._get_model)
+
     def _transcribe(self, chunks: tuple[AudioChunk, ...]) -> Transcript:
         if not chunks:
             raise ValueError("at least one audio chunk is required")
@@ -47,7 +51,10 @@ class FasterWhisperSTT:
         pcm = b"".join(chunk.pcm for chunk in chunks)
         audio = _pcm_to_mono_float(pcm, first.channels)
         segments, _info = self._get_model().transcribe(  # type: ignore[attr-defined]
-            audio, language=self._language, initial_prompt="Conversación breve en español con SIRAH."
+            audio,
+            language=self._language,
+            initial_prompt="Conversación breve en español con SIRAH.",
+            beam_size=1,
         )
         result = tuple(segments)
         average_logprob = (

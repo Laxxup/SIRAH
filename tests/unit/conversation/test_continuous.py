@@ -8,6 +8,7 @@ from sirah.conversation.continuous import (
     ContinuousSessionConfig,
     ConversationState,
 )
+from sirah.conversation.timing import TurnTiming
 
 
 def _chunk(at: float) -> AudioChunk:
@@ -272,3 +273,53 @@ async def test_default_semiduplex_discards_microphone_frames_while_speaking():
 
     assert conversation.interruptions == 0
     assert session.buffered_chunks == 0
+
+
+async def test_default_semiduplex_discards_microphone_frames_while_processing():
+    conversation = FakeConversation()
+    session = ContinuousConversationSession(FakeSource([]), FakeVAD({1.0}), FakeSTT([]), conversation)
+    await session._set_state(ConversationState.PROCESSING)
+
+    await session._handle_chunk(_chunk(1.0))
+
+    assert conversation.interruptions == 0
+    assert session.state is ConversationState.PROCESSING
+    assert session.buffered_chunks == 0
+
+
+async def test_session_reports_voice_end_and_stt_timing_before_the_response():
+    lines: list[str] = []
+    session = ContinuousConversationSession(
+        FakeSource([_chunk(0.0), _chunk(0.1), _chunk(0.4)]),
+        FakeVAD({0.1}),
+        FakeSTT(["hola"]),
+        FakeConversation(),
+        config=ContinuousSessionConfig(end_silence_ms=200, min_speech_ms=0),
+        timing=TurnTiming(write=lines.append),
+        stt_label="STT Groq",
+    )
+
+    await session.run()
+
+    assert [line.split("] ", 1)[1].split(" |", 1)[0] for line in lines] == [
+        "Fin de voz detectado",
+        "STT Groq: iniciando",
+        "STT Groq: listo",
+    ]
+
+
+async def test_retains_a_fifteen_second_turn_at_the_configured_32ms_frame_size():
+    chunks = [_chunk(index * 0.032) for index in range(470)]
+    stt = FakeSTT(["turno largo"])
+    session = ContinuousConversationSession(
+        FakeSource(chunks),
+        FakeVAD({chunk.observed_at for chunk in chunks}),
+        stt,
+        FakeConversation(),
+        config=ContinuousSessionConfig(max_turn_seconds=15, min_speech_ms=0),
+    )
+
+    await session.run()
+
+    assert len(stt.requests) == 1
+    assert len(stt.requests[0]) >= 469

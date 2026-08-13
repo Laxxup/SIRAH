@@ -1,8 +1,37 @@
 # Changelog
 
-SIRAH = **Sistema Inteligente Robótico de Asistencia Humana** (only in
-Spanish, never translated). Historico por stage del subsistema de ojos
-(SIRAH v0.3.0). Formato: Conventional Commits.
+SIRAH = **Sistema Inteligente Robótico de Asistencia Humana** (solo en
+español). Histórico de releases. Formato: Conventional Commits.
+
+## v0.3.1 — Laboratorio conversacional y observabilidad (2026-08-13)
+
+### Conversación
+- `feat(conversation)`: STT cloud opcional con Groq Whisper para turnos WAV
+  mono de 16 kHz, manteniendo Faster-Whisper local como alternativa.
+- `feat(conversation)`: Edge TTS opcional con voces neuronales, decodificación
+  streaming con `ffmpeg` y salida PCM continua; Azure y Kokoro permanecen
+  disponibles.
+- `feat(conversation)`: modo `--lab` con marcas de tiempo para fin de voz,
+  STT, Ollama, primer PCM, reproducción y salud de la cola de captura.
+- `feat(conversation)`: sonda de Ollama streaming que mide primer evento,
+  primer contenido, razonamiento y respuesta final sin almacenar contenido.
+- `feat(conversation)`: `SIRAH_OLLAMA_THINK=low` permite evaluar un presupuesto
+  reducido de razonamiento para Ollama Cloud; su impacto debe compararse en el
+  entorno de laboratorio antes de adoptarlo.
+
+### Robustez y documentación
+- `fix(audio)`: propiedad serializada del stream de salida para evitar cerrar
+  PortAudio mientras una escritura nativa sigue activa.
+- `fix(conversation)`: el buffer de turno conserva hasta 15 segundos de audio
+  con bloques de 32 ms, en vez de truncar turnos largos cerca de cuatro segundos.
+- `docs`: guía de conversación, plantilla de configuración privada, protocolo
+  de laboratorio, documentación de arquitectura, release y contribución.
+
+### Límites conocidos
+- La conversación sigue siendo experimental, opt-in y no controla hardware.
+- No hay AEC: el barge-in es experimental y debe probarse con el micrófono y la
+  bocina finales.
+- No se integra música, YouTube Music, Spotify ni control de reproductores.
 
 ## v0.3.0 — Milestone 1 (eyes core)
 

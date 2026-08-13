@@ -20,3 +20,8 @@ deterministic clarification, never to a physical fallback command.
 
 Any implementation must first add an ADR, shadow mode, replay scenarios and
 metrics for latency, token use, rejected intents and false proactivity.
+
+The shadow coordinator accepts only a semantic event and a derived
+`Transcript`. It builds an `IntentRequest`, calls an injected proposer, and
+records either the structured proposal or its rejection. It has no runtime,
+transport, audio-capture, TTS, or physical-action dependency.

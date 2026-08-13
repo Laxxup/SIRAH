@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sirah"
-version = "0.3.0"
-description = "SIRAH — Sistema Inteligente Robótico de Asistencia Humana; v0.3.0 subsistema de ojos (mirada 2D, parpadeo, tracking)"
+version = "0.3.1"
+description = "SIRAH — Sistema Inteligente Robótico de Asistencia Humana; ojos y laboratorio conversacional de baja latencia"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
@@ -27,6 +27,7 @@ audio = [
 vad = ["silero-vad>=6.2.1", "onnxruntime>=1.16.1"]
 conversation = ["pydantic>=2"]
 local-tts = ["kokoro==0.9.4"]
+edge-tts = ["edge-tts>=7.0"]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.24",
@@ -65,6 +66,8 @@ module = [
     "torch",
     "huggingface_hub",
     "kokoro",
+    "edge_tts",
+    "serial_asyncio",
 ]
 ignore_missing_imports = true
 

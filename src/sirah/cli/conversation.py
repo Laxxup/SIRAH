@@ -11,6 +11,7 @@ from pathlib import Path
 
 from sirah.audio.capture import SoundDeviceAudioSource
 from sirah.audio.contracts import Transcript
+from sirah.audio.groq_stt import GroqWhisperSTT
 from sirah.audio.playback import SoundDevicePCMPlayer
 from sirah.audio.replay import load_replay
 from sirah.audio.stt import FasterWhisperSTT
@@ -25,6 +26,7 @@ from sirah.conversation.contracts import IntentRequest
 from sirah.conversation.core import ConversationCore
 from sirah.conversation.ollama import OllamaIntentProposer
 from sirah.conversation.session import ConversationSession, OperationTTS
+from sirah.conversation.timing import TurnTiming
 
 
 class _TextOnlyResponder:
@@ -56,6 +58,13 @@ def build_parser() -> argparse.ArgumentParser:
     replay.add_argument("path", type=Path)
     check = commands.add_parser("ollama-check", help="check Cloud configuration without sending text")
     check.add_argument("--live", action="store_true", help="permit one diagnostic request")
+    stream_probe = commands.add_parser(
+        "ollama-stream-probe", help="measure Ollama stream timing without saving assistant text"
+    )
+    stream_probe.add_argument("--live", action="store_true", help="permit one diagnostic request")
+    stream_probe.add_argument("--prompt", default="Responde solo: Hola.")
+    stream_probe.add_argument("--context-limit", type=int, default=0)
+    stream_probe.add_argument("--think", choices=("default", "false", "low"), default="default")
     commands.add_parser("config", help="show effective configuration with secrets redacted")
     logs = commands.add_parser("logs", help="inspect explicitly recorded SIRAH session logs")
     log_commands = logs.add_subparsers(dest="logs_command", required=True)
@@ -71,6 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
     listen.add_argument("--output-device")
     listen.add_argument("--sample-rate", type=int, default=16000)
     listen.add_argument("--whisper-model", default=os.getenv("SIRAH_WHISPER_MODEL", "base"))
+    listen.add_argument("--stt-provider", choices=("local", "groq"), default=os.getenv("SIRAH_STT_PROVIDER", "local"))
     listen.add_argument("--language", default=os.getenv("SIRAH_WHISPER_LANGUAGE", "es"))
     listen.add_argument("--ollama-model", default=os.getenv("SIRAH_OLLAMA_MODEL", "gpt-oss:20b-cloud"))
     listen.add_argument("--text-only", action="store_true", help="print replies; do not initialize Azure or audio output")
@@ -81,7 +91,7 @@ def build_parser() -> argparse.ArgumentParser:
     listen.add_argument("--include-text", action="store_true")
     listen.add_argument(
         "--tts-provider",
-        choices=("local", "azure"),
+        choices=("local", "azure", "edge"),
         default=os.getenv("SIRAH_TTS_PROVIDER", "local"),
     )
     talk = commands.add_parser("push-to-talk", help="run real microphone capture only with --live")
@@ -91,6 +101,7 @@ def build_parser() -> argparse.ArgumentParser:
     talk.add_argument("--sample-rate", type=int, default=16000)
     talk.add_argument("--duration", type=float)
     talk.add_argument("--whisper-model", default=os.getenv("SIRAH_WHISPER_MODEL", "base"))
+    talk.add_argument("--stt-provider", choices=("local", "groq"), default=os.getenv("SIRAH_STT_PROVIDER", "local"))
     talk.add_argument("--language", default=os.getenv("SIRAH_WHISPER_LANGUAGE", "es"))
     talk.add_argument("--ollama-model", default=os.getenv("SIRAH_OLLAMA_MODEL", "gpt-oss:20b-cloud"))
     talk.add_argument("--text-only", action="store_true")
@@ -101,8 +112,10 @@ def build_parser() -> argparse.ArgumentParser:
     chat.add_argument("--include-text", action="store_true")
     tts = commands.add_parser("tts-check", help="check Azure TTS configuration")
     tts.add_argument("--live", action="store_true")
-    tts.add_argument("--provider", choices=("local", "azure"), default=os.getenv("SIRAH_TTS_PROVIDER", "local"))
+    tts.add_argument("--provider", choices=("local", "azure", "edge"), default=os.getenv("SIRAH_TTS_PROVIDER", "local"))
     tts.add_argument("--output-device")
+    tts.add_argument("--text", default="Hola, soy SIRAH. Mi voz está funcionando.")
+    tts.add_argument("--lab", action="store_true", help="show latency timings without saving text or audio")
     return parser
 
 
@@ -131,6 +144,11 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps({"configured": _ollama_configured(), "live": False}))
             return 0
         return asyncio.run(_ollama_diagnostic())
+    if args.command == "ollama-stream-probe":
+        if not args.live:
+            print(json.dumps({"configured": _ollama_configured(), "live": False}))
+            return 0
+        return asyncio.run(_ollama_stream_probe(args.prompt, args.context_limit, args.think))
     if not args.live:
         print(f"{args.command} is real microphone and Cloud mode; rerun with --live")
         return 2
@@ -148,9 +166,12 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--include-text requires --record-session")
         return asyncio.run(_text_chat(args.ollama_model, args.record_session, args.include_text))
     if args.command == "tts-check":
-        return asyncio.run(_tts_check(args.provider, args.output_device))
+        return asyncio.run(_tts_check(args.provider, args.output_device, args.text, lab=args.lab))
     print("Cloud transcripts may leave this device. Press Ctrl-C to stop after speaking.")
-    return asyncio.run(_push_to_talk(args))
+    try:
+        return asyncio.run(_push_to_talk(args))
+    except KeyboardInterrupt:
+        return 0
 
 
 def _safe_config() -> dict[str, str]:
@@ -212,6 +233,41 @@ async def _ollama_diagnostic() -> int:
     return 0
 
 
+async def _ollama_stream_probe(prompt: str, context_limit: int, think: str) -> int:
+    from sirah.conversation.ollama import OllamaStreamProbe
+
+    if not _ollama_configured():
+        print("Ollama is not configured; no request was sent")
+        return 1
+    try:
+        metrics = await OllamaStreamProbe.from_environment().measure(
+            prompt,
+            context_limit=context_limit,
+            think={"default": None, "false": False, "low": "low"}[think],
+        )
+    except Exception as exc:  # noqa: BLE001 - provider errors are reported without content.
+        print(json.dumps({"success": False, "error": type(exc).__name__}))
+        return 1
+    print(
+        json.dumps(
+            {
+                "success": True,
+                "request_bytes": metrics.request_bytes,
+                "context_items": metrics.context_items,
+                "events": metrics.events,
+                "content_events": metrics.content_events,
+                "thinking_events": metrics.thinking_events,
+                "first_event_ms": metrics.first_event_ms,
+                "first_content_ms": metrics.first_content_ms,
+                "total_ms": metrics.total_ms,
+                "prompt_tokens": metrics.prompt_tokens,
+                "output_tokens": metrics.output_tokens,
+            }
+        )
+    )
+    return 0
+
+
 def _proposer(model: str | None = None) -> OllamaIntentProposer:
     env = dict(os.environ)
     if model:
@@ -238,7 +294,7 @@ async def _push_to_talk(args: argparse.Namespace) -> int:
             chunks.append(await asyncio.wait_for(source.next_chunk(), timeout=1.0))
         if stop_task is not None:
             await stop_task
-        transcript = await FasterWhisperSTT(args.whisper_model, language=args.language).transcribe(chunks)
+        transcript = await _operation_stt(args.stt_provider, args.whisper_model, args.language).transcribe(chunks)
         print(f"transcript: {transcript.text}")
         if args.text_only:
             proposal = await _proposer(args.ollama_model).propose(IntentRequest("speech_ended", transcript.text, transcript.ended_at))
@@ -270,6 +326,7 @@ async def _listen(args: argparse.Namespace) -> int:
     player: SoundDevicePCMPlayer | None = None
     conversation: ConversationSession | _TextOnlyResponder
     tts: OperationTTS
+    timing = TurnTiming() if args.lab else None
     if args.text_only:
         proposer = _proposer(args.ollama_model)
         conversation = _TextOnlyResponder(ConversationCore(proposer), show_text=args.show_text, log=log)
@@ -300,6 +357,8 @@ async def _listen(args: argparse.Namespace) -> int:
             player,
             core=ConversationCore(proposer),
             on_response=observe_response,
+            on_diagnostic=_show_lab_diagnostic if args.lab else None,
+            timing=timing,
         )
 
     async def show_state(state: ConversationState) -> None:
@@ -318,18 +377,29 @@ async def _listen(args: argparse.Namespace) -> int:
     async def show_error(error: Exception) -> None:
         print(f"error de sesion: {error}")
 
+    async def on_state_changed(state: ConversationState) -> None:
+        await show_state(state)
+
+    stt = _operation_stt(args.stt_provider, args.whisper_model, args.language)
+    if isinstance(stt, FasterWhisperSTT):
+        print("preparando reconocimiento")
+        await stt.preload()
+        print("listo")
+    source = SoundDeviceAudioSource(
+        sample_rate=args.sample_rate,
+        blocksize=512 if args.sample_rate == 16_000 else 256,
+        device=_device_id(args.input_device),
+    )
     session = ContinuousConversationSession(
-        SoundDeviceAudioSource(
-            sample_rate=args.sample_rate,
-            blocksize=512 if args.sample_rate == 16_000 else 256,
-            device=_device_id(args.input_device),
-        ),
+        source,
         SileroVoiceActivityDetector.from_official_distribution(threshold=config.threshold),
-        FasterWhisperSTT(args.whisper_model, language=args.language),
+        stt,
         conversation,
         config=config,
-        on_state_change=show_state,
+        on_state_change=on_state_changed,
         on_error=show_error,
+        timing=timing,
+        stt_label="STT Groq" if args.stt_provider == "groq" else "STT local",
     )
     print("escuchando; Ctrl-C para detener")
     if config.barge_in:
@@ -343,6 +413,8 @@ async def _listen(args: argparse.Namespace) -> int:
             log.close()
         if player is not None:
             await player.close()
+        if args.lab:
+            print(_capture_metrics(source.dropped_chunks, source.queue_high_water_mark))
     return 0
 
 
@@ -372,12 +444,38 @@ def _operation_tts(provider: str) -> tuple[OperationTTS, int]:
         from sirah.audio.kokoro_tts import KokoroTextToSpeech
 
         return AsyncTTS(KokoroTextToSpeech.from_environment), KokoroTextToSpeech.sample_rate
+    if provider == "edge":
+        from sirah.audio.edge_tts import EdgeTextToSpeech
+
+        return AsyncTTS(EdgeTextToSpeech.from_environment), EdgeTextToSpeech.sample_rate
     from sirah.audio.azure_tts import AzureOperationTextToSpeech, AzureTextToSpeech
 
     return AzureOperationTextToSpeech(AzureTextToSpeech.from_environment()), 16_000
 
 
-async def _tts_check(provider: str, output_device: str | None) -> int:
+def _capture_metrics(dropped_chunks: int, queue_high_water_mark: int) -> str:
+    if dropped_chunks == 0:
+        return f"captura: sin descartes; cola max {queue_high_water_mark}/8"
+    return f"captura: {dropped_chunks} frames descartados; cola max {queue_high_water_mark}/8"
+
+
+def _show_lab_diagnostic(message: str) -> None:
+    print(f"diagnóstico: {message}")
+
+
+def _operation_stt(provider: str, model: str, language: str):
+    if provider == "groq":
+        return GroqWhisperSTT.from_environment()
+    return FasterWhisperSTT(model, language=language)
+
+
+async def _tts_check(
+    provider: str,
+    output_device: str | None,
+    text: str = "Hola, soy SIRAH. Mi voz está funcionando.",
+    *,
+    lab: bool = False,
+) -> int:
     if provider == "azure":
         from sirah.audio.azure_tts import AzureTextToSpeech
 
@@ -388,18 +486,41 @@ async def _tts_check(provider: str, output_device: str | None) -> int:
             return 1
         print("Azure TTS is configured; no synthesis was requested")
         return 0
-    tts, sample_rate = _operation_tts("local")
+    tts, sample_rate = _operation_tts(provider)
     player = SoundDevicePCMPlayer(device=output_device, sample_rate=sample_rate)
     operation_id = "tts-check"
-    phrase = "Hola, soy SIRAH. Mi voz local está funcionando."
+    timing = TurnTiming() if lab else None
     try:
-        pcm = await tts.synthesize(operation_id, phrase)
-        await player.play(operation_id, pcm)
-        await player.join()
+        if timing is not None:
+            timing.mark(f"TTS {provider}: iniciando")
+        stream = getattr(tts, "stream", None)
+        play_stream = getattr(player, "play_stream", None)
+        if stream is not None and play_stream is not None:
+            first_chunk = True
+
+            async def observed_stream():
+                nonlocal first_chunk
+                async for pcm in stream(operation_id, text):
+                    if first_chunk and timing is not None:
+                        first_chunk = False
+                        timing.mark(f"TTS {provider}: primer PCM listo")
+                        timing.mark("Altavoz: iniciando")
+                    yield pcm
+
+            await play_stream(operation_id, observed_stream())
+        else:
+            pcm = await tts.synthesize(operation_id, text)
+            if timing is not None:
+                timing.mark(f"TTS {provider}: PCM listo")
+                timing.mark("Altavoz: iniciando")
+            await player.play(operation_id, pcm)
+            await player.join()
+        if timing is not None:
+            timing.mark("Altavoz: reproducción terminada")
     except Exception as exc:  # noqa: BLE001
-        print(f"Local TTS unavailable: {type(exc).__name__}: {exc}")
+        print(f"{provider} TTS unavailable: {type(exc).__name__}: {exc}")
         return 1
     finally:
         await player.close()
-    print(phrase)
+    print(text)
     return 0

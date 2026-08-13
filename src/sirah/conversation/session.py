@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -12,6 +12,7 @@ from sirah.conversation.context import ConversationContext
 from sirah.conversation.contracts import IntentProposal, IntentProposer, IntentRequest
 from sirah.conversation.core import ConversationCore
 from sirah.conversation.personality import ConversationPersonality
+from sirah.conversation.timing import TurnTiming
 from sirah.conversation.validator import ProposalValidator
 
 
@@ -49,6 +50,8 @@ class ConversationSession:
         personality: ConversationPersonality | None = None,
         core: ConversationCore | None = None,
         on_response: Callable[[Transcript, IntentProposal], Awaitable[None] | None] | None = None,
+        on_diagnostic: Callable[[str], Awaitable[None] | None] | None = None,
+        timing: TurnTiming | None = None,
     ) -> None:
         self._proposer = proposer
         self._tts = tts
@@ -57,6 +60,8 @@ class ConversationSession:
         self._personality = personality or ConversationPersonality()
         self._core = core
         self._on_response = on_response
+        self._on_diagnostic = on_diagnostic
+        self._timing = timing
         self.context = ConversationContext(context_limit)
         self._turn_lock = asyncio.Lock()
         self._active_task: asyncio.Task[object] | None = None
@@ -76,11 +81,24 @@ class ConversationSession:
             self._active_operation = operation_id
             self.context.add(transcript)
             try:
+                self._mark("Ollama: iniciando")
                 proposal = await self._propose_safe(transcript)
+                self._mark("Ollama: respuesta lista")
                 if proposal.speech is not None:
-                    pcm = await self._tts.synthesize(operation_id, proposal.speech)
-                    await self._player.play(operation_id, pcm)
-                    await self._player.join()
+                    self._mark("TTS: iniciando")
+                    stream = getattr(self._tts, "stream", None)
+                    play_stream = getattr(self._player, "play_stream", None)
+                    if stream is not None and play_stream is not None:
+                        await self._play_stream(operation_id, stream(operation_id, proposal.speech), play_stream)
+                    else:
+                        pcm = await self._tts.synthesize(operation_id, proposal.speech)
+                        self._mark("TTS: PCM listo")
+                        self._mark("Altavoz: iniciando")
+                        await self._player.play(operation_id, pcm)
+                        await self._player.join()
+                    self._mark("Altavoz: reproducción terminada")
+                else:
+                    self._mark("Respuesta: silenciosa")
                 if self._on_response is not None:
                     result = self._on_response(transcript, proposal)
                     if result is not None:
@@ -105,7 +123,8 @@ class ConversationSession:
             return self._validator.validate(proposal)
         except asyncio.CancelledError:
             raise
-        except Exception:  # noqa: BLE001 - external proposals are untrusted; silence is safe.
+        except Exception as exc:  # noqa: BLE001 - external proposals are untrusted; silence is safe.
+            self._report_diagnostic(f"propuesta descartada: {type(exc).__name__}")
             return self._personality.fallback()
 
     async def _cancel_obsolete(self) -> None:
@@ -116,3 +135,33 @@ class ConversationSession:
         await self._tts.cancel(operation_id)
         await self._player.cancel(operation_id)
         task.cancel()
+
+    def _mark(self, label: str) -> None:
+        if self._timing is not None:
+            self._timing.mark(label)
+
+    def _report_diagnostic(self, message: str) -> None:
+        if self._on_diagnostic is None:
+            return
+        result = self._on_diagnostic(message)
+        if result is not None:
+            asyncio.ensure_future(result)
+
+    async def _play_stream(
+        self,
+        operation_id: str,
+        pcm_stream: AsyncIterator[bytes],
+        play_stream: Callable[[str, AsyncIterator[bytes]], Awaitable[None]],
+    ) -> None:
+        first_chunk = True
+
+        async def observed_stream() -> AsyncIterator[bytes]:
+            nonlocal first_chunk
+            async for pcm in pcm_stream:
+                if first_chunk:
+                    first_chunk = False
+                    self._mark("TTS: primer PCM listo")
+                    self._mark("Altavoz: iniciando")
+                yield pcm
+
+        await play_stream(operation_id, observed_stream())

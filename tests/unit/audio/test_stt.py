@@ -44,6 +44,23 @@ async def test_stt_lazily_transcribes_pcm_with_an_injected_model():
     assert models[0].audio.tolist() == [0.0, pytest.approx(32767 / 32768)]
     assert models[0].kwargs["language"] == "es"
     assert "español" in models[0].kwargs["initial_prompt"]
+    assert models[0].kwargs["beam_size"] == 1
+
+
+async def test_stt_preload_initializes_the_model_without_audio():
+    models: list[FakeModel] = []
+
+    def model_factory(_name: str) -> FakeModel:
+        model = FakeModel()
+        models.append(model)
+        return model
+
+    stt = FasterWhisperSTT("tiny", model_factory=model_factory)
+
+    await stt.preload()
+
+    assert len(models) == 1
+    assert models[0].audio is None
 
 
 async def test_stt_rejects_chunks_with_incompatible_audio_formats():
