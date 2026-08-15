@@ -11,22 +11,22 @@ import argparse
 import asyncio
 import logging
 import os
+from dataclasses import replace
 from pathlib import Path
-from typing import Optional
 
 import cv2
 
 from sirah.intelligence.groq_adapter import GroqIntelligence
-from sirah.intelligence.port import IntelligencePort
 from sirah.perception.mediapipe_vision import MediaPipeVision
-from sirah.types import ConversationMessage, DecisionType, IntelligenceDecision, IntelligenceRequest, IntelligenceResponse
+from sirah.personality.loader import PersonalityLoader
+from sirah.types import (
+    ConversationMessage,
+    IntelligenceRequest,
+)
 from sirah.voice.mic_capture import MicCapture
 from sirah.voice.stt_whisper import WhisperSTT
 from sirah.voice.tts_piper import AplayPlayer, PiperTTS
 
-VOICE_DIR = Path("/home/laxxup/.local/share/piper/voices")
-MODEL_PATH = VOICE_DIR / "es_ES-sharvard-medium.onnx"
-CONFIG_PATH = VOICE_DIR / "es_ES-sharvard-medium.onnx.json"
 EVIDENCE_DIR = Path("/tmp/sirah-evidence")
 DETECT_EVERY = 3
 SMOOTHING = 0.30
@@ -83,9 +83,10 @@ def build_self_state(perception):
 
 
 class SelfAwareIntelligence:
-    def __init__(self, inner, state_provider, history_limit=MAX_HISTORY):
+    def __init__(self, inner, state_provider, personality_prompt=None, history_limit=MAX_HISTORY):
         self._inner = inner
         self._state = state_provider
+        self._personality = personality_prompt
         self._history = []
         self._history_limit = history_limit
         self._turn = 0
@@ -94,28 +95,25 @@ class SelfAwareIntelligence:
         return await self._inner.health()
 
     def _system_prompt(self, perception):
+        parts = []
+        if self._personality:
+            parts.append(self._personality)
         self_state = build_self_state(self._state())
+        parts.append(f"Estado actual: {self_state}")
         recent = ""
         if self._history:
             lines = [f"  - usuario: '{u}' -> SIRAH: '{s}'" for u, s in self._history[-5:]]
             recent = "Historial reciente (NO repitas; varia tus respuestas):\n" + "\n".join(lines)
-        return (
-            "Eres SIRAH, robot social con cuerpo real: ojos con servos que mueven la mirada, "
-            "parpadeas, camara que detecta rostros/colores/sonrisas, microfono y voz. "
-            "Autonoma, creativa, calida.\n\n"
-            "REGLAS:\n"
-            "- NUNCA digas 'en que puedo ayudarte' ni frases repetitivas.\n"
-            "- Usa tu estado corporal: menciona si te mueves, si te siguen, si ves colores.\n"
-            "- Se breve (1-3 frases), natural, varia tono y temas. Pregunta, comenta, reflexiona.\n"
-            "- Espanol, primera persona, personalidad propia.\n\n"
-            f"TU ESTADO ACTUAL:\n{self_state}\n\n"
-            f"{recent}\nResponde al usuario integrando tu estado de forma natural."
-        )
+        parts.append(f"{recent}\nResponde al usuario integrando tu estado de forma natural.")
+        return "\n\n".join(parts)
 
     async def decide(self, request):
         self._turn += 1
         perception = self._state()
-        request.messages.insert(0, ConversationMessage(role="system", content=self._system_prompt(perception)))
+        request = replace(
+            request,
+            system_prompt_override=self._system_prompt(perception),
+        )
         response = await self._inner.decide(request)
         user_text = ""
         for msg in request.messages:
@@ -129,19 +127,35 @@ class SelfAwareIntelligence:
         return response
 
 
-class EchoIntelligence:
-    async def health(self):
-        return True
-    async def decide(self, request):
-        user_text = ""
-        for msg in request.messages:
-            if getattr(msg, "role", "") == "user":
-                user_text = getattr(msg, "content", "")
-        user_text = (user_text or "").strip()
-        answer = f"Te escucho: '{user_text}'. Sin Groq no conversamos de verdad."
-        return IntelligenceResponse(raw_text=answer, decision=IntelligenceDecision(
-            decision_type=DecisionType.CONVERSATION, text_response=answer, confidence=0.6),
-            latency_ms=1.0, model="echo")
+def build_intelligence(state):
+    provider = os.environ.get("SIRAH_LLM_PROVIDER", "fake").strip()
+    inner = None
+    if provider == "ollama":
+        from sirah.intelligence.ollama_adapter import OllamaIntelligence
+        inner = OllamaIntelligence(
+            base_url=os.environ.get("SIRAH_OLLAMA_URL", "http://127.0.0.1:11434"),
+            model=os.environ.get("SIRAH_OLLAMA_MODEL", "gpt-oss:120b-cloud"),
+            fallback_model=os.environ.get("SIRAH_OLLAMA_FALLBACK_MODEL", "gemma3:4b") or None,
+            timeout=float(os.environ.get("SIRAH_OLLAMA_TIMEOUT", "30.0")),
+            temperature=0.9,
+        )
+    elif provider == "groq":
+        key = os.environ.get("GROQ_API_KEY", "").strip()
+        if key:
+            inner = GroqIntelligence(api_key=key, temperature=0.9, max_tokens=180)
+    if inner is None:
+        from sirah.intelligence.fake_adapter import FakeIntelligence
+        inner = FakeIntelligence(scripted=["Hola, soy SIRAH. Cuentame, ¿en qué piensas hoy?"])
+    return SelfAwareIntelligence(inner, lambda: dict(state), personality_prompt=load_personality_prompt())
+
+
+def load_personality_prompt():
+    pdir = os.environ.get("SIRAH_PERSONALITY_DIR", "config/personality")
+    try:
+        return PersonalityLoader(pdir).load().base_prompt
+    except Exception as exc:
+        logging.warning("no se cargo personalidad desde %s: %s", pdir, exc)
+        return None
 
 
 async def eye_tracker(camera, serial_port, mirror, state):
@@ -196,7 +210,7 @@ async def eye_tracker(camera, serial_port, mirror, state):
 
 
 async def _record_vad(mic, max_s):
-    from sirah.voice.diagnostics import analyze_pcm, CapturedAudio
+    from sirah.voice.diagnostics import CapturedAudio, analyze_pcm
     t0 = asyncio.get_event_loop().time()
     chunks = []
     saw_speech = False
@@ -230,11 +244,24 @@ async def _record_vad(mic, max_s):
                          channels=metrics.channels, sample_width=metrics.sample_width,
                          duration_ms=metrics.duration_ms, metrics=metrics)
 
-
-def build_intelligence(state):
-    key = os.environ.get("GROQ_API_KEY", "").strip()
-    inner = GroqIntelligence(api_key=key, temperature=0.9, max_tokens=180) if key else EchoIntelligence()
-    return SelfAwareIntelligence(inner, lambda: dict(state))
+def build_tts(player):
+    provider = os.environ.get("SIRAH_TTS_PROVIDER", "piper").strip()
+    if provider == "kokoro_http":
+        from sirah.voice.tts_kokoro import KokoroHTTPTTS
+        return KokoroHTTPTTS(
+            base_url=os.environ.get("SIRAH_KOKORO_URL", "http://127.0.0.1:8880/v1"),
+            model=os.environ.get("SIRAH_KOKORO_MODEL", "kokoro"),
+            voice=os.environ.get("SIRAH_KOKORO_VOICE", "ef_dora"),
+            speed=float(os.environ.get("SIRAH_KOKORO_SPEED", "1.0")),
+            timeout=float(os.environ.get("SIRAH_KOKORO_TIMEOUT", "30.0")),
+            player=player,
+        )
+    else:
+        from pathlib import Path
+        voice_dir = Path("/home/laxxup/.local/share/piper/voices")
+        model_path = voice_dir / "es_ES-sharvard-medium.onnx"
+        config_path = voice_dir / "es_ES-sharvard-medium.onnx.json"
+        return PiperTTS(model_path=model_path, config_path=config_path, player=player)
 
 
 def _summary(state):
@@ -271,7 +298,7 @@ async def main():
     whisper = WhisperSTT(model_size="tiny", language="es", beam_size=1)
     await whisper.start()
     player = AplayPlayer(output_device=args.speaker, timeout_s=12.0)
-    tts = PiperTTS(model_path=MODEL_PATH, config_path=CONFIG_PATH, player=player)
+    tts = build_tts(player)
     await tts.start()
     intelligence = build_intelligence(state)
 
@@ -293,8 +320,13 @@ async def main():
             if text.lower().rstrip(".!?") in {"salir", "exit", "terminar"}:
                 await tts.speak("Hasta luego.")
                 break
-            request = IntelligenceRequest(messages=[], max_tokens=180, temperature=0.9)
-            request.messages.append(ConversationMessage(role="user", content=text))
+            request = IntelligenceRequest(
+                messages=(
+                    ConversationMessage(role="user", content=text),
+                ),
+                max_tokens=180,
+                temperature=0.9,
+            )
             response = await intelligence.decide(request)
             answer = (response.decision.text_response if response.decision else "").strip()
             print(f"SIRAH: {answer}")
