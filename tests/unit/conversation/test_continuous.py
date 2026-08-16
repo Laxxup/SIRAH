@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from sirah.audio.contracts import AudioChunk, Transcript
 from sirah.conversation.continuous import (
     ContinuousConversationSession,
@@ -31,13 +33,16 @@ class FakeSource:
         self.failure = failure
         self.started = 0
         self.stopped = 0
+        self.calls = 0
 
     async def start(self) -> None:
         self.started += 1
 
     async def next_chunk(self) -> AudioChunk | None:
+        self.calls += 1
         if self.failure is not None:
-            raise self.failure
+            failure, self.failure = self.failure, None
+            raise failure
         return self.chunks.pop(0) if self.chunks else None
 
     async def stop(self) -> None:
@@ -183,7 +188,13 @@ async def test_processes_consecutive_turns_without_keyboard_input():
 
 async def test_source_failure_recovers_then_stops_without_persisting_buffers():
     source = FakeSource([], failure=OSError("device disconnected"))
-    session = ContinuousConversationSession(source, FakeVAD(set()), FakeSTT([]), FakeConversation())
+    session = ContinuousConversationSession(
+        source,
+        FakeVAD(set()),
+        FakeSTT([]),
+        FakeConversation(),
+        config=ContinuousSessionConfig(recovery_delay_ms=0),
+    )
 
     await session.run()
 
@@ -200,12 +211,138 @@ async def test_source_failure_reports_the_underlying_error_to_the_operator_callb
         FakeVAD(set()),
         FakeSTT([]),
         FakeConversation(),
+        config=ContinuousSessionConfig(recovery_delay_ms=0),
         on_error=lambda error: errors.append(str(error)),
     )
 
     await session.run()
 
     assert errors == ["invalid VAD block size"]
+
+
+async def test_transient_source_failure_does_not_retry_before_recovery_delay_elapses():
+    class FixedClock:
+        def __init__(self) -> None:
+            self.now = 0.0
+
+        def __call__(self) -> float:
+            return self.now
+
+    clock = FixedClock()
+    source = FakeSource([], failure=OSError("device disconnected"))
+    session = ContinuousConversationSession(
+        source,
+        FakeVAD(set()),
+        FakeSTT([]),
+        FakeConversation(),
+        config=ContinuousSessionConfig(recovery_delay_ms=1_000),
+        clock=clock,
+    )
+
+    run = asyncio.create_task(session.run())
+    for _ in range(200):
+        if session.state is ConversationState.RECOVERING:
+            break
+        await asyncio.sleep(0.01)
+
+    assert session.state is ConversationState.RECOVERING
+    assert session._recovering_until == 1.0
+    assert source.calls == 1
+    assert session.transitions.count(ConversationState.RECOVERING) == 1
+
+    await asyncio.sleep(0.05)
+    assert source.calls == 1
+
+    clock.now = 1.0
+    await asyncio.wait_for(run, timeout=1.0)
+
+    assert source.calls == 2
+    assert session.state is ConversationState.STOPPED
+
+
+async def test_config_rejects_negative_max_recovery_attempts():
+    with pytest.raises(ValueError, match="max_recovery_attempts"):
+        ContinuousSessionConfig(max_recovery_attempts=-1)
+
+
+async def test_persistent_source_failure_stops_after_max_recovery_attempts():
+    class AlwaysFailingSource:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.started = 0
+            self.stopped = 0
+
+        async def start(self) -> None:
+            self.started += 1
+
+        async def next_chunk(self) -> AudioChunk | None:
+            self.calls += 1
+            raise OSError("device disconnected")
+
+        async def stop(self) -> None:
+            self.stopped += 1
+
+    errors: list[str] = []
+    source = AlwaysFailingSource()
+    session = ContinuousConversationSession(
+        source,
+        FakeVAD(set()),
+        FakeSTT([]),
+        FakeConversation(),
+        config=ContinuousSessionConfig(recovery_delay_ms=0, max_recovery_attempts=3),
+        on_error=lambda error: errors.append(str(error)),
+    )
+
+    await asyncio.wait_for(session.run(), timeout=1.0)
+
+    assert source.calls == 4
+    assert errors == ["device disconnected"] * 4
+    assert ConversationState.RECOVERING in session.transitions
+    assert session.state is ConversationState.STOPPED
+    assert source.stopped == 1
+
+
+async def test_recovery_attempts_reset_after_success_then_bounds_again():
+    class FlakySource:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.started = 0
+            self.stopped = 0
+            self.chunks = [_chunk(0.0)]
+            self.failed_once = False
+
+        async def start(self) -> None:
+            self.started += 1
+
+        async def next_chunk(self) -> AudioChunk | None:
+            self.calls += 1
+            if not self.failed_once:
+                self.failed_once = True
+                raise OSError("device disconnected")
+            if self.chunks:
+                return self.chunks.pop(0)
+            raise OSError("device disconnected")
+
+        async def stop(self) -> None:
+            self.stopped += 1
+
+    errors: list[str] = []
+    source = FlakySource()
+    session = ContinuousConversationSession(
+        source,
+        FakeVAD(set()),
+        FakeSTT([]),
+        FakeConversation(),
+        config=ContinuousSessionConfig(recovery_delay_ms=0, max_recovery_attempts=3),
+        on_error=lambda error: errors.append(str(error)),
+    )
+
+    await asyncio.wait_for(session.run(), timeout=1.0)
+
+    assert source.calls == 6
+    assert len(errors) == 5
+    assert session.state is ConversationState.STOPPED
+    assert source.stopped == 1
 
 
 async def test_processing_failure_reports_the_underlying_error_to_the_operator_callback():
@@ -221,6 +358,69 @@ async def test_processing_failure_reports_the_underlying_error_to_the_operator_c
     await session.run()
 
     assert errors == ["Azure rejected credentials"]
+
+
+async def test_recovers_to_idle_after_processing_failure_and_accepts_a_new_turn():
+    class FlakySTT(FakeSTT):
+        def __init__(self) -> None:
+            super().__init__(["dos"], failure=RuntimeError("boom"))
+            self.attempts = 0
+
+        async def transcribe(self, chunks: list[AudioChunk]) -> Transcript:
+            self.attempts += 1
+            if self.failure is not None:
+                failure, self.failure = self.failure, None
+                raise failure
+            return await super().transcribe(chunks)
+
+    errors: list[str] = []
+    source = FakeSource([_chunk(0.0), _chunk(0.1), _chunk(0.4), _chunk(0.5), _chunk(0.6), _chunk(0.9)])
+    stt = FlakySTT()
+    conversation = FakeConversation()
+    session = ContinuousConversationSession(
+        source,
+        FakeVAD({0.1, 0.5, 0.6}),
+        stt,
+        conversation,
+        config=ContinuousSessionConfig(end_silence_ms=200, min_speech_ms=0, recovery_delay_ms=0),
+        on_error=lambda error: errors.append(str(error)),
+    )
+
+    await session.run()
+
+    assert errors == ["boom"]
+    assert stt.attempts == 2
+    assert [request.text for request in conversation.requests] == ["dos"]
+    recovering = session.transitions.index(ConversationState.RECOVERING)
+    assert ConversationState.IDLE in session.transitions[recovering + 1:]
+    assert session.state is ConversationState.STOPPED
+
+
+async def test_processing_failure_drops_chunks_until_recovery_delay_elapses():
+    errors: list[str] = []
+    source = FakeSource(
+        [_chunk(0.0), _chunk(0.1), _chunk(0.4), _chunk(0.5), _chunk(0.6)]
+    )
+    stt = FakeSTT(["unused"], failure=RuntimeError("boom"))
+    session = ContinuousConversationSession(
+        source,
+        FakeVAD({0.1, 0.5, 0.6}),
+        stt,
+        FakeConversation(),
+        config=ContinuousSessionConfig(
+            end_silence_ms=200, min_speech_ms=0, recovery_delay_ms=10_000
+        ),
+        on_error=lambda error: errors.append(str(error)),
+    )
+
+    await session.run()
+
+    assert errors == ["boom"]
+    assert len(stt.requests) == 1
+    assert session.state is ConversationState.STOPPED
+    recovering = session.transitions.index(ConversationState.RECOVERING)
+    assert ConversationState.IDLE not in session.transitions[recovering + 1:]
+    assert session.buffered_chunks == 0
 
 
 async def test_start_and_stop_are_idempotent():
@@ -285,6 +485,43 @@ async def test_default_semiduplex_discards_microphone_frames_while_processing():
     assert conversation.interruptions == 0
     assert session.state is ConversationState.PROCESSING
     assert session.buffered_chunks == 0
+
+
+async def test_barge_in_while_stt_is_still_processing_interrupts_the_turn():
+    class BlockingSTT(FakeSTT):
+        def __init__(self) -> None:
+            super().__init__(["first"])
+            self.started = asyncio.Event()
+
+        async def transcribe(self, chunks: list[AudioChunk]) -> Transcript:
+            self.started.set()
+            await asyncio.Event().wait()  # STT still in flight when new voice arrives
+            return Transcript("first", chunks[0].observed_at, chunks[-1].observed_at, 0.9)
+
+    stt = BlockingSTT()
+    conversation = FakeConversation()
+    session = ContinuousConversationSession(
+        FakeSource([_chunk(0.0), _chunk(0.1), _chunk(0.4), _chunk(0.5)]),
+        FakeVAD({0.1, 0.5}),
+        stt,
+        conversation,
+        config=ContinuousSessionConfig(
+            end_silence_ms=200,
+            min_speech_ms=0,
+            barge_in=True,
+            barge_in_min_speech_ms=0,
+        ),
+    )
+    run = asyncio.create_task(session.run())
+    await stt.started.wait()  # turn closed; STT now stuck in PROCESSING
+    await asyncio.sleep(0)  # let the capture loop observe a new voice chunk
+    await asyncio.sleep(0)
+    assert session.state is ConversationState.PROCESSING
+    assert conversation.interruptions == 1
+    assert ConversationState.INTERRUPTING in session.transitions
+    run.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await run
 
 
 async def test_session_reports_voice_end_and_stt_timing_before_the_response():

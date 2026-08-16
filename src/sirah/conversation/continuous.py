@@ -47,12 +47,16 @@ class ContinuousSessionConfig:
     barge_in_min_speech_ms: int = 200
     barge_in: bool = False
     post_playback_guard_ms: int = 500
+    recovery_delay_ms: int = 1500
+    max_recovery_attempts: int = 5
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.threshold <= 1.0 or not 0.0 <= self.barge_in_threshold <= 1.0:
             raise ValueError("threshold must be within [0, 1]")
-        if min(self.min_speech_ms, self.end_silence_ms, self.pre_roll_ms, self.barge_in_min_speech_ms, self.post_playback_guard_ms) < 0:
+        if min(self.min_speech_ms, self.end_silence_ms, self.pre_roll_ms, self.barge_in_min_speech_ms, self.post_playback_guard_ms, self.recovery_delay_ms) < 0:
             raise ValueError("VAD durations must be non-negative")
+        if self.max_recovery_attempts < 0:
+            raise ValueError("max_recovery_attempts must be non-negative")
         if self.max_turn_seconds <= 0:
             raise ValueError("max_turn_seconds must be positive")
         if self.max_queue_chunks <= 0:
@@ -102,6 +106,8 @@ class ContinuousConversationSession:
         self._processing_task: asyncio.Task[None] | None = None
         self._now = clock or time.monotonic
         self._guard_until = 0.0
+        self._recovering_until = 0.0
+        self._recovery_attempts = 0
 
     @property
     def state(self) -> ConversationState:
@@ -136,19 +142,28 @@ class ContinuousConversationSession:
         try:
             await self.start()
             while True:
-                chunk = await self._source.next_chunk()
-                if chunk is None:
-                    if self._state is ConversationState.LISTENING:
-                        await self._close_turn()
-                    if self._processing_task is not None:
-                        await self._processing_task
-                    return
-                await self._handle_chunk(chunk)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:  # noqa: BLE001 - capture providers are external.
-            await self._report_error(exc)
-            await self._set_state(ConversationState.RECOVERING)
+                try:
+                    chunk = await self._source.next_chunk()
+                    if chunk is None:
+                        if self._state is ConversationState.LISTENING:
+                            await self._close_turn()
+                        if self._processing_task is not None:
+                            await self._processing_task
+                        self._recovery_attempts = 0
+                        return
+                    await self._handle_chunk(chunk)
+                    self._recovery_attempts = 0
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 - capture providers are external.
+                    await self._report_error(exc)
+                    self._recovery_attempts += 1
+                    if self._recovery_attempts > self._config.max_recovery_attempts:
+                        return
+                    self._recovering_until = self._now() + self._config.recovery_delay_ms / 1000
+                    await self._set_state(ConversationState.RECOVERING)
+                    while self._now() < self._recovering_until:
+                        await asyncio.sleep(0.01)
         finally:
             await self.stop()
 
@@ -180,6 +195,10 @@ class ContinuousConversationSession:
             if speech:
                 await self._interrupt_for_new_voice(chunk)
             return
+        if self._state is ConversationState.RECOVERING:
+            if self._now() < self._recovering_until:
+                return
+            await self._set_state(ConversationState.IDLE)
         if self._state is ConversationState.INTERRUPTING:
             return
         if self._state is ConversationState.STOPPED:
@@ -253,6 +272,7 @@ class ContinuousConversationSession:
             raise
         except Exception as exc:  # noqa: BLE001 - failures enter a visible recovery state.
             await self._report_error(exc)
+            self._recovering_until = self._now() + self._config.recovery_delay_ms / 1000
             await self._set_state(ConversationState.RECOVERING)
         finally:
             if generation == self._generation and self._state is not ConversationState.RECOVERING:
