@@ -83,8 +83,8 @@ async def test_ollama_client_sends_only_structured_request_and_parses_intent():
     assert "frame" not in json.dumps(payload)
     assert "# Identidad y hechos verificados" in payload["messages"][0]["content"]
     assert "# Política de turno" in payload["messages"][0]["content"]
-    assert "No hagas una pregunta" in payload["messages"][0]["content"]
-    assert "solo cuando pregunten por colaborar" in payload["messages"][0]["content"]
+    assert "Haz como máximo una pregunta" in payload["messages"][0]["content"]
+    assert "solo si preguntan por colaborar" in payload["messages"][0]["content"]
     assert "anfitriona" in payload["messages"][0]["content"]
     assert "una frase breve" not in payload["messages"][0]["content"]
     assert "github.com/Laxxup/SIRAH" in payload["messages"][0]["content"]
