@@ -74,6 +74,27 @@ async def test_player_keeps_queue_bounded_while_waiting_for_sink():
     await player.close()
 
 
+async def test_sink_failure_does_not_kill_the_worker_and_later_audio_still_plays():
+    delivered: list[bytes] = []
+    calls = 0
+
+    async def flaky_sink(pcm: bytes) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("device unavailable")
+        delivered.append(pcm)
+
+    player = PCMPlayer(flaky_sink)
+    await player.play("reply-1", b"first")
+    await player.play("reply-2", b"second")
+    await player.join()
+
+    assert calls == 2
+    assert delivered == [b"second"]
+    await player.close()
+
+
 def test_bluealsa_playback_uses_alsa_subprocess(monkeypatch):
     calls = []
     player = SoundDevicePCMPlayer(device="bluealsa", sample_rate=24_000)

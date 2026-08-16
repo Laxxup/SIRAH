@@ -446,8 +446,19 @@ def _operation_tts(provider: str) -> tuple[OperationTTS, int]:
         return AsyncTTS(KokoroTextToSpeech.from_environment), KokoroTextToSpeech.sample_rate
     if provider == "edge":
         from sirah.audio.edge_tts import EdgeTextToSpeech
+        from sirah.audio.kokoro_tts import KokoroTextToSpeech
+        from sirah.audio.tts import FallbackTTS
 
-        return AsyncTTS(EdgeTextToSpeech.from_environment), EdgeTextToSpeech.sample_rate
+        # Edge is a network provider; fall back to the local Kokoro voice at
+        # the same sample rate (24 kHz) when the cloud is unreachable.
+        return (
+            FallbackTTS(
+                EdgeTextToSpeech.from_environment,
+                KokoroTextToSpeech.from_environment,
+                on_fallback=lambda exc: print(f"edge TTS falló; usando voz local: {type(exc).__name__}"),
+            ),
+            EdgeTextToSpeech.sample_rate,
+        )
     from sirah.audio.azure_tts import AzureOperationTextToSpeech, AzureTextToSpeech
 
     return AzureOperationTextToSpeech(AzureTextToSpeech.from_environment()), 16_000

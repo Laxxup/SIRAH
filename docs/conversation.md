@@ -33,6 +33,13 @@ proyecto, comparte `github.com/Laxxup/SIRAH`.
 
 Python 3.12 es obligatorio. Instala lo necesario según la ruta elegida.
 
+La reproducción de audio usa `sounddevice`, que necesita PortAudio en el
+sistema. En Linux (incluidas Raspberry Pi) instálalo antes:
+
+```bash
+sudo apt install libportaudio2
+```
+
 Ruta local con Faster-Whisper y Kokoro:
 
 ```bash

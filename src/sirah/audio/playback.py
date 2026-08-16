@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import subprocess
 from collections.abc import AsyncIterator, Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -11,6 +12,8 @@ from typing import Any
 
 _Sink = Callable[[bytes], Awaitable[None]]
 _StreamFactory = Callable[..., object]
+
+_logger = logging.getLogger(__name__)
 
 
 class PCMPlayer:
@@ -105,6 +108,8 @@ class PCMPlayer:
                 except asyncio.CancelledError:
                     if operation_id not in self._cancelled:
                         raise
+                except Exception as exc:  # noqa: BLE001 - a failing sink must not kill the worker.
+                    _logger.warning("sink error while playing %s: %r", operation_id, exc)
             finally:
                 self._active_operation = None
                 self._sink_task = None

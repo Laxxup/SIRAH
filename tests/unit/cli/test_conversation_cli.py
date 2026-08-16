@@ -95,10 +95,12 @@ def test_local_provider_selection_does_not_read_azure_configuration():
     assert sample_rate == 24_000
 
 
-def test_edge_provider_selection_uses_24khz_pcm():
+def test_edge_provider_selection_uses_24khz_pcm_with_local_fallback():
+    from sirah.audio.tts import FallbackTTS
+
     tts, sample_rate = _operation_tts("edge")
 
-    assert isinstance(tts, AsyncTTS)
+    assert isinstance(tts, FallbackTTS)
     assert sample_rate == 24_000
 
 
