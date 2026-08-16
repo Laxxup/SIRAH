@@ -6,6 +6,7 @@ from pathlib import Path
 from sirah.audio.fakes import FakeOperationTTS, FakePCMPlayer
 from sirah.audio.replay import load_replay
 from sirah.conversation.ollama import OllamaIntentProposer
+from sirah.conversation.personality import INVALID_RESPONSE_FALLBACK_SPEECH
 from sirah.conversation.session import ConversationSession
 from sirah.evaluation.conversation import replay_transcripts
 
@@ -76,7 +77,7 @@ async def test_malformed_ollama_json_plays_spoken_recovery():
     assert metrics.fallback == 0
     assert metrics.played == 1
     assert metrics.cancelled == 0
-    assert tts.requests == [("conversation-1", "No entendí bien, ¿puedes repetirlo?")]
+    assert tts.requests == [("conversation-1", INVALID_RESPONSE_FALLBACK_SPEECH)]
     assert player.played == [("conversation-1", b"synthetic-pcm")]
 
 

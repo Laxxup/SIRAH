@@ -15,9 +15,12 @@ from sirah.conversation.contracts import (
     IntentProposer,
     IntentRequest,
 )
+from sirah.conversation.personality import (
+    INVALID_RESPONSE_FALLBACK_SPEECH,
+    UNDERSTANDING_FALLBACK_SPEECH,
+)
 
 PERSONALITY_VERSION = "1"
-_FALLBACK = "No entendí bien, ¿puedes reformularlo?"
 _CAPABILITY_PHRASES = (
     "que puedes hacer",
     "que te falta",
@@ -49,7 +52,11 @@ class ConversationCore:
             self._remember(text, local)
             return local
         if transcript.confidence < self._minimum_confidence or not text or len(text) > 1_000:
-            return IntentProposal(IntentName.CLARIFY, "No entendí bien, ¿puedes repetirlo?", EmotionName.CONCERNED)
+            return IntentProposal(
+                IntentName.CLARIFY,
+                UNDERSTANDING_FALLBACK_SPEECH,
+                EmotionName.CONCERNED,
+            )
         request = IntentRequest("speech_ended", text, transcript.ended_at, tuple(self._context))
         proposal = await self._proposer.propose(request)
         if not _is_spanish(proposal.speech) or _claims_wrong_identity(proposal.speech):
@@ -57,7 +64,11 @@ class ConversationCore:
                 IntentRequest("repair_spanish", text, transcript.ended_at, tuple(self._context))
             )
         if not _is_spanish(proposal.speech) or _claims_wrong_identity(proposal.speech):
-            return IntentProposal(IntentName.CLARIFY, _FALLBACK, EmotionName.CONCERNED)
+            return IntentProposal(
+                IntentName.CLARIFY,
+                INVALID_RESPONSE_FALLBACK_SPEECH,
+                EmotionName.CONCERNED,
+            )
         self._remember(text, proposal)
         return proposal
 

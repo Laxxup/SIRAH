@@ -13,17 +13,31 @@ from sirah.conversation.contracts import (
     IntentProposal,
 )
 from sirah.conversation.core import ConversationCore
+from sirah.conversation.errors import (
+    BudgetExhausted,
+    ConversationTimeout,
+    InvalidModelResponse,
+    RemoteError,
+)
+from sirah.conversation.personality import (
+    GENERATION_FALLBACK_SPEECH,
+    INVALID_RESPONSE_FALLBACK_SPEECH,
+    UNDERSTANDING_FALLBACK_SPEECH,
+)
 from sirah.conversation.session import ConversationSession
 from sirah.conversation.timing import TurnTiming
 
 
 class FakeProposer:
-    def __init__(self, proposal: object) -> None:
+    def __init__(self, proposal: object, *, failure: Exception | None = None) -> None:
         self.proposal = proposal
+        self.failure = failure
         self.requests = []
 
     async def propose(self, request):
         self.requests.append(request)
+        if self.failure is not None:
+            raise self.failure
         return self.proposal
 
 
@@ -55,8 +69,8 @@ class FakePlayer:
         return None
 
 
-def _transcript(text: str, ended_at: float = 1.5) -> Transcript:
-    return Transcript(text, started_at=1.0, ended_at=ended_at, confidence=0.9)
+def _transcript(text: str, ended_at: float = 1.5, confidence: float = 0.9) -> Transcript:
+    return Transcript(text, started_at=1.0, ended_at=ended_at, confidence=confidence)
 
 
 async def test_session_plays_accepted_none_action_response_under_its_operation_id():
@@ -79,16 +93,18 @@ async def test_session_plays_accepted_none_action_response_under_its_operation_i
 async def test_session_uses_spoken_recovery_for_malformed_proposal():
     tts = FakeTTS()
     player = FakePlayer()
-    session = ConversationSession(FakeProposer(object()), tts, player)
+    proposer = FakeProposer(object())
+    session = ConversationSession(proposer, tts, player)
 
     result = await session.respond(_transcript("hola"))
 
     assert result.proposal == IntentProposal(
         IntentName.CLARIFY,
-        "No entendí bien, ¿puedes repetirlo?",
+        INVALID_RESPONSE_FALLBACK_SPEECH,
         EmotionName.CONCERNED,
     )
-    assert tts.calls == [("conversation-1", "No entendí bien, ¿puedes repetirlo?")]
+    assert len(proposer.requests) == 1
+    assert tts.calls == [("conversation-1", INVALID_RESPONSE_FALLBACK_SPEECH)]
     assert player.calls == [("conversation-1", b"pcm")]
 
 
@@ -250,10 +266,134 @@ async def test_session_recovers_from_a_rejected_proposal_without_response_text()
 
     assert result.proposal == IntentProposal(
         IntentName.CLARIFY,
-        "No entendí bien, ¿puedes repetirlo?",
+        GENERATION_FALLBACK_SPEECH,
         EmotionName.CONCERNED,
     )
     assert diagnostics == ["propuesta descartada: ValueError"]
+
+
+async def test_session_uses_understanding_clarification_for_low_confidence_transcript():
+    proposer = FakeProposer(IntentProposal(IntentName.ANSWER, "ignored"))
+    tts = FakeTTS()
+    player = FakePlayer()
+    session = ConversationSession(
+        proposer,
+        tts,
+        player,
+        core=ConversationCore(proposer),
+    )
+
+    result = await session.respond(_transcript("nombre raro", confidence=0.2))
+
+    assert result.proposal == IntentProposal(
+        IntentName.CLARIFY,
+        UNDERSTANDING_FALLBACK_SPEECH,
+        EmotionName.CONCERNED,
+    )
+    assert proposer.requests == []
+    assert tts.calls == [("conversation-1", UNDERSTANDING_FALLBACK_SPEECH)]
+
+
+async def test_session_uses_generation_fallback_for_conversation_timeout():
+    diagnostics: list[str] = []
+    session = ConversationSession(
+        FakeProposer(IntentProposal(IntentName.ANSWER, "ignored"), failure=ConversationTimeout("timeout")),
+        FakeTTS(),
+        FakePlayer(),
+        on_diagnostic=diagnostics.append,
+    )
+
+    result = await session.respond(_transcript("hola"))
+
+    assert result.proposal == IntentProposal(
+        IntentName.CLARIFY,
+        GENERATION_FALLBACK_SPEECH,
+        EmotionName.CONCERNED,
+    )
+    assert "entendí" not in result.proposal.speech
+    assert diagnostics == ["propuesta descartada: ConversationTimeout"]
+
+
+async def test_session_uses_generation_fallback_for_remote_error():
+    diagnostics: list[str] = []
+    session = ConversationSession(
+        FakeProposer(IntentProposal(IntentName.ANSWER, "ignored"), failure=RemoteError("network")),
+        FakeTTS(),
+        FakePlayer(),
+        on_diagnostic=diagnostics.append,
+    )
+
+    result = await session.respond(_transcript("hola"))
+
+    assert result.proposal == IntentProposal(
+        IntentName.CLARIFY,
+        GENERATION_FALLBACK_SPEECH,
+        EmotionName.CONCERNED,
+    )
+    assert diagnostics == ["propuesta descartada: RemoteError"]
+
+
+async def test_session_uses_invalid_response_fallback_without_retrying_the_proposer():
+    diagnostics: list[str] = []
+    proposer = FakeProposer(
+        IntentProposal(IntentName.ANSWER, "ignored"),
+        failure=InvalidModelResponse("malformed"),
+    )
+    session = ConversationSession(
+        proposer,
+        FakeTTS(),
+        FakePlayer(),
+        on_diagnostic=diagnostics.append,
+    )
+
+    result = await session.respond(_transcript("hola"))
+
+    assert result.proposal == IntentProposal(
+        IntentName.CLARIFY,
+        INVALID_RESPONSE_FALLBACK_SPEECH,
+        EmotionName.CONCERNED,
+    )
+    assert len(proposer.requests) == 1
+    assert diagnostics == ["propuesta descartada: InvalidModelResponse"]
+
+
+async def test_session_uses_safe_generation_fallback_for_budget_exhausted():
+    diagnostics: list[str] = []
+    session = ConversationSession(
+        FakeProposer(IntentProposal(IntentName.ANSWER, "ignored"), failure=BudgetExhausted("limit")),
+        FakeTTS(),
+        FakePlayer(),
+        on_diagnostic=diagnostics.append,
+    )
+
+    result = await session.respond(_transcript("hola"))
+
+    assert result.proposal == IntentProposal(
+        IntentName.CLARIFY,
+        GENERATION_FALLBACK_SPEECH,
+        EmotionName.CONCERNED,
+    )
+    assert "entendí" not in result.proposal.speech
+    assert diagnostics == ["propuesta descartada: BudgetExhausted"]
+
+
+async def test_session_keeps_successful_proposal_unchanged_without_diagnostics():
+    diagnostics: list[str] = []
+    proposal = IntentProposal(IntentName.ANSWER, "Hola", EmotionName.FRIENDLY, ActionName.NONE)
+    tts = FakeTTS()
+    player = FakePlayer()
+    session = ConversationSession(
+        FakeProposer(proposal),
+        tts,
+        player,
+        on_diagnostic=diagnostics.append,
+    )
+
+    result = await session.respond(_transcript("hola"))
+
+    assert result.proposal == proposal
+    assert diagnostics == []
+    assert tts.calls == [("conversation-1", "Hola")]
 
 
 async def test_session_marks_silent_response_before_returning_to_idle():

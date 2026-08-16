@@ -11,6 +11,14 @@ from sirah.audio.contracts import Transcript
 from sirah.conversation.context import ConversationContext
 from sirah.conversation.contracts import IntentProposal, IntentProposer, IntentRequest
 from sirah.conversation.core import ConversationCore
+from sirah.conversation.errors import (
+    BudgetExhausted,
+    ConfigurationError,
+    ConversationTimeout,
+    InvalidModelResponse,
+    ProposalInFlight,
+    RemoteError,
+)
 from sirah.conversation.personality import ConversationPersonality
 from sirah.conversation.timing import TurnTiming
 from sirah.conversation.validator import ProposalValidator
@@ -124,9 +132,18 @@ class ConversationSession:
             return self._validator.validate(proposal)
         except asyncio.CancelledError:
             raise
+        except (ConversationTimeout, RemoteError) as exc:
+            self._report_diagnostic(f"propuesta descartada: {type(exc).__name__}")
+            return self._personality.generation_fallback()
+        except InvalidModelResponse as exc:
+            self._report_diagnostic(f"propuesta descartada: {type(exc).__name__}")
+            return self._personality.invalid_response_fallback()
+        except (BudgetExhausted, ProposalInFlight, ConfigurationError) as exc:
+            self._report_diagnostic(f"propuesta descartada: {type(exc).__name__}")
+            return self._personality.generation_fallback()
         except Exception as exc:  # noqa: BLE001 - external proposals are untrusted; silence is safe.
             self._report_diagnostic(f"propuesta descartada: {type(exc).__name__}")
-            return self._personality.fallback()
+            return self._personality.generation_fallback()
 
     async def _cancel_obsolete(self) -> None:
         operation_id = self._active_operation

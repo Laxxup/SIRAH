@@ -8,6 +8,10 @@ from sirah.audio.contracts import Transcript
 from sirah.conversation.contracts import EmotionName, IntentName, IntentProposal
 from sirah.conversation.core import ConversationCore
 from sirah.conversation.fakes import FakeIntentProposer
+from sirah.conversation.personality import (
+    INVALID_RESPONSE_FALLBACK_SPEECH,
+    UNDERSTANDING_FALLBACK_SPEECH,
+)
 
 
 def _transcript(text: str, confidence: float = 0.9) -> Transcript:
@@ -32,7 +36,7 @@ async def test_core_rejects_low_confidence_before_ollama():
 
     response = await core.respond(_transcript("nombre raro", confidence=0.2))
 
-    assert response.speech == "No entendí bien, ¿puedes repetirlo?"
+    assert response.speech == UNDERSTANDING_FALLBACK_SPEECH
     assert proposer.requests == []
 
 
@@ -121,7 +125,7 @@ async def test_core_accepts_valid_spanish_listening_response_from_cloud():
     assert response.speech == "Sí, te escucho."
 
 
-async def test_core_repairs_english_response_once_then_uses_spanish_fallback():
+async def test_core_repairs_english_response_once_then_uses_invalid_response_fallback():
     class EnglishTwice(FakeIntentProposer):
         async def propose(self, request):
             self.requests.append(request)
@@ -132,5 +136,5 @@ async def test_core_repairs_english_response_once_then_uses_spanish_fallback():
 
     response = await core.respond(_transcript("Háblame normalmente"))
 
-    assert response.speech == "No entendí bien, ¿puedes reformularlo?"
+    assert response.speech == INVALID_RESPONSE_FALLBACK_SPEECH
     assert len(proposer.requests) == 2
