@@ -80,6 +80,7 @@ class ConversationSession:
             self._active_task = task
             self._active_operation = operation_id
             self.context.add(transcript)
+            self._renew_proposal_budget()
             try:
                 self._mark("Ollama: iniciando")
                 proposal = await self._propose_safe(transcript)
@@ -135,6 +136,11 @@ class ConversationSession:
         await self._tts.cancel(operation_id)
         await self._player.cancel(operation_id)
         task.cancel()
+
+    def _renew_proposal_budget(self) -> None:
+        renew = getattr(self._proposer, "start_turn", None)
+        if renew is not None:
+            renew()
 
     def _mark(self, label: str) -> None:
         if self._timing is not None:

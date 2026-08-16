@@ -34,6 +34,7 @@ class ConversationCore:
         self._context: deque[str] = deque(maxlen=context_limit)
 
     async def respond(self, transcript: Transcript) -> IntentProposal:
+        self._renew_proposal_budget()
         text = transcript.text.strip()
         local = self._local(text)
         if local is not None and transcript.confidence >= 0.45:
@@ -76,6 +77,11 @@ class ConversationCore:
         self._context.append(f"Persona: {person_text}")
         if proposal.speech:
             self._context.append(f"SIRAH: {proposal.speech}")
+
+    def _renew_proposal_budget(self) -> None:
+        renew = getattr(self._proposer, "start_turn", None)
+        if renew is not None:
+            renew()
 
 
 def _is_spanish(speech: str | None) -> bool:

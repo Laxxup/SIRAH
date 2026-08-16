@@ -250,9 +250,21 @@ class OllamaIntentProposer:
         self._model = model
         self._api_key = api_key
         self._timeout_s = timeout_s
+        self._budget = budget
         self._remaining = budget
         self._post = post
         self._single_flight = asyncio.Lock()
+
+    def start_turn(self) -> None:
+        """Renew the per-turn Cloud proposal allowance.
+
+        ``budget`` bounds the Cloud proposals a single conversational turn may
+        consume (one initial proposal plus a bounded optional repair). The turn
+        orchestrator renews the allowance at each turn boundary; without
+        renewal a long-lived session would exhaust it and reply with a
+        clarification for every later turn.
+        """
+        self._remaining = self._budget
 
     @classmethod
     def from_environment(

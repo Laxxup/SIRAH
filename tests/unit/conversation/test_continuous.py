@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 
 from sirah.audio.contracts import AudioChunk, Transcript
+from sirah.audio.fakes import FakeOperationTTS, FakePCMPlayer
 from sirah.conversation.continuous import (
     ContinuousConversationSession,
     ContinuousSessionConfig,
     ConversationState,
 )
+from sirah.conversation.ollama import OllamaIntentProposer
+from sirah.conversation.session import ConversationSession
 from sirah.conversation.timing import TurnTiming
 
 
@@ -560,3 +564,58 @@ async def test_retains_a_fifteen_second_turn_at_the_configured_32ms_frame_size()
 
     assert len(stt.requests) == 1
     assert len(stt.requests[0]) >= 469
+
+
+async def test_hands_free_session_exceeds_ten_turns_without_budget_exhaustion():
+    calls: list[bytes] = []
+
+    async def post(_url: str, _headers: dict[str, str], body: bytes, _timeout: float) -> bytes:
+        calls.append(body)
+        return json.dumps(
+            {
+                "message": {
+                    "content": json.dumps(
+                        {
+                            "intent": "answer",
+                            "speech": "Hola, sigamos.",
+                            "emotion": "friendly",
+                            "action": "none",
+                        }
+                    )
+                }
+            }
+        ).encode()
+
+    proposer = OllamaIntentProposer.from_environment(
+        environ={
+            "SIRAH_OLLAMA_HOST": "https://offline.invalid",
+            "SIRAH_OLLAMA_MODEL": "offline-model",
+            "SIRAH_OLLAMA_API_KEY": "offline-key",
+        },
+        timeout_s=10.0,
+        budget=1,
+        post=post,
+    )
+    conversation = ConversationSession(proposer, FakeOperationTTS(), FakePCMPlayer())
+    chunks: list[AudioChunk] = []
+    texts: list[str] = []
+    speech_at: set[float] = set()
+    for turn in range(12):
+        base = turn * 10
+        chunks.extend([_chunk(base + 0.1), _chunk(base + 0.2), _chunk(base + 0.5)])
+        speech_at.update({base + 0.1, base + 0.2})
+        texts.append(f"turno {turn}")
+    session = ContinuousConversationSession(
+        FakeSource(chunks),
+        FakeVAD(speech_at),
+        FakeSTT(texts),
+        conversation,
+        config=ContinuousSessionConfig(
+            end_silence_ms=200, min_speech_ms=0, post_playback_guard_ms=0
+        ),
+    )
+
+    await session.run()
+
+    assert session.state is ConversationState.STOPPED
+    assert len(calls) == 12
