@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import unicodedata
 from collections import deque
 from collections.abc import Callable
 from datetime import datetime
@@ -17,6 +18,13 @@ from sirah.conversation.contracts import (
 
 PERSONALITY_VERSION = "1"
 _FALLBACK = "No entendí bien, ¿puedes reformularlo?"
+_CAPABILITY_PHRASES = (
+    "que puedes hacer",
+    "que te falta",
+    "que quieres lograr",
+    "tus capacidades",
+    "tus limitaciones",
+)
 
 
 class ConversationCore:
@@ -54,18 +62,18 @@ class ConversationCore:
         return proposal
 
     def _local(self, text: str) -> IntentProposal | None:
-        normalized = text.lower()
-        if "cómo te llamas" in normalized or "que significa sirah" in normalized or "qué significa sirah" in normalized:
+        normalized = _normalize(text)
+        if "como te llamas" in normalized or "que significa sirah" in normalized:
             return IntentProposal(
                 IntentName.ANSWER,
                 "Me llamo SIRAH, Sistema Inteligente Robótico de Asistencia Humana.",
                 EmotionName.FRIENDLY,
             )
-        if "hora" in normalized:
+        if _wants_time(normalized):
             return IntentProposal(IntentName.ANSWER, f"Son las {self._clock():%H:%M}.", EmotionName.FRIENDLY)
-        if "fecha" in normalized or "día" in normalized or "dia" in normalized:
+        if _wants_date(normalized):
             return IntentProposal(IntentName.ANSWER, f"Hoy es {self._clock():%Y-%m-%d}.", EmotionName.FRIENDLY)
-        if any(phrase in normalized for phrase in ("qué puedes hacer", "que puedes hacer", "qué te falta", "que te falta", "qué quieres lograr", "que quieres lograr", "tus capacidades", "tus limitaciones")):
+        if any(phrase in normalized for phrase in _CAPABILITY_PHRASES):
             return IntentProposal(
                 IntentName.ANSWER,
                 "Puedo escucharte y conversar contigo por voz. Mi sistema visual sigue en desarrollo; quiero comprender mejor mi entorno y seguir rostros en el futuro.",
@@ -82,6 +90,44 @@ class ConversationCore:
         renew = getattr(self._proposer, "start_turn", None)
         if renew is not None:
             renew()
+
+
+def _normalize(text: str) -> str:
+    """Fold case and strip diacritics so accented variants match equal phrases."""
+    decomposed = unicodedata.normalize("NFD", text.casefold())
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+
+
+def _wants_date(normalized: str) -> bool:
+    """True when the turn explicitly asks for today's date.
+
+    Matches by terminal phrase (optionally followed by ``hoy``) instead of the
+    bare ``dia``/``fecha`` substrings, so greetings and schedule questions such
+    as ``Buen dia`` or ``En que dia es la reunion`` stay on the Cloud path.
+    """
+    core = normalized.strip().strip("¿?¡!.")
+    if core.endswith(" hoy"):
+        core = core[: -len(" hoy")].rstrip()
+    return core.endswith(
+        ("que dia es", "que fecha es", "cual es la fecha", "que dia estamos")
+    )
+
+
+def _wants_time(normalized: str) -> bool:
+    """True when the turn explicitly asks for the current time.
+
+    Requires a question ending (``que hora es``) or an explicit request phrase
+    (``dime/decir/dame la hora``); plain ``hora`` occurrences such as ``a esta
+    hora`` or ``una hora`` continue to the Cloud path.
+    """
+    core = normalized.strip().strip("¿?¡!.")
+    if core.endswith(" ahora"):
+        core = core[: -len(" ahora")].rstrip()
+    if core.endswith("que hora es"):
+        return True
+    return any(
+        phrase in core for phrase in ("dime la hora", "decir la hora", "dame la hora")
+    )
 
 
 def _is_spanish(speech: str | None) -> bool:
