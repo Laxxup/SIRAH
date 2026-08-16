@@ -32,6 +32,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y g++ make
       - name: Install project
         run: pip install -e . pytest
+      - name: Build + run firmware core tests
+        run: make -C firmware/sirah-eyes/tests/host core_tests
       - name: Build host contract tool
         run: make -C firmware/sirah-eyes/tests/host contract_checker
       - name: Contract gate (Python + C++ over same corpus)

@@ -263,3 +263,29 @@ async def test_mid_session_link_loss_degrades_eyes_and_counts():
     result = await run
     assert result.send_errors == 1
     assert result.registry.get("eyes").status == ComponentStatus.DEGRADED
+
+
+async def test_link_loss_safe_pose_recenters_firmware_via_watchdog():
+    # spec 10.3: when the host disappears the firmware/fake watchdog eases
+    # the gaze back to the safe pose CENTER while the link stays down.
+    fake = BurstTransport.from_actuators_yaml(watchdog_timeout_ms=60)
+    app = _app(
+        fake,
+        ScriptedCamera(n=10**6),
+        WindowDetector(GazeTarget(0.5, -0.5, confidence=0.9), n_faces=10**9),
+        GazeBehavior(),
+    )
+    stop = asyncio.Event()
+    run = asyncio.create_task(app.run(stop))
+    await _await_until(lambda: app.result.faces_seen > 0)
+    await _await_state(fake, lambda x, y: x > 0.3 and y < -0.3)  # tracking a face
+    fake.break_link = True  # host disappears: no more HEARTBEAT/STATUS reach it
+    await _await_until(lambda: app.registry.get("eyes").status == ComponentStatus.DEGRADED)
+    # The watchdog is armed by the sim clock: advance past the timeout and
+    # confirm the fake eased the gaze back to the safe pose CENTER.
+    fake.advance(fake.watchdog_timeout_ms + 5000)
+    assert fake._target_x == 0.0 and fake._target_y == 0.0
+    assert abs(fake._easer.x) < 0.05 and abs(fake._easer.y) < 0.05
+    stop.set()
+    result = await run
+    assert result.registry.get("eyes").status == ComponentStatus.DEGRADED

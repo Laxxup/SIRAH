@@ -18,7 +18,8 @@ CORE_SRCS = \
 	../../core/protocol.cpp \
 	../../core/mapping.cpp \
 	../../core/easing.cpp \
-	../../core/blink_fsm.cpp
+	../../core/blink_fsm.cpp \
+	../../core/watchdog.cpp
 
 all: core_tests contract_checker
 

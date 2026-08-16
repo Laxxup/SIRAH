@@ -16,8 +16,10 @@ Mirror map (firmware files tell the truth; this module is the mirror):
   trigger only in Idle, auto cadence drawn with jitter, seeded RNG)
 - replies             -> `core/protocol.cpp` (`READY 1`, `OK`, `ERR n`,
   `STATE %.3f %.3f %d` with the -0.000 clamp)
-- watchdog            -> Stage 11 semantics (countdown from last
-  HEARTBEAT; on timeout target eases back to CENTER; blink continues)
+- watchdog            -> spec 10 semantics (countdown from last VALID
+  command line, not just HEARTBEAT; on timeout target eases back to
+  CENTER; blink continues; first valid line after timeout emits READY 1
+  exactly once)
 
 Evidence classes: mapping/easing/FSM/reply formatting VERIFIED against
 the C++ host tests (same numbers); tick period 20 ms INFERRED from the
@@ -248,7 +250,8 @@ class FakeESP32(EyeTransport):
         self._target_x = 0.0
         self._target_y = 0.0
         self._blink_requested = False
-        self._last_heartbeat_ms: float | None = None
+        self._last_activity_ms: float | None = None
+        self._watchdog_armed = False
         self._sim_ms = 0.0  # virtual simulation clock
         self._next_step_ms = float(tick_ms)
         self._last_sync_ms: float | None = None
@@ -283,6 +286,13 @@ class FakeESP32(EyeTransport):
             # Responses/ignored arriving at the firmware produce no reply.
             return
         assert result.name is not None
+        # Any valid command line resets the watchdog (spec 10.2). If the
+        # link had timed out, emit READY 1 exactly once, before the reply
+        # to the recovering line (spec 10.4).
+        self._last_activity_ms = self._sim_ms
+        if self._watchdog_armed:
+            self._watchdog_armed = False
+            self._enqueue(b"READY 1")
         if result.name == "TARGET":
             x, y = float(result.args[0]), float(result.args[1])
             if not (MIN_COORD <= x <= MAX_COORD and MIN_COORD <= y <= MAX_COORD):
@@ -297,7 +307,7 @@ class FakeESP32(EyeTransport):
             self._blink_requested = True
             self._enqueue(b"OK")
         elif result.name == "HEARTBEAT":
-            self._last_heartbeat_ms = self._sim_ms  # silent by spec 6.2
+            pass  # silent by spec 10.1; activity already reset the watchdog
         elif result.name == "STATUS":
             self._enqueue(self._format_state())
         else:  # pragma: no cover - parse_line only yields the verbs above
@@ -366,12 +376,14 @@ class FakeESP32(EyeTransport):
         self._last_sync_ms = now
 
     def _step(self, now_ms: float) -> None:
-        # Watchdog (Stage 11): countdown from last HEARTBEAT; on timeout the
-        # target eases back to CENTER. Blink continues (firmware-owned).
+        # Watchdog (spec 10, Stage 11): countdown from the last valid
+        # activity; on timeout the target eases back to CENTER (safe pose).
+        # Blink continues (firmware-owned).
         if (
-            self._last_heartbeat_ms is not None
-            and now_ms - self._last_heartbeat_ms >= self.watchdog_timeout_ms
+            self._last_activity_ms is not None
+            and now_ms - self._last_activity_ms >= self.watchdog_timeout_ms
         ):
+            self._watchdog_armed = True
             self._target_x = 0.0
             self._target_y = 0.0
         if self._blink.state != BlinkState.IDLE:

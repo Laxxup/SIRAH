@@ -8,15 +8,18 @@
 //   - TARGET/CENTER: normalized gaze commands; eased to degrees by firmware.
 //   - BLINK: best-effort punctual trigger for the firmware-owned blink FSM.
 //   - STATUS: current eased gaze + blink flag. HEARTBEAT: accepted in
-//     silence (A2 watchdog lands in Stage 11).
+//     silence (keeps the watchdog alive, spec 10.1).
+//   - Watchdog (spec 10, Stage 11): any VALID command line resets it
+//     (spec 10.2); after 3 s without activity the link is considered lost
+//     and the firmware eases to the safe pose CENTER and holds it while
+//     the link stays down (spec 10.3). Blinking continues (ADR-0004). The
+//     first valid line after a timeout recovers the link and emits
+//     READY 1 exactly once (spec 10.4).
 //   - Natural blinking cadence 6 s ± 2 s (A10), firmware-owned, jitter
 //     drawn with esp_random() at every cycle start.
-//   - Auto-gaze idle roam: while no VALID command has arrived for the
-//     last kRoamIdleMs, the gaze cycles a waypoint table (normalized,
-//     inside the calibrated range). Any valid command takes over right
-//     away (spec 10.5); the roam resumes once the link stays silent.
-//     Grammar stays closed (protocol.md v1.0): this is internal idle
-//     behavior only, no new verb.
+//   - Grammar stays closed (protocol.md v1.0): no verb beyond the five
+//     catalog commands; no idle roam (spec 10.3 keeps the safe pose while
+//     the host is away).
 //
 // Iteration: 20 ms loop; Y easing is more damped than X (ADR-0005).
 
@@ -30,6 +33,7 @@
 #include "core/easing.h"
 #include "core/mapping.h"
 #include "core/protocol.h"
+#include "core/watchdog.h"
 #include "platform/pins.h"
 #include "platform/servo_driver.h"
 
@@ -45,31 +49,14 @@ constexpr float kEaseKy = 0.12F;  // Y more damped (ADR-0005)
 constexpr uint32_t kBlinkCadenceMs = 6000;
 constexpr uint32_t kBlinkJitterMs = 2000;
 
-// Idle auto-gaze (roam): waypoint cycle in normalized space, well inside
-// the calibrated range; the per-axis easer smooths the transits. Any
-// valid command pauses the roam; it resumes kRoamIdleMs later.
-constexpr uint32_t kRoamIdleMs = 8000;
-constexpr uint32_t kRoamWaypointMs = 2500;
-
-struct RoamWaypoint {
-  float x;
-  float y;
-};
-
-// Cycle: right-up, left-up, left-down, right-down, back to center (loop).
-constexpr RoamWaypoint kRoamPath[] = {
-    {0.45F, 0.20F},
-    {-0.45F, 0.20F},
-    {-0.45F, -0.20F},
-    {0.45F, -0.20F},
-    {0.0F, 0.0F},
-};
-constexpr size_t kRoamPathLen = sizeof(kRoamPath) / sizeof(kRoamPath[0]);
+// Watchdog (spec 10): 3 s without any valid activity = link lost.
+constexpr uint32_t kWatchdogTimeoutMs = 3000;
 
 constexpr size_t kLineBytes = 64;  // protocol.md 4: 63 payload + NUL
 
 sirah::eyes::core::GazeEaser g_gaze;
 sirah::eyes::core::BlinkFSM g_blink;
+sirah::eyes::core::Watchdog g_watchdog(kWatchdogTimeoutMs);
 sirah::eyes::platform::ServoDriver g_servos;
 
 char g_line[kLineBytes];
@@ -81,12 +68,6 @@ float g_target_y = 0.0F;
 
 uint32_t g_auto_interval_ms = kBlinkCadenceMs;
 bool g_blink_requested = false;
-
-// kRoamIdleMs as boot value: counts as "idle for a long time" (unsigned
-// wrap), so the gaze starts looking around right after power-on.
-uint32_t g_last_activity_ms = kRoamIdleMs;  // last VALID command (spec 10.2)
-size_t g_roam_index = 0;
-uint32_t g_roam_hold_until_ms = 0;
 
 uint32_t draw_blink_interval() {
   const int32_t j = static_cast<int32_t>(
@@ -101,7 +82,13 @@ void handle_command(const sirah::eyes::core::ParseResult& r) {
     return;
   }
   if (r.kind != Kind::Command) return;  // responses from PC ignored
-  g_last_activity_ms = millis();  // any valid command keeps the link live
+  // Any valid command line is "activity" (spec 10.2): resets the watchdog
+  // and, if the link had timed out, arms the once-only READY 1.
+  g_watchdog.mark_activity(millis());
+  if (g_watchdog.recovery_pending()) {
+    g_watchdog.clear_recovery();
+    Serial.println(sirah::eyes::core::kReadyLine);
+  }
   if (r.name == "TARGET") {
     g_target_x = std::strtof(r.args[0].c_str(), nullptr);
     g_target_y = std::strtof(r.args[1].c_str(), nullptr);
@@ -118,7 +105,7 @@ void handle_command(const sirah::eyes::core::ParseResult& r) {
     Serial.println(
         sirah::eyes::core::format_state(g_gaze.x, g_gaze.y, blinking ? 1 : 0).c_str());
   }
-  // HEARTBEAT: accepted silently (Stage 11 watchdog).
+  // HEARTBEAT: accepted silently (keeps the watchdog alive, spec 10.1).
 }
 
 void on_line(const char* line, size_t len) {
@@ -157,7 +144,6 @@ void setup() {
   Serial.begin(115200);
   g_servos.init();
   g_auto_interval_ms = draw_blink_interval();
-  g_roam_hold_until_ms = millis() + kRoamWaypointMs;
   g_blink.reset();
   Serial.println(sirah::eyes::core::kReadyLine);
 }
@@ -166,6 +152,14 @@ void loop() {
   read_serial();
 
   const uint32_t now_ms = millis();
+
+  // Watchdog (spec 10.3): while the link is lost, hold the safe pose CENTER.
+  g_watchdog.check(now_ms);
+  if (g_watchdog.timed_out()) {
+    g_target_x = 0.0F;
+    g_target_y = 0.0F;
+  }
+
   const BlinkState prev = g_blink.state();
   if (prev != BlinkState::Idle) {
     // A blink owns the mechanism briefly; defer gaze motion until it opens.
@@ -175,22 +169,10 @@ void loop() {
       g_blink.trigger(now_ms);
       g_blink_requested = false;
     }
-    if (now_ms - g_last_activity_ms >= kRoamIdleMs) {
-      // Idle auto-gaze: follow the waypoint cycle; blinking keeps its own
-      // cadence and freezes the gaze for its duration.
-      if (now_ms >= g_roam_hold_until_ms) {
-        g_roam_index = (g_roam_index + 1) % kRoamPathLen;
-        g_roam_hold_until_ms = now_ms + kRoamWaypointMs;
-      }
-      g_gaze.tick(kRoamPath[g_roam_index].x, kRoamPath[g_roam_index].y,
-                  kEaseKx, kEaseKy);
+    const bool gaze_settled = g_gaze.tick(g_target_x, g_target_y, kEaseKx, kEaseKy);
+    if (gaze_settled) {
+      // Auto blinking starts only while the eyes are not turning.
       g_blink.tick(now_ms, g_auto_interval_ms);
-    } else {
-      const bool gaze_settled = g_gaze.tick(g_target_x, g_target_y, kEaseKx, kEaseKy);
-      if (gaze_settled) {
-        // Auto blinking starts only while the eyes are not turning.
-        g_blink.tick(now_ms, g_auto_interval_ms);
-      }
     }
   }
   if (prev != BlinkState::Idle && g_blink.state() == BlinkState::Idle) {

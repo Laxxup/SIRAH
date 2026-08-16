@@ -10,6 +10,7 @@
 #include "core/easing.h"
 #include "core/mapping.h"
 #include "core/protocol.h"
+#include "core/watchdog.h"
 
 namespace {
 
@@ -223,6 +224,52 @@ void test_protocol_formatting() {
   assert(sirah::eyes::core::format_err(5) == "ERR 5");
 }
 
+void test_watchdog_does_not_timeout_with_activity() {
+  sirah::eyes::core::Watchdog wd(3000);
+  wd.mark_activity(0);
+  for (uint32_t t = 1000; t <= 5000; t += 1000) {
+    wd.mark_activity(t);
+    assert(!wd.check(t));
+  }
+}
+
+void test_watchdog_times_out_and_holds_while_link_down() {
+  sirah::eyes::core::Watchdog wd(3000);
+  wd.mark_activity(0);
+  assert(!wd.check(1000));
+  assert(!wd.check(2999));
+  assert(wd.check(3000));   // timeout crossed -> latched
+  assert(wd.check(4000));   // stays latched while link stays down
+  assert(wd.check(10000));
+}
+
+void test_watchdog_any_valid_line_recovers_with_ready_once() {
+  sirah::eyes::core::Watchdog wd(3000);
+  wd.mark_activity(0);
+  assert(wd.check(3000));           // timed out
+  assert(!wd.recovery_pending());
+  wd.mark_activity(4500);           // first valid line (could be HEARTBEAT/STATUS)
+  assert(!wd.check(4500));          // recovered
+  assert(wd.recovery_pending());    // READY 1 pending
+  wd.clear_recovery();              // firmware emitted READY 1
+  assert(!wd.recovery_pending());
+  wd.mark_activity(4600);           // further lines do NOT re-arm READY 1
+  assert(!wd.recovery_pending());
+  assert(!wd.check(5000));
+}
+
+void test_watchdog_times_out_again_after_recovery() {
+  sirah::eyes::core::Watchdog wd(3000);
+  wd.mark_activity(0);
+  assert(wd.check(3000));
+  wd.mark_activity(4500);
+  assert(wd.recovery_pending());
+  wd.clear_recovery();
+  assert(!wd.check(5000));
+  assert(wd.check(7500));           // 3s after the recovery line -> timeout again
+  assert(!wd.recovery_pending());
+}
+
 }  // namespace
 
 int main() {
@@ -241,6 +288,10 @@ int main() {
   test_blink_trigger_only_in_idle_after_cycle();
   test_protocol_parsing_smoke();
   test_protocol_formatting();
+  test_watchdog_does_not_timeout_with_activity();
+  test_watchdog_times_out_and_holds_while_link_down();
+  test_watchdog_any_valid_line_recovers_with_ready_once();
+  test_watchdog_times_out_again_after_recovery();
   std::printf("core_tests: all assertions passed\n");
   return 0;
 }

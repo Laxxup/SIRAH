@@ -8,7 +8,8 @@ Covers:
 - per-axis easing mirror (ADR-0005: Y damped more than X);
 - blink FSM mirror (trigger only in Idle, timing, auto cadence);
 - calibration hard-clamp rejects (out-of-range -> ERR 3);
-- watchdog mirror (Stage 11: heartbeat pause -> eased CENTER);
+- watchdog mirror (spec 10: any valid command resets; pause -> eased
+  CENTER; recovery emits READY 1 exactly once);
 - initialization from the shared actuator YAML (ADR-0009).
 """
 
@@ -297,6 +298,7 @@ async def test_watchdog_recenters_after_heartbeat_pause(fake: FakeESP32) -> None
     assert await fake.read() == b"OK"
     fake.advance(fake.watchdog_timeout_ms + 2000)
     await fake.send(b"STATUS")
+    assert await fake.read() == b"READY 1"  # recovery, exactly once (spec 10.4)
     line = await fake.read()
     result = parse_line(line)
     x = float(result.args[0])  # type: ignore[union-attr]
@@ -327,9 +329,42 @@ async def test_watchdog_blink_continues(fake: FakeESP32) -> None:
     await fake.send(b"HEARTBEAT")
     fake.advance(fake.watchdog_timeout_ms + 100)
     await fake.send(b"STATUS")  # report to flush watchdog step
-    await fake.read()
+    assert await fake.read() == b"READY 1"  # recovery preamble (spec 10.4)
+    assert await fake.read() == b"STATE 0.000 0.000 0"
     await fake.send(b"BLINK")
     assert await fake.read() == b"OK"  # blink still accepted while centered
+
+
+async def test_any_valid_command_resets_watchdog_not_only_heartbeat(fake: FakeESP32) -> None:
+    # spec 10.2: "Activity" = any VALID command line (TARGET, CENTER,
+    # BLINK, HEARTBEAT, STATUS). A STATUS well inside the timeout must keep
+    # tracking (old firmware only reset on HEARTBEAT).
+    await fake.connect()
+    await fake.read()  # READY
+    await fake.send(b"TARGET 0.9 0.9")
+    await fake.read()
+    await fake.send(b"STATUS")
+    await fake.read()
+    fake.advance(1500)
+    await fake.send(b"STATUS")
+    line = await fake.read()
+    result = parse_line(line)
+    x = float(result.args[0])  # type: ignore[union-attr]
+    assert x > 0.5  # watchdog did not recenter: STATUS kept it alive
+
+
+async def test_recovery_emits_ready_1_exactly_once(fake: FakeESP32) -> None:
+    await fake.connect()
+    await fake.read()  # READY at boot
+    await fake.send(b"HEARTBEAT")
+    await fake.send(b"TARGET 1.0 0.0")
+    await fake.read()
+    fake.advance(fake.watchdog_timeout_ms + 1000)  # link lost
+    await fake.send(b"STATUS")
+    assert await fake.read() == b"READY 1"  # exactly once (spec 10.4)
+    await fake.read()  # STATE for that STATUS
+    await fake.send(b"TARGET 0.5 0.5")  # further valid lines must NOT re-arm READY
+    assert await fake.read() == b"OK"
 
 
 # --- initialization from shared YAML (ADR-0009) ------------------------
