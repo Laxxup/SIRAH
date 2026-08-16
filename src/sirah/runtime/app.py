@@ -200,7 +200,12 @@ class RuntimeApp:
         else:
             self.lost_face.on_face()
             self.result.faces_seen += 1
-            setpoint = self.behavior.step(target)
+            try:
+                setpoint = self.behavior.step(target)
+            except Exception as exc:  # noqa: BLE001 - behavior failures degrade
+                self.registry.set("behavior", ComponentStatus.DEGRADED, str(exc))
+                self.behavior = None
+                return
         if setpoint is None:
             return
         gated = self.policy.validate(setpoint.x, setpoint.y)

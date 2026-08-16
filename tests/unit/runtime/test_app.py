@@ -10,6 +10,7 @@ import pytest
 
 from sirah.config.loader import load_runtime_config
 from sirah.hardware.fake_esp32 import FakeESP32
+from sirah.perception.contracts import Frame, GazeTarget
 from sirah.runtime.app import RuntimeApp
 from sirah.runtime.registry import ComponentStatus
 
@@ -96,3 +97,47 @@ async def test_run_is_idempotent_safe_without_camera():
     await asyncio.sleep(0.03)
     stop.set()
     await asyncio.wait_for(task, timeout=2.0)
+
+
+class ExplodingBehavior:
+    def step(self, target: GazeTarget):
+        raise RuntimeError("behavior bug")
+
+
+async def test_behavior_failure_degrades_pipeline_but_runtime_continues():
+    fake = FakeESP32.from_actuators_yaml()
+    settings, actuators = _settings()
+
+    class OneFrameCamera:
+        def __init__(self) -> None:
+            self._frames = [Frame(index=1)]
+
+        async def start(self) -> None:
+            return None
+
+        async def next_frame(self) -> Frame | None:
+            return self._frames.pop(0) if self._frames else None
+
+        async def stop(self) -> None:
+            return None
+
+    class Detector:
+        def detect(self, frame: Frame) -> GazeTarget | None:
+            return GazeTarget(x=0.0, y=0.0, confidence=1.0)
+
+    app = RuntimeApp(
+        settings,
+        actuators,
+        fake,
+        camera=OneFrameCamera(),
+        face_detector=Detector(),
+        behavior=ExplodingBehavior(),
+    )
+    stop = asyncio.Event()
+    run = asyncio.create_task(app.run(stop))
+    await asyncio.sleep(0.1)
+    state = app.registry.get("behavior")
+    assert state.status == ComponentStatus.DEGRADED
+    assert "behavior bug" in state.detail
+    stop.set()
+    await run  # no exception: runtime survives a failing behavior
