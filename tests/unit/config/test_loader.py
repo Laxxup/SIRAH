@@ -8,6 +8,7 @@ import pytest
 
 from sirah.config.loader import (
     DEFAULT_SERIAL_DEVICE,
+    RuntimeSettings,
     load_runtime_config,
     load_runtime_settings,
 )
@@ -61,3 +62,30 @@ def test_load_runtime_config_absorbs_actuator_yaml():
 def test_missing_toml_raises():
     with pytest.raises(FileNotFoundError):
         load_runtime_settings("/tmp/does-not-exist.toml")
+
+
+def test_runtime_settings_default_is_disarmed():
+    settings = RuntimeSettings()
+    assert settings.eyes_armed is False
+
+
+def test_eyes_section_without_armed_remains_disarmed(tmp_path):
+    toml = tmp_path / "runtime.toml"
+    toml.write_text(
+        "[eyes]\n"
+        'device = "/dev/ttyUSB0"\n'
+        "baudrate = 115200\n"
+        "read_timeout_s = 1.0\n",
+        encoding="utf-8",
+    )
+
+    settings = load_runtime_settings(toml, env={})
+
+    assert settings.eyes_armed is False
+
+
+def test_runtime_settings_rejects_non_positive_tick():
+    with pytest.raises(ValueError, match="tick_s must be positive"):
+        RuntimeSettings(tick_s=0)
+    with pytest.raises(ValueError, match="tick_s must be positive"):
+        RuntimeSettings(tick_s=-0.5)

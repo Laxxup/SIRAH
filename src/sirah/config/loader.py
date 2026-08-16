@@ -28,7 +28,7 @@ class RuntimeSettings:
 
     serial_device: str = DEFAULT_SERIAL_DEVICE
     baudrate: int = 115200
-    eyes_armed: bool = True  # SIRAH_EYES: 0 disarms the eyes subsystem
+    eyes_armed: bool = False  # SIRAH_EYES=1 arms the eyes subsystem; disarmed by default
     read_timeout_s: float = 1.0
     heartbeat_cadence_s: float = 1.0  # proposed 1 s cadence (Stage 11/A2)
     heartbeat_timeout_s: float = 3.0  # proposed 3 s timeout (Stage 11/A2)
@@ -36,6 +36,10 @@ class RuntimeSettings:
     tick_s: float = 0.02
     lab_enabled: bool = False  # ADR-0007; SIRAH_LAB
     env: dict[str, str] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.tick_s <= 0:
+            raise ValueError("tick_s must be positive")
 
     @property
     def serial_device_is_allowlisted(self) -> bool:
@@ -82,7 +86,7 @@ def load_runtime_settings(
     settings = RuntimeSettings(
         serial_device=device,
         baudrate=int(eyes.get("baudrate", 115200)),
-        eyes_armed=_env_bool(env, "SIRAH_EYES", bool(eyes.get("armed", True))),
+        eyes_armed=_env_bool(env, "SIRAH_EYES", bool(eyes.get("armed", False))),
         read_timeout_s=float(eyes.get("read_timeout_s", 1.0)),
         heartbeat_cadence_s=float(heartbeat.get("cadence_s", 1.0)),
         heartbeat_timeout_s=float(heartbeat.get("timeout_s", 3.0)),
