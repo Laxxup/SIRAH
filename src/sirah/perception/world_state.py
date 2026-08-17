@@ -21,6 +21,67 @@ from dataclasses import dataclass
 from math import isfinite
 
 from sirah.perception.contracts import GazeTarget
+from sirah.perception.evidence import EvidenceSnapshot, StableState
+
+
+@dataclass(frozen=True)
+class PerceptionFacts:
+    """Temporally-valid perception facts (M3): stable knowledge + freshness.
+
+    Conversation and behavior must never consume stale perception as
+    current truth. Every fact below is a `StableState` carrying
+    confidence, observed_at, confirmed_at and expires_at; `fresh(now)`
+    returns only facts whose TTL has not lapsed. `events` are the
+    edge-triggered transitions of the last tick (e.g.
+    "person_present_confirmed", "gesture_thumb_up_confirmed").
+    """
+
+    observed_at: float  # hub tick time for this snapshot
+    states: tuple[StableState, ...] = ()
+    events: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isfinite(self.observed_at):
+            raise ValueError("observed_at must be finite")
+
+    @classmethod
+    def from_snapshot(
+        cls, snapshot: EvidenceSnapshot, *, observed_at: float
+    ) -> PerceptionFacts:
+        """Adapt the evidence layer's snapshot into WorldState facts."""
+        return cls(
+            observed_at=observed_at,
+            states=snapshot.states,
+            events=snapshot.event_values(),
+        )
+
+    def state_of(self, kind: str, track_id: str | None = None) -> StableState | None:
+        """The stable state for a kind (and optional track), or None."""
+        for state in self.states:
+            if state.kind == kind and state.track_id == track_id:
+                return state
+        return None
+
+    def fresh(self, now: float) -> PerceptionFacts:
+        """Only facts whose TTL has not lapsed at `now`."""
+        return PerceptionFacts(
+            observed_at=self.observed_at,
+            states=tuple(state for state in self.states if not state.is_stale(now)),
+            events=self.events,
+        )
+
+    def stale(self, now: float) -> tuple[StableState, ...]:
+        """Facts that are older than their TTL at `now` (NOT current truth)."""
+        return tuple(state for state in self.states if state.is_stale(now))
+
+    def fresh_state_of(
+        self, kind: str, track_id: str | None = None, *, now: float
+    ) -> StableState | None:
+        """The stable state for a kind, but only if it is still fresh."""
+        state = self.state_of(kind, track_id)
+        if state is None or state.is_stale(now):
+            return None
+        return state
 
 
 @dataclass(frozen=True)
@@ -36,6 +97,7 @@ class WorldState:
     gaze_producer: str | None
     vision_degraded: bool
     observed_at: float
+    perception: PerceptionFacts | None = None
 
     def __post_init__(self) -> None:
         if not isfinite(self.observed_at):
@@ -90,6 +152,7 @@ class WorldStateBuilder:
         gaze_y: float | None,
         gaze_producer: str | None,
         vision_degraded: bool,
+        perception: PerceptionFacts | None = None,
     ) -> WorldState:
         """Emit the current immutable state."""
         present = self._current_target is not None
@@ -106,4 +169,5 @@ class WorldStateBuilder:
             gaze_producer=gaze_producer,
             vision_degraded=vision_degraded,
             observed_at=now,
+            perception=perception,
         )

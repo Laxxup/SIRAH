@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from sirah.perception.contracts import GazeTarget
-from sirah.perception.world_state import WorldState, WorldStateBuilder
+from sirah.perception.world_state import PerceptionFacts, WorldState, WorldStateBuilder
 
 
 def _target(x: float = 0.2, y: float = -0.3, conf: float = 0.9) -> GazeTarget:
@@ -150,3 +150,82 @@ def test_builder_requires_finite_clock():
     builder = WorldStateBuilder()
     with pytest.raises(ValueError):
         builder.observe(_target(), now=float("nan"))
+
+
+# ---------------------------------------------------------------------------
+# PerceptionFacts freshness (M3): stale perception is never current truth
+# ---------------------------------------------------------------------------
+
+
+def _facts():
+    from sirah.perception.evidence import EvidenceHub, RawObservation
+
+    hub = EvidenceHub(confirm_samples=1)
+    hub.observe(
+        [
+            RawObservation("yunet", "person", "present", 0.9, 0.0),
+            RawObservation("gesture", "gesture", "thumb_up", 0.9, 0.0),
+        ],
+        now=0.0,
+    )
+    return PerceptionFacts.from_snapshot(
+        hub.observe([], now=0.0), observed_at=0.0
+    )
+
+
+def test_perception_facts_carry_temporal_validity():
+    facts = _facts()
+    person = facts.state_of("person")
+    assert person is not None
+    assert person.value == "present"
+    assert person.observed_at == 0.0
+    assert person.confirmed_at == 0.0
+    assert person.expires_at is not None  # TTL set by the hub default
+
+
+def test_fresh_facts_are_fresh_and_stale_facts_are_filtered():
+    facts = _facts()
+    assert facts.fresh_state_of("person", now=0.5) is not None  # within TTL
+    assert facts.fresh_state_of("person", now=5.0) is None  # TTL (3s) lapsed
+    assert facts.fresh(0.5).state_of("person") is not None
+    assert facts.fresh(5.0).state_of("person") is None
+    assert facts.stale(5.0) == facts.states  # everything stale later
+
+
+def test_stale_perception_never_surfaces_as_current_truth():
+    facts = _facts()
+    assert facts.fresh_state_of("gesture", now=0.1) is not None
+    assert facts.fresh_state_of("gesture", now=4.0) is None
+
+
+def test_world_state_carries_fresh_perception_facts():
+    facts = _facts()
+    state = WorldState(
+        face_present=True,
+        primary_target=_target(),
+        last_observed_at=10.0,
+        target_age_s=0.0,
+        gaze_x=0.2,
+        gaze_y=-0.3,
+        gaze_producer="face_tracking",
+        vision_degraded=False,
+        observed_at=10.0,
+        perception=facts,
+    )
+    assert state.perception is not None
+    assert state.perception.state_of("person").value == "present"  # type: ignore[union-attr]
+
+
+def test_world_state_without_perception_stays_backwards_compatible():
+    state = WorldState(
+        face_present=False,
+        primary_target=None,
+        last_observed_at=None,
+        target_age_s=None,
+        gaze_x=None,
+        gaze_y=None,
+        gaze_producer=None,
+        vision_degraded=False,
+        observed_at=10.0,
+    )
+    assert state.perception is None
