@@ -77,6 +77,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="video replay; requires --yunet-model",
     )
     parser.add_argument(
+        "--attention",
+        action="store_true",
+        help="stabilize the primary face target before gaze "
+        "(multi-face anti-flicker; requires a camera or replay source)",
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true", help="log component statuses"
     )
     return parser
@@ -94,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 async def _entry(args: argparse.Namespace) -> int:
+    from sirah.behavior.attention import AttentionManager
     from sirah.behavior.gaze_behavior import GazeBehavior
     from sirah.config.loader import load_runtime_config
     from sirah.hardware.fake_esp32 import FakeESP32
@@ -136,7 +143,7 @@ async def _entry(args: argparse.Namespace) -> int:
             read_timeout_s=settings.read_timeout_s,
         )
     camera: CameraSource | None = None
-    detector = behavior = None
+    detector = behavior = attention = None
     if args.camera_device:
         camera = OpenCVCameraSource(args.camera_device)
     elif args.replay_jsonl:
@@ -146,8 +153,16 @@ async def _entry(args: argparse.Namespace) -> int:
     if camera is not None:
         detector = YuNetFaceDetector(Path(args.yunet_model))
         behavior = GazeBehavior()
+        if args.attention:
+            attention = AttentionManager()
     app = RuntimeApp(
-        settings, actuators, transport, camera=camera, face_detector=detector, behavior=behavior
+        settings,
+        actuators,
+        transport,
+        camera=camera,
+        face_detector=detector,
+        behavior=behavior,
+        attention=attention,
     )
 
     stop = asyncio.Event()
