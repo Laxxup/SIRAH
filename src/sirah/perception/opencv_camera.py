@@ -153,13 +153,15 @@ class OpenCVCameraSource:
             await wakeup.wait()
 
     async def stop(self) -> None:
-        """Stop the worker thread and release the capture.
+        """Signal the worker to stop; the worker owns the release.
 
         Deliberate stop is an EOF: waiters wake and `next_frame` returns
-        None. The capture is released AFTER joining so the worker never
-        calls `read()` on a released object; if the worker is blocked in a
-        driver `read()` the join times out and the thread stays a daemon
-        (documented lifecycle risk, not a deadlock).
+        None. The capture is released by the capture thread itself in its
+        teardown, so `release()` can never race an in-flight driver
+        `read()` from another thread. If the worker is blocked in a driver
+        `read()` the join times out and the daemon thread releases the
+        capture when the read returns (documented lifecycle risk, not a
+        deadlock).
         """
         self._stop.set()
         with self._lock:
@@ -168,8 +170,6 @@ class OpenCVCameraSource:
             self._wakeup.set()  # wake any waiter from the loop side
         if self._thread is not None:
             self._thread.join(timeout=1.0)
-        if self._capture is not None:
-            self._capture.release()  # type: ignore[attr-defined]
         self._thread = None
         self._capture = None
 
@@ -199,33 +199,37 @@ class OpenCVCameraSource:
             setter(cv2.CAP_PROP_FPS, self._fps_target)  # type: ignore[attr-defined]
 
     def _capture_loop(self) -> None:
-        assert self._capture is not None
-        while not self._stop.is_set():
-            ok, frame = self._capture.read()  # type: ignore[attr-defined]
-            if ok:
-                now = self._clock()
-                with self._lock:
-                    self._latest = frame
-                    self._latest_at = now
-                    self._captured += 1
-                    self._latest_seq = self._captured
-                    self._read_failures = 0
-                    self._capture_times.append(now)
-                self._notify()
-            else:
-                with self._lock:
-                    self._read_failures += 1
-                    failed = self._read_failures >= self._read_failure_limit
-                    if failed:
-                        self._ended = True
-                        self._failure_reason = (
-                            f"camera {self._device!r} read failed "
-                            f"{self._read_failures} times consecutively"
-                        )
-                if failed:
+        capture = self._capture
+        assert capture is not None
+        try:
+            while not self._stop.is_set():
+                ok, frame = capture.read()  # type: ignore[attr-defined]
+                if ok:
+                    now = self._clock()
+                    with self._lock:
+                        self._latest = frame
+                        self._latest_at = now
+                        self._captured += 1
+                        self._latest_seq = self._captured
+                        self._read_failures = 0
+                        self._capture_times.append(now)
                     self._notify()
-                    break
-                time.sleep(_READ_RETRY_SLEEP_S)
+                else:
+                    with self._lock:
+                        self._read_failures += 1
+                        failed = self._read_failures >= self._read_failure_limit
+                        if failed:
+                            self._ended = True
+                            self._failure_reason = (
+                                f"camera {self._device!r} read failed "
+                                f"{self._read_failures} times consecutively"
+                            )
+                    if failed:
+                        self._notify()
+                        break
+                    time.sleep(_READ_RETRY_SLEEP_S)
+        finally:
+            capture.release()  # type: ignore[attr-defined]
 
     def _notify(self) -> None:
         """Wake the event loop from the capture thread (thread-safe)."""
@@ -257,7 +261,21 @@ class OpenCVCameraSource:
 
 
 def _opencv_capture(device: int | str) -> object:
-    return _opencv_module().VideoCapture(device)  # type: ignore[attr-defined]
+    """Open `device`, preferring the native V4L2 backend for device paths.
+
+    The default CAP_ANY backend maps `/dev/videoN` to FFmpeg's libavdevice
+    V4L2 module, whose teardown emits ``ioctl(VIDIOC_QBUF): Bad file
+    descriptor`` on some UVC cameras. The native CAP_V4L2 backend closes
+    cleanly, so device paths open with it first and fall back to CAP_ANY
+    only when it cannot open the device at all.
+    """
+    cv2 = _opencv_module()
+    if isinstance(device, str) and device.startswith("/dev/video"):
+        capture = cv2.VideoCapture(device, cv2.CAP_V4L2)  # type: ignore[attr-defined]
+        if capture.isOpened():
+            return capture
+        capture.release()
+    return cv2.VideoCapture(device)  # type: ignore[attr-defined]
 
 
 def _opencv_module() -> object:

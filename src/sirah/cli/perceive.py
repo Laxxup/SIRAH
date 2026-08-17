@@ -7,12 +7,14 @@ machine without arming eyes, opening a serial port or actuating servos.
 The reusable core is `perceive()`, which satisfies the CameraSource /
 FaceDetector contracts and is deterministic-testable with fakes. Exit
 codes mirror sirah-runtime: 0 clean, 2 usage error, 1 runtime failure.
+A SIGINT/SIGTERM interruption stops the camera cleanly and exits 130.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import signal
 import statistics
 import sys
 import time
@@ -469,7 +471,37 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.max_frames < 0:
         build_parser().error("--max-frames must not be negative")
-    return asyncio.run(_entry(args))
+    try:
+        return asyncio.run(_entry_with_signal_stop(args))
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        print("\nsirah-perceive: stopping...", file=sys.stderr)
+        return 130
+
+
+async def _entry_with_signal_stop(args: argparse.Namespace) -> int:
+    """Run the entry point, converting SIGINT/SIGTERM into a clean cancellation.
+
+    A Ctrl-C cancels the running perception task so the camera is still
+    stopped cleanly in `_entry`'s teardown (no `ioctl(VIDIOC_QBUF)`
+    warning, no traceback). The signal handler is idempotent, so a
+    repeated signal just re-requests the same cancellation; `main` maps
+    the resulting `CancelledError` (or any `KeyboardInterrupt`) to exit
+    code 130.
+    """
+    loop = asyncio.get_running_loop()
+    task = asyncio.current_task()
+    assert task is not None
+
+    def _request_stop(*_args: object) -> None:
+        if not task.done():
+            task.cancel()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, _request_stop)
+        except NotImplementedError:  # Windows fallback
+            signal.signal(sig, lambda *_args: _request_stop())
+    return await _entry(args)
 
 
 async def _entry(args: argparse.Namespace) -> int:

@@ -3,10 +3,12 @@ deterministic and needs no OpenCV, model, camera or hardware."""
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import pytest
 
+import sirah.cli.perceive as perceive_cli
 from sirah.cli.perceive import build_parser, perceive
 from sirah.perception.contracts import Frame, GazeTarget
 
@@ -111,3 +113,42 @@ def test_parser_gesture_model_is_optional():
         ]
     )
     assert with_gesture.gesture_model == Path("gesture.task")
+
+
+def test_main_handles_ctrl_c_without_a_traceback(monkeypatch, capsys):
+    """A SIGINT cancellation must exit cleanly, not leak a traceback."""
+
+    def interrupt(_coroutine):
+        _coroutine.close()
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(perceive_cli.asyncio, "run", interrupt)
+    assert (
+        perceive_cli.main(["--camera-device", "/dev/video0", "--yunet-model", "yunet.onnx"])
+        == 130
+    )
+
+
+def test_main_handles_keyboard_interrupt_without_a_traceback(monkeypatch, capsys):
+    def interrupt(_coroutine):
+        _coroutine.close()
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(perceive_cli.asyncio, "run", interrupt)
+    assert (
+        perceive_cli.main(["--camera-device", "/dev/video0", "--yunet-model", "yunet.onnx"])
+        == 130
+    )
+
+
+async def test_perceive_stops_camera_on_cancellation():
+    """CANCELLATION: an interrupted perceive still stops the camera."""
+    camera = FakeCamera([(0, 1.0), (1, 2.0)])
+    task = asyncio.create_task(
+        perceive(camera, FakeDetector({}), max_frames=0, interval_s=5.0)
+    )
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert camera.stopped  # teardown still ran during cancellation

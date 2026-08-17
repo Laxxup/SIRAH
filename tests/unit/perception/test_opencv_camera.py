@@ -14,6 +14,7 @@ from collections.abc import Callable
 import pytest
 
 from sirah.cli.perceive import perceive
+from sirah.perception import opencv_camera
 from sirah.perception.contracts import Frame, GazeTarget
 from sirah.perception.opencv_camera import OpenCVCameraSource
 
@@ -344,3 +345,153 @@ async def test_transient_read_failures_reset_and_do_not_end_stream():
     frame = await asyncio.wait_for(source.next_frame(), timeout=2.0)
     assert frame is not None  # transient failures did not end the stream
     await source.stop()
+
+
+class RecordingCapture(FakeCapture):
+    """Tracks which thread reads/releases and how many times."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.read_thread: int | None = None
+        self.release_thread: int | None = None
+        self.release_count = 0
+        self._reading = threading.Event()
+
+    def read(self) -> tuple[bool, object]:
+        self.read_thread = threading.get_ident()
+        self._reading.set()
+        self.reads += 1
+        return True, {"frame": self.reads}
+
+    def release(self) -> None:
+        self.release_count += 1
+        self.release_thread = threading.get_ident()
+        super().release()
+
+
+class HeldReadCapture(FakeCapture):
+    """Blocks inside `read()` until the test releases it (no frame)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._entered_read = threading.Event()
+        self._allow_read = threading.Event()
+        self.release_count = 0
+
+    def read(self) -> tuple[bool, object]:
+        self._entered_read.set()
+        self._allow_read.wait(timeout=5.0)
+        self.reads += 1
+        return True, {"frame": self.reads}
+
+    def release(self) -> None:
+        self.release_count += 1
+        self.released = True
+
+
+def _fake_cv2(monkeypatch, capture) -> dict:
+    """Stub cv2 module recording how VideoCapture is called."""
+    calls: list[tuple[object, object | None]] = []
+
+    class _FakeCv2:
+        CAP_V4L2 = 200
+
+        def VideoCapture(self, device, backend=None):
+            calls.append((device, backend))
+            return capture
+
+    monkeypatch.setattr(opencv_camera, "_opencv_module", lambda: _FakeCv2())
+    return {"calls": calls}
+
+
+def test_device_path_prefers_native_v4l2_backend(monkeypatch):
+    """REGRESSION: /dev/videoN must open with CAP_V4L2, not CAP_ANY.
+
+    The default backend maps the path to FFmpeg's libavdevice, whose
+    teardown emits `ioctl(VIDIOC_QBUF): Bad file descriptor` on this
+    camera. The native backend is requested explicitly.
+    """
+    calls = _fake_cv2(monkeypatch, FakeCapture())["calls"]
+    opencv_camera._opencv_capture("/dev/video0")
+    assert calls == [("/dev/video0", 200)]
+
+
+def test_int_device_keeps_default_backend(monkeypatch):
+    calls = _fake_cv2(monkeypatch, FakeCapture())["calls"]
+    opencv_camera._opencv_capture(0)
+    assert calls == [(0, None)]
+
+
+def test_device_path_falls_back_when_v4l2_unavailable(monkeypatch):
+    class NeverOpens:
+        def __init__(self) -> None:
+            self.released = False
+
+        def isOpened(self) -> bool:
+            return False
+
+        def release(self) -> None:
+            self.released = True
+
+    never = NeverOpens()
+    backup = FakeCapture()
+
+    class _FakeCv2:
+        CAP_V4L2 = 200
+
+        def __init__(self) -> None:
+            self._calls: list[tuple[object, object | None]] = []
+
+        def VideoCapture(self, device, backend=None):
+            self._calls.append((device, backend))
+            return never if backend == 200 else backup
+
+    fake = _FakeCv2()
+    monkeypatch.setattr(opencv_camera, "_opencv_module", lambda: fake)
+    result = opencv_camera._opencv_capture("/dev/video0")
+    assert fake._calls == [("/dev/video0", 200), ("/dev/video0", None)]
+    assert result is backup
+    assert never.released  # the failed V4L2 handle was released, not leaked
+
+
+async def test_stop_releases_capture_once_on_the_capture_thread():
+    """OWNERSHIP: the capture thread releases, exactly once, never a reader."""
+    capture = RecordingCapture()
+    source = OpenCVCameraSource(0, capture_factory=lambda _: capture)
+    await source.start()
+    await asyncio.sleep(0.01)  # let the producer thread take ownership
+    assert capture._reading.wait(timeout=1.0)
+    await source.stop()
+    assert capture.released
+    assert capture.release_count == 1  # released exactly once
+    assert capture.release_thread == capture.read_thread  # same thread owns it
+    assert capture.release_thread != threading.get_ident()  # not the caller
+
+
+async def test_stop_never_releases_while_a_read_is_blocked():
+    """RACE: a blocked driver read() must never be raced by release()."""
+    capture = HeldReadCapture()
+    source = OpenCVCameraSource(0, capture_factory=lambda _: capture)
+    await source.start()
+    assert capture._entered_read.wait(timeout=1.0)  # worker is inside read()
+    await source.stop()  # join times out; release must NOT happen here
+    assert not capture.released  # release deferred to the worker's teardown
+    assert capture.release_count == 0
+    capture._allow_read.set()  # let the blocked read return
+    for _ in range(200):
+        if capture.released:
+            break
+        await asyncio.sleep(0.005)
+    assert capture.released  # released by the worker once the read returned
+    assert capture.release_count == 1
+
+
+async def test_repeated_stop_releases_exactly_once():
+    capture = RecordingCapture()
+    source = OpenCVCameraSource(0, capture_factory=lambda _: capture)
+    await source.start()
+    await asyncio.sleep(0.01)
+    await source.stop()
+    await source.stop()  # idempotent
+    assert capture.released
+    assert capture.release_count == 1
