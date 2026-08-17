@@ -128,3 +128,33 @@ def test_detector_reports_every_face_via_detect_many(tmp_path):
     assert len(faces) == 2
     assert (faces[0].x, faces[0].y, faces[0].confidence) == pytest.approx((-0.9, 0.9, 0.7))
     assert (faces[1].x, faces[1].y, faces[1].confidence) == pytest.approx((0.2, -0.2, 0.9))
+
+
+def test_detect_boxes_returns_image_space_boxes(tmp_path):
+    """detect_boxes (M5.2B renderer input) must return raw image-space
+    boxes, not normalized targets."""
+    model = tmp_path / "yunet.onnx"
+    model.touch()
+
+    class Image:
+        shape = (100, 100, 3)
+
+    image = Image()
+
+    class FakeDetector:
+        def setInputSize(self, size):
+            assert size == (100, 100)
+
+        def detect(self, payload):
+            assert payload is image
+            return None, [[0, 0, 10, 10, 0, 0, 0, 0, 0, 0.7], [50, 50, 20, 20, 0, 0, 0, 0, 0, 0.9]]
+
+    detector = YuNetFaceDetector(model, detector_factory=lambda _: FakeDetector())
+    boxes = detector.detect_boxes(Frame(1, image))
+    assert len(boxes) == 2
+    assert (boxes[0].x, boxes[0].y, boxes[0].width, boxes[0].height, boxes[0].confidence) == (
+        0.0, 0.0, 10.0, 10.0, 0.7,
+    )
+    assert (boxes[1].x, boxes[1].y, boxes[1].width, boxes[1].height, boxes[1].confidence) == (
+        50.0, 50.0, 20.0, 20.0, 0.9,
+    )

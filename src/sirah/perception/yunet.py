@@ -81,6 +81,15 @@ class YuNetFaceDetector:
             for face in self._boxes(frame)
         ]
 
+    def detect_boxes(self, frame: Frame) -> Sequence[FaceBox]:
+        """Image-space face bounding boxes for diagnostic rendering.
+
+        The renderer needs a rectangle, not just a normalized center, so
+        this mirrors `detect_many` but keeps the raw boxes. The viewer is
+        the only consumer; attention still operates on `GazeTarget`s.
+        """
+        return list(self._boxes(frame))
+
     def _boxes(self, frame: Frame) -> Sequence[FaceBox]:
         if frame.payload is None:
             return []

@@ -233,11 +233,13 @@ async def perceive_gesture_preview(
     detector: FaceDetector,
     *,
     gesture_worker,
+    viewer=None,
     max_frames: int = 0,
     interval_s: float = 0.05,
     clock: Callable[[], float] = time.monotonic,
     attention: AttentionSelector | None = None,
     evidence: EvidenceHub | None = None,
+    camera_stats_provider: Callable[[], object] | None = None,
 ) -> GesturePreviewSummary:
     """Camera -> YuNet and MediaPipe in parallel, both into one EvidenceHub.
 
@@ -246,6 +248,11 @@ async def perceive_gesture_preview(
     the SAME `EvidenceHub`, which is how a thumb_up becomes stable state
     and an edge event. The gesture worker's latest raw detection is
     snapshotted per tick so the preview can show what MediaPipe saw.
+
+    When `viewer` is provided, each tick also renders a
+    `DiagnosticSnapshot` into the viewer; the viewer consumes its own
+    broker subscription and never reopens the camera. A user closing the
+    viewer window (q/Esc) ends the preview cleanly.
     """
     from sirah.behavior.attention import AttentionManager
 
@@ -253,6 +260,8 @@ async def perceive_gesture_preview(
     attention = attention or AttentionManager()
     await camera.start()
     await gesture_worker.start()
+    if viewer is not None:
+        await viewer.start()
     observations: list[GesturePreviewObservation] = []
     faces = 0
     all_events: list[str] = []
@@ -264,8 +273,10 @@ async def perceive_gesture_preview(
             frame = await camera.next_frame()
             if frame is None:
                 break
+            if viewer is not None and viewer.user_closed:
+                break
             now = clock()
-            target = _attended(detector, frame, attention)
+            target, detected_faces = _attended(detector, frame, attention, want_faces=viewer is not None)
             snapshot, latency = _evidence_tick(evidence, target, now)
             if target is not None:
                 faces += 1
@@ -275,6 +286,8 @@ async def perceive_gesture_preview(
             detect_ms.append(latency)
             rejected_count += len(snapshot.rejected)
             all_events.extend(snapshot.event_values())
+            if viewer is not None:
+                viewer.push(_diagnostic_snapshot(frame, now, detected_faces, snapshot, gesture_worker, camera_stats_provider))
             observations.append(
                 GesturePreviewObservation(
                     index=frame.index,
@@ -293,6 +306,8 @@ async def perceive_gesture_preview(
                 break
             await asyncio.sleep(interval_s)
     finally:
+        if viewer is not None:
+            await viewer.stop()
         await gesture_worker.stop()
         await camera.stop()
     stats = gesture_worker.stats()
@@ -314,11 +329,13 @@ async def perceive_preview(
     camera: CameraSource,
     detector: FaceDetector,
     *,
+    viewer=None,
     max_frames: int = 0,
     interval_s: float = 0.05,
     clock: Callable[[], float] = time.monotonic,
     attention: AttentionSelector | None = None,
     evidence: EvidenceHub | None = None,
+    camera_stats_provider: Callable[[], object] | None = None,
 ) -> PreviewSummary:
     """Camera → detector → evidence, with full diagnostic reporting.
 
@@ -328,12 +345,19 @@ async def perceive_preview(
     states with TTL, and edge events. Requires no GUI; headless text
     output. The camera is always stopped before returning (also on
     cancellation).
+
+    When `viewer` is provided, each tick also renders a
+    `DiagnosticSnapshot` into the viewer (faces and face-only evidence;
+    no gesture overlays). The viewer consumes its own broker subscription
+    and never reopens the camera.
     """
     from sirah.behavior.attention import AttentionManager
 
     evidence = evidence or EvidenceHub()
     attention = attention or AttentionManager()
     await camera.start()
+    if viewer is not None:
+        await viewer.start()
     observations: list[PreviewObservation] = []
     faces = 0
     all_events: list[str] = []
@@ -345,8 +369,10 @@ async def perceive_preview(
             frame = await camera.next_frame()
             if frame is None:
                 break
+            if viewer is not None and viewer.user_closed:
+                break
             now = clock()
-            target = _attended(detector, frame, attention)
+            target, detected_faces = _attended(detector, frame, attention, want_faces=viewer is not None)
             snapshot, latency = _evidence_tick(evidence, target, now)
             if target is not None:
                 faces += 1
@@ -356,6 +382,8 @@ async def perceive_preview(
             detect_ms.append(latency)
             rejected_count += len(snapshot.rejected)
             all_events.extend(snapshot.event_values())
+            if viewer is not None:
+                viewer.push(_diagnostic_snapshot(frame, now, detected_faces, snapshot, None, camera_stats_provider))
             observations.append(
                 PreviewObservation(
                     index=frame.index,
@@ -372,6 +400,8 @@ async def perceive_preview(
                 break
             await asyncio.sleep(interval_s)
     finally:
+        if viewer is not None:
+            await viewer.stop()
         await camera.stop()
     return PreviewSummary(
         observations=tuple(observations),
@@ -384,12 +414,121 @@ async def perceive_preview(
 
 
 def _attended(
+    detector: FaceDetector,
+    frame: Frame,
+    attention: AttentionSelector,
+    *,
+    want_faces: bool = False,
+) -> tuple[GazeTarget | None, tuple]:
+    """Detector output → attended primary target (attention-aware).
+
+    When `want_faces` is set (graphical viewer active), the detector's
+    image-space face boxes are also returned so the viewer can draw real
+    bounding boxes and mark the attended target; attention still operates
+    on normalized `GazeTarget`s. Returns `(target, faces)` where faces is
+    a tuple of `DiagnosticFace` (empty when not requested or unavailable).
+    """
+    if want_faces:
+        boxes = getattr(detector, "detect_boxes", None)
+        if callable(boxes):
+            from sirah.perception.diagnostic import DiagnosticFace
+
+            payload = frame.payload
+            width = height = 1
+            if payload is not None and hasattr(payload, "shape") and len(payload.shape) >= 2:
+                height, width = payload.shape[:2]
+            face_boxes = list(boxes(frame))
+            from sirah.perception.yunet import map_face
+
+            targets = [
+                map_face(box, width=width, height=height)
+                for box in face_boxes
+            ]
+            attended = attention.observe(targets)
+            faces = tuple(
+                DiagnosticFace(
+                    x=_clamp01(box.x / width) if width else 0.0,
+                    y=_clamp01(box.y / height) if height else 0.0,
+                    width=_clamp01(box.width / width) if width else 0.0,
+                    height=_clamp01(box.height / height) if height else 0.0,
+                    confidence=box.confidence,
+                    attended=_is_attended_face(attended, target, width, height),
+                )
+                for box, target in zip(face_boxes, targets)
+            )
+            return attended, faces
+    return _attended_target(detector, frame, attention), ()
+
+
+def _attended_target(
     detector: FaceDetector, frame: Frame, attention: AttentionSelector
 ) -> GazeTarget | None:
-    """Detector output → attended primary target (attention-aware)."""
     if isinstance(detector, MultiFaceDetector):
         return attention.observe(detector.detect_many(frame))
     return detector.detect(frame)
+
+
+def _clamp01(value: float) -> float:
+    """Clamp a normalized coordinate into [0, 1].
+
+    YuNet can report boxes that spill a few pixels past the frame edge;
+    the DiagnosticFace contract requires strictly normalized boxes, so the
+    snapshot boundary clamps instead of rejecting a real detection.
+    """
+    return max(0.0, min(1.0, value))
+
+
+def _is_attended_face(
+    attended: GazeTarget | None, target: GazeTarget | None, width: int, height: int
+) -> bool:
+    """Mark the box whose center maps to the attended target, if any."""
+    if attended is None or target is None:
+        return False
+    return attended.x == target.x and attended.y == target.y
+
+
+def _diagnostic_snapshot(
+    frame: Frame,
+    now: float,
+    faces: tuple,
+    evidence_snapshot: EvidenceSnapshot,
+    gesture_worker: object | None,
+    camera_stats_provider: Callable[[], object] | None,
+):
+    """Build the immutable DiagnosticSnapshot for one tick (viewer only)."""
+    from sirah.perception.diagnostic import DiagnosticSnapshot
+
+    stats = getattr(gesture_worker, "stats", None)
+    worker_stats = stats() if callable(stats) else None
+    camera_stats = camera_stats_provider() if camera_stats_provider is not None else None
+    return DiagnosticSnapshot(
+        frame_index=frame.index,
+        created_at=now,
+        captured_at=frame.captured_at,
+        faces=faces,
+        raw_hands=getattr(gesture_worker, "last_raw", ()),
+        hands=getattr(gesture_worker, "last_hands", ()),
+        states=evidence_snapshot.states,
+        events=evidence_snapshot.events,
+        rejected=evidence_snapshot.rejected,
+        pending=evidence_snapshot.pending,
+        camera_fps=_camera_fps(camera_stats),
+        camera_captured=_camera_captured(camera_stats),
+        gesture_inferences=getattr(worker_stats, "inferences", 0) if worker_stats is not None else 0,
+        gesture_errors=getattr(worker_stats, "errors", 0) if worker_stats is not None else 0,
+        gesture_latency_ms=getattr(worker_stats, "latency_ms", ()) if worker_stats is not None else (),
+        gesture_frame_age_s=getattr(worker_stats, "frame_age_s", ()) if worker_stats is not None else (),
+    )
+
+
+def _camera_fps(stats: object | None) -> float | None:
+    fps = getattr(stats, "capture_fps", None)
+    return fps if isinstance(fps, float) else None
+
+
+def _camera_captured(stats: object | None) -> int:
+    captured = getattr(stats, "captured", 0)
+    return captured if isinstance(captured, int) else 0
 
 
 def _evidence_tick(
@@ -464,6 +603,23 @@ def build_parser() -> argparse.ArgumentParser:
         "raw/stable/rejected observations, events, TTL and detector latency "
         "(answers 'why did SIRAH not react?'; headless, no GUI)",
     )
+    parser.add_argument(
+        "--preview-window",
+        action="store_true",
+        help="graphical diagnostic mode: open a live annotated camera view "
+        "(faces, attended target, hand landmarks, raw vs stable gestures, "
+        "events and freshness/performance HUD) via an external ffplay "
+        "window. The camera is still owned once by the frame broker. "
+        "Requires the external 'ffplay' executable (part of FFmpeg). "
+        "May be combined with --preview for text + window.",
+    )
+    parser.add_argument(
+        "--mirror-display",
+        action="store_true",
+        help="presentation-only horizontal mirror for --preview-window "
+        "(rendering transform x' = width-1-x; never alters stored "
+        "coordinates or perception data)",
+    )
     return parser
 
 
@@ -523,7 +679,7 @@ async def _entry(args: argparse.Namespace) -> int:
     try:
         if args.gesture_model is not None:
             return await _gesture_preview_entry(camera, detector, args)
-        if args.preview:
+        if args.preview or args.preview_window:
             return await _preview_entry(camera, detector, args)
         summary = await perceive(
             camera, detector, max_frames=args.max_frames, interval_s=args.interval
@@ -579,16 +735,19 @@ async def _gesture_preview_entry(camera: CameraSource, detector: FaceDetector, a
     face_camera = broker.subscribe()
     gesture_camera = broker.subscribe()
     worker = GestureWorker(gesture_camera, recognizer, evidence=hub)
+    viewer = _make_viewer(broker, args) if args.preview_window else None
     try:
         async with broker:
             summary = await perceive_gesture_preview(
                 face_camera,
                 detector,
                 gesture_worker=worker,
+                viewer=viewer,
                 max_frames=args.max_frames,
                 interval_s=args.interval,
                 attention=AttentionManager(),
                 evidence=hub,
+                camera_stats_provider=lambda: broker.source_stats,
             )
     finally:
         recognizer.close()
@@ -661,18 +820,39 @@ def _print_gesture_preview(summary: GesturePreviewSummary, broker) -> None:
 
 
 async def _preview_entry(camera: CameraSource, detector: FaceDetector, args: argparse.Namespace) -> int:
-    """Run and print the diagnostic preview (headless)."""
+    """Run and print the diagnostic preview (headless, or + graphical)."""
     from sirah.behavior.attention import AttentionManager
     from sirah.perception.evidence import EvidenceHub
+    from sirah.perception.fanout import FrameBroker
 
-    summary = await perceive_preview(
-        camera,
-        detector,
-        max_frames=args.max_frames,
-        interval_s=args.interval,
-        attention=AttentionManager(),
-        evidence=EvidenceHub(),
-    )
+    if args.preview_window:
+        # the viewer needs its own broker subscription; the camera is
+        # still owned exactly once, by the broker.
+        broker = FrameBroker(camera)
+        face_camera = broker.subscribe()
+        viewer = _make_viewer(broker, args)
+        async with broker:
+            summary = await perceive_preview(
+                face_camera,
+                detector,
+                viewer=viewer,
+                max_frames=args.max_frames,
+                interval_s=args.interval,
+                attention=AttentionManager(),
+                evidence=EvidenceHub(),
+                camera_stats_provider=lambda: broker.source_stats,
+            )
+        stats_source: object = broker
+    else:
+        summary = await perceive_preview(
+            camera,
+            detector,
+            max_frames=args.max_frames,
+            interval_s=args.interval,
+            attention=AttentionManager(),
+            evidence=EvidenceHub(),
+        )
+        stats_source = camera
     for obs in summary.observations:
         print(f"[{obs.index:04d}] age={_fmt_age(obs.frame_age_s)} det={_fmt_ms(obs.detect_ms)}")
         if obs.target is not None:
@@ -710,9 +890,9 @@ async def _preview_entry(camera: CameraSource, detector: FaceDetector, args: arg
         f"frame_age_p50={_fmt_age(summary.frame_age_p50)} "
         f"frame_age_p95={_fmt_age(summary.frame_age_p95)}"
     )
-    stats = getattr(camera, "stats", None)
+    stats = getattr(stats_source, "source_stats", None) or getattr(stats_source, "stats", None)
     if stats is not None:
-        s = stats()
+        s = stats() if callable(stats) else stats
         print(
             f"sirah-perceive: captured={s.captured} consumed={s.consumed} "
             f"dropped={s.dropped} capture_fps={s.capture_fps:.1f}"
@@ -720,12 +900,33 @@ async def _preview_entry(camera: CameraSource, detector: FaceDetector, args: arg
     return 0
 
 
-def _fmt_ms(value: float | None) -> str:
-    return f"{value:.1f}ms" if value is not None else "n/a"
+def _make_viewer(broker, args: argparse.Namespace):
+    """Build a DiagnosticViewer wired to a fresh broker subscription.
+
+    The viewer consumes the broker's latest frame (it never opens the
+    camera) and renders annotated frames to an external ffplay process.
+    Building the ffplay backend validates the external executable BEFORE
+    the camera is opened, so a missing viewer fails cleanly and never
+    touches /dev/videoN. The backend itself is started lazily on the
+    first displayed frame.
+    """
+    from sirah.perception.display import FfplayDisplayBackend
+    from sirah.perception.renderer import DiagnosticRenderer
+    from sirah.perception.viewer import DiagnosticViewer
+
+    backend = FfplayDisplayBackend()
+    renderer = DiagnosticRenderer()
+    viewer = DiagnosticViewer(broker.subscribe(), renderer, backend)
+    viewer.set_mirror(bool(args.mirror_display))
+    return viewer
 
 
 def _fmt_ttl(expires_at: float | None, observed_at: float) -> str:
     return f"{expires_at - observed_at:.1f}s" if expires_at is not None else "∞"
+
+
+def _fmt_ms(value: float | None) -> str:
+    return f"{value:.1f}ms" if value is not None else "n/a"
 
 
 if __name__ == "__main__":

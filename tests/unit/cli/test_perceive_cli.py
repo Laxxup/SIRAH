@@ -115,6 +115,88 @@ def test_parser_gesture_model_is_optional():
     assert with_gesture.gesture_model == Path("gesture.task")
 
 
+def test_parser_preview_window_and_mirror_flags():
+    parser = build_parser()
+    args = parser.parse_args(
+        ["--camera-device", "/dev/video0", "--yunet-model", "yunet.onnx", "--preview-window"]
+    )
+    assert args.preview_window is True
+    assert args.mirror_display is False
+    mirrored = parser.parse_args(
+        [
+            "--camera-device",
+            "/dev/video0",
+            "--yunet-model",
+            "yunet.onnx",
+            "--preview-window",
+            "--mirror-display",
+        ]
+    )
+    assert mirrored.mirror_display is True
+
+
+def test_make_viewer_raises_actionable_error_when_ffplay_missing(monkeypatch, tmp_path):
+    import sirah.cli.perceive as perceive_cli
+    import sirah.perception.display as display_mod
+
+    def missing(_executable: str) -> str | None:
+        return None
+
+    monkeypatch.setattr(display_mod, "_which_ffplay", missing)
+    from sirah.perception.fanout import FrameBroker
+
+    broker = FrameBroker(FakeCamera([]))
+    parser = build_parser()
+    args = parser.parse_args(
+        ["--camera-device", "/dev/video0", "--yunet-model", str(tmp_path / "yunet.onnx")]
+    )
+    with pytest.raises(RuntimeError, match="ffplay"):
+        perceive_cli._make_viewer(broker, args)
+
+
+def test_preview_window_routes_to_preview_entry(monkeypatch, tmp_path):
+    """--preview-window alone (no gesture model) must go to the preview path,
+    not the headless perceive() path."""
+    import sirah.cli.perceive as perceive_cli
+    import sirah.perception.opencv_camera as opencv_camera_mod
+    import sirah.perception.yunet as yunet_mod
+
+    model = tmp_path / "yunet.onnx"
+    model.touch()
+
+    class FakeOpenCVSource:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class FakeYuNet:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr(opencv_camera_mod, "OpenCVCameraSource", FakeOpenCVSource)
+    monkeypatch.setattr(yunet_mod, "YuNetFaceDetector", FakeYuNet)
+
+    calls: list[str] = []
+
+    async def fake_preview_entry(camera, detector, args):
+        calls.append("preview_entry")
+        return 0
+
+    async def fake_perceive(camera, detector, **kwargs):
+        calls.append("perceive")
+
+    monkeypatch.setattr(perceive_cli, "_preview_entry", fake_preview_entry)
+    monkeypatch.setattr(perceive_cli, "perceive", fake_perceive)
+
+    asyncio.run(
+        perceive_cli._entry(
+            build_parser().parse_args(
+                ["--camera-device", "/dev/video0", "--yunet-model", str(model), "--preview-window"]
+            )
+        )
+    )
+    assert calls == ["preview_entry"]
+
+
 def test_main_handles_ctrl_c_without_a_traceback(monkeypatch, capsys):
     """A SIGINT cancellation must exit cleanly, not leak a traceback."""
 
