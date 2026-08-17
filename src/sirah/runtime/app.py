@@ -222,7 +222,7 @@ class RuntimeApp:
             self.camera = None
             return
         if frame is None:
-            return  # no frame this tick: hold the current gaze
+            return  # EOF (replay exhausted / stopped): hold the current gaze
         self.result.frames_seen += 1
         now = self._clock()
         if frame.captured_at is not None:

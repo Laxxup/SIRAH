@@ -100,8 +100,16 @@ def snapshot_from_target(
 
 @runtime_checkable
 class CameraSource(Protocol):
-    """Frame producer. `next_frame()` returns None when no frame is
-    available yet (or the stream ended); the owner decides degradation.
+    """Frame producer with one unambiguous EOF signal.
+
+    `next_frame()` WAITS asynchronously until a frame is available and
+    returns it; it never returns None merely because a frame is "not
+    ready yet" (live sources wait for the first frame and for every
+    subsequent one). `None` is returned ONLY when the stream has ended:
+    the source was stopped or, for replay, the finite sequence is
+    exhausted. Consumers may treat `None` as end-of-stream without
+    ambiguity. A source that fails mid-stream (e.g. the camera died)
+    raises instead of returning None so the owner degrades explicitly.
     """
 
     async def start(self) -> None: ...

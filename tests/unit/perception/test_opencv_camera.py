@@ -1,9 +1,20 @@
+"""OpenCVCameraSource tests: deterministic (fake capture), no OpenCV or
+hardware. `next_frame()` WAITS asynchronously for a new frame; `None` is
+EOF only — the regression tests pin the startup race and the wait
+semantics instead of polling around them.
+"""
+
 from __future__ import annotations
 
 import asyncio
 import threading
+import time
 from collections.abc import Callable
 
+import pytest
+
+from sirah.cli.perceive import perceive
+from sirah.perception.contracts import Frame, GazeTarget
 from sirah.perception.opencv_camera import OpenCVCameraSource
 
 
@@ -53,6 +64,27 @@ class GatedCapture(FakeCapture):
         return True, {"frame": self.reads, "at": self._clock()}
 
 
+class DelayedCapture(FakeCapture):
+    """First read is delayed like a camera warm-up; then frames flow."""
+
+    def __init__(self, delay_s: float) -> None:
+        super().__init__()
+        self._delay_s = delay_s
+        self._first_done = False
+
+    def read(self) -> tuple[bool, object]:
+        if not self._first_done:
+            time.sleep(self._delay_s)
+            self._first_done = True
+        self.reads += 1
+        return True, {"frame": self.reads}
+
+
+class _NoFaceDetector:
+    def detect(self, frame: Frame) -> GazeTarget | None:
+        return None
+
+
 def _clock_control() -> tuple[Callable[[], float], dict[str, float]]:
     state = {"now": 100.0}
 
@@ -62,29 +94,69 @@ def _clock_control() -> tuple[Callable[[], float], dict[str, float]]:
     return clock, state
 
 
-async def _drain(source: OpenCVCameraSource, expected_at: float | None = None) -> object:
-    for _ in range(500):
-        frame = await source.next_frame()
-        if frame is not None and (expected_at is None or frame.captured_at == expected_at):
-            return frame
-        await asyncio.sleep(0.001)
-    raise AssertionError(f"no frame with captured_at={expected_at} arrived")
+async def _await_captured(source: OpenCVCameraSource, n: int) -> None:
+    """Wait until the producer thread has stored `n` frames."""
+    for _ in range(1000):
+        if source.stats().captured >= n:
+            return
+        await asyncio.sleep(0.005)
+    raise AssertionError(f"captured never reached {n}")
+
+
+async def _produce(
+    source: OpenCVCameraSource,
+    state: dict[str, float],
+    gate: threading.Event,
+    nows: tuple[float, ...],
+) -> None:
+    """Produce one frame per timestamp, waiting for each to be stored.
+
+    `gate.set()` is a latch, not a counter: the next set must wait until
+    the capture thread consumed the previous one.
+    """
+    for i, now in enumerate(nows, 1):
+        state["now"] = now
+        gate.set()
+        await _await_captured(source, i)
+
+
+async def test_next_frame_waits_for_slow_first_frame():
+    """STARTUP RACE: a delayed first frame must NOT read as EOF."""
+    source = OpenCVCameraSource(0, capture_factory=lambda _: DelayedCapture(0.2))
+    await source.start()
+    frame = await asyncio.wait_for(source.next_frame(), timeout=2.0)
+    assert frame is not None  # old code returned None → perceived EOF
+    assert frame.payload is not None
+    await source.stop()
+
+
+async def test_perceive_waits_for_slow_first_frame():
+    """The reported bug end-to-end: sirah-perceive sees frames > 0."""
+    source = OpenCVCameraSource(0, capture_factory=lambda _: DelayedCapture(0.15))
+    summary = await perceive(source, _NoFaceDetector(), max_frames=3, interval_s=0.01)
+    assert summary.frames == 3
+    assert summary.faces == 0
 
 
 async def test_camera_returns_latest_frame_and_releases_capture():
     capture = FakeCapture()
     source = OpenCVCameraSource(0, capture_factory=lambda _: capture)
-
     await source.start()
-    for _ in range(20):
-        frame = await source.next_frame()
-        if frame is not None:
-            break
-        await asyncio.sleep(0.001)
-
+    frame = await asyncio.wait_for(source.next_frame(), timeout=1.0)
     assert frame is not None
     assert frame.payload is not None
     await source.stop()
+    assert capture.released
+
+
+async def test_stop_returns_eof_after_capture():
+    capture = FakeCapture()
+    source = OpenCVCameraSource(0, capture_factory=lambda _: capture)
+    await source.start()
+    frame = await asyncio.wait_for(source.next_frame(), timeout=1.0)
+    assert frame is not None
+    await source.stop()
+    assert await source.next_frame() is None  # EOF after deliberate stop
     assert capture.released
 
 
@@ -97,63 +169,105 @@ async def test_frames_carry_monotonic_capture_timestamp():
     await source.start()
     state["now"] = 250.0
     gate.set()  # produce one frame stamped at 250.0
-    frame = await _drain(source)
-    assert frame.captured_at == 250.0
+    frame = await asyncio.wait_for(source.next_frame(), timeout=1.0)
+    assert frame is not None and frame.captured_at == 250.0
     await source.stop()
 
 
-async def test_stats_report_age_and_dropped_frames():
+async def test_stop_while_waiting_for_first_frame_is_eof_not_deadlock():
+    """STOP WHILE WAITING: a waiter wakes and gets EOF, no leak."""
+    clock, _ = _clock_control()
+    gate = threading.Event()  # never set: the camera never produces
+    source = OpenCVCameraSource(
+        0, capture_factory=lambda _: GatedCapture(clock, gate), clock=clock
+    )
+    await source.start()
+    waiter = asyncio.create_task(source.next_frame())
+    await asyncio.sleep(0.05)  # let the waiter block on the wait
+    await asyncio.wait_for(source.stop(), timeout=2.0)
+    assert await asyncio.wait_for(waiter, timeout=1.0) is None
+
+
+async def test_cancelled_wait_leaves_camera_stoppable():
+    """CANCELLATION: the await is interrupted, then stop() still works."""
+    clock, _ = _clock_control()
+    gate = threading.Event()  # never set
+    source = OpenCVCameraSource(
+        0, capture_factory=lambda _: GatedCapture(clock, gate), clock=clock
+    )
+    await source.start()
+    waiter = asyncio.create_task(source.next_frame())
+    await asyncio.sleep(0.05)
+    waiter.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await waiter
+    await asyncio.wait_for(source.stop(), timeout=2.0)
+    assert await source.next_frame() is None  # still usable: EOF after stop
+
+
+async def test_latest_frame_wins_when_producer_faster():
+    """LATEST-FRAME: several frames before a read collapse into the newest."""
     clock, state = _clock_control()
     gate = threading.Event()
     source = OpenCVCameraSource(
         0, capture_factory=lambda _: GatedCapture(clock, gate), clock=clock
     )
     await source.start()
-
-    state["now"] = 300.0
-    gate.set()  # frame #1 stamped 300.0
-    consumed = await _drain(source)
-    assert consumed.captured_at == 300.0
-
-    state["now"] = 300.25  # 250 ms later: the frame we read is now stale
-    again = await source.next_frame()  # re-read of the SAME frame
-    assert again.captured_at == 300.0
-    stats = source.stats()
-    assert stats.consumed == 1  # unique frames read, re-reads ignored
-    assert stats.captured == 1
-    assert stats.frame_age_s == 0.25
-
-    state["now"] = 300.4
-    gate.set()  # frame #2 stamped 300.4 (frame #1 was never replaced before its read)
-    second = await _drain(source, expected_at=300.4)
-    assert second.captured_at == 300.4
-    await source.stop()
-    stats = source.stats()
-    assert stats.captured == 2
-    assert stats.consumed == 2
-    assert stats.dropped == 0  # both produced frames were consumed
-
-
-async def test_dropped_frames_count_replaced_productions():
-    clock, state = _clock_control()
-    gate = threading.Event()
-    source = OpenCVCameraSource(
-        0, capture_factory=lambda _: GatedCapture(clock, gate), clock=clock
-    )
-    await source.start()
-
-    # Produce three frames (300.0, 300.1, 300.2) BEFORE any consumer read.
-    for now in (300.0, 300.1, 300.2):
-        state["now"] = now
-        gate.set()
-        await asyncio.sleep(0.01)
-
-    consumed = await _drain(source, expected_at=300.2)  # consumer reads only the newest
-    assert consumed.captured_at == 300.2
+    await _produce(source, state, gate, (300.0, 300.1, 300.2))
+    frame = await asyncio.wait_for(source.next_frame(), timeout=1.0)
+    assert frame is not None and frame.captured_at == 300.2  # newest only
     stats = source.stats()
     assert stats.captured == 3
     assert stats.consumed == 1
     assert stats.dropped == 2  # two frames were replaced before any read
+    await source.stop()
+
+
+async def test_stats_report_consumption_age():
+    clock, state = _clock_control()
+    gate = threading.Event()
+    source = OpenCVCameraSource(
+        0, capture_factory=lambda _: GatedCapture(clock, gate), clock=clock
+    )
+    await source.start()
+    state["now"] = 300.0
+    gate.set()  # frame stamped 300.0
+    frame = await asyncio.wait_for(source.next_frame(), timeout=1.0)
+    assert frame is not None and frame.captured_at == 300.0
+    stats = source.stats()
+    assert stats.consumed == 1
+    assert stats.captured == 1
+    assert stats.dropped == 0
+    await source.stop()
+
+
+async def test_stats_report_age_when_consumer_lags():
+    clock, state = _clock_control()
+    gate = threading.Event()
+    source = OpenCVCameraSource(
+        0, capture_factory=lambda _: GatedCapture(clock, gate), clock=clock
+    )
+    await source.start()
+    state["now"] = 300.0
+    gate.set()  # frame captured at 300.0
+    await _await_captured(source, 1)
+    state["now"] = 300.5  # the consumer only reads it half a second later
+    frame = await asyncio.wait_for(source.next_frame(), timeout=1.0)
+    assert frame is not None and frame.captured_at == 300.0
+    assert source.stats().frame_age_s == pytest.approx(0.5)
+    await source.stop()
+
+
+async def test_stats_report_capture_fps():
+    clock, state = _clock_control()
+    gate = threading.Event()
+    source = OpenCVCameraSource(
+        0, capture_factory=lambda _: GatedCapture(clock, gate), clock=clock
+    )
+    await source.start()
+    await _produce(source, state, gate, (100.0, 100.1, 100.2))
+    await asyncio.wait_for(source.next_frame(), timeout=1.0)
+    assert source.stats().capture_fps == pytest.approx(10.0)  # 2 / 0.2s
     await source.stop()
 
 
@@ -178,4 +292,55 @@ async def test_capture_settings_skipped_without_set_support():
     await source.start()
     await asyncio.sleep(0.005)
     assert capture.reads > 0  # still capturing
+    await source.stop()
+
+
+async def test_read_failure_raises_after_limit():
+    class DyingCapture:
+        def __init__(self) -> None:
+            self.reads = 0
+            self.released = False
+
+        def isOpened(self) -> bool:
+            return True
+
+        def read(self) -> tuple[bool, object]:
+            self.reads += 1
+            return False, None
+
+        def release(self) -> None:
+            self.released = True
+
+    source = OpenCVCameraSource(
+        0, capture_factory=lambda _: DyingCapture(), read_failure_limit=3
+    )
+    await source.start()
+    with pytest.raises(OSError, match="read failed"):
+        await asyncio.wait_for(source.next_frame(), timeout=2.0)
+    await source.stop()
+
+
+async def test_transient_read_failures_reset_and_do_not_end_stream():
+    class FlakyCapture:
+        def __init__(self) -> None:
+            self.reads = 0
+
+        def isOpened(self) -> bool:
+            return True
+
+        def read(self) -> tuple[bool, object]:
+            self.reads += 1
+            if self.reads <= 3:  # warm-up failures
+                return False, None
+            return True, {"frame": self.reads}
+
+        def release(self) -> None:
+            pass
+
+    source = OpenCVCameraSource(
+        0, capture_factory=lambda _: FlakyCapture(), read_failure_limit=5
+    )
+    await source.start()
+    frame = await asyncio.wait_for(source.next_frame(), timeout=2.0)
+    assert frame is not None  # transient failures did not end the stream
     await source.stop()

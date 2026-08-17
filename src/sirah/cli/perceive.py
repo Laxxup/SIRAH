@@ -51,8 +51,11 @@ async def perceive(
 ) -> PerceptionSummary:
     """Camera → detector for `max_frames` (0 = until the source ends).
 
-    Never touches behavior, transport or hardware beyond the camera. The
-    camera is always stopped before returning (also on cancellation).
+    `next_frame` blocks asynchronously until a frame is available, so an
+    active camera with a slow first frame is awaited, not mistaken for
+    end-of-stream (None now means EOF only). Never touches behavior,
+    transport or hardware beyond the camera. The camera is always stopped
+    before returning (also on cancellation).
     """
     await camera.start()
     observations: list[PerceptionObservation] = []
