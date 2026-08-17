@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 from sirah.perception.contracts import Frame, GazeTarget
@@ -39,6 +40,10 @@ class YuNetFaceDetector:
 
     Implements both contracts: `detect` (largest face, backwards
     compatible) and `detect_many` (every face, for the attention layer).
+    Detection parameters follow the OpenCV Zoo `YuNet` class defaults
+    (score 0.6, nms 0.3, top_k 5000) rather than the stricter OpenCV
+    `FaceDetectorYN.create` defaults (score 0.9): faces farther/smaller
+    are worth surfacing to attention, which gates them downstream.
     """
 
     def __init__(
@@ -46,10 +51,19 @@ class YuNetFaceDetector:
         model_path: Path,
         *,
         detector_factory: Callable[[Path], object] | None = None,
+        score_threshold: float = 0.6,
+        nms_threshold: float = 0.3,
+        top_k: int = 5000,
     ) -> None:
         if not model_path.is_file():
             raise FileNotFoundError(f"YuNet model not found: {model_path}")
-        self._detector = (detector_factory or _opencv_detector)(model_path)
+        factory = detector_factory or partial(
+            _opencv_detector,
+            score_threshold=score_threshold,
+            nms_threshold=nms_threshold,
+            top_k=top_k,
+        )
+        self._detector = factory(model_path)
         self._width = 0
         self._height = 0
 
@@ -81,9 +95,13 @@ class YuNetFaceDetector:
         ]
 
 
-def _opencv_detector(model_path: Path) -> object:
+def _opencv_detector(
+    model_path: Path, *, score_threshold: float, nms_threshold: float, top_k: int
+) -> object:
     try:
         import cv2
     except ImportError as exc:
         raise RuntimeError('install perception support: pip install -e ".[perception]"') from exc
-    return cv2.FaceDetectorYN.create(str(model_path), "", (320, 320))
+    return cv2.FaceDetectorYN.create(
+        str(model_path), "", (320, 320), score_threshold, nms_threshold, top_k
+    )

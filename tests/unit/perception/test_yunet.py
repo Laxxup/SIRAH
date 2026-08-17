@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from sirah.perception.contracts import Frame
@@ -49,6 +51,59 @@ def test_detector_returns_largest_face_as_target(tmp_path):
     target = detector.detect(Frame(1, image))
     assert target is not None
     assert (target.x, target.y, target.confidence) == pytest.approx((0.2, -0.2, 0.9))
+
+
+def test_detection_parameters_are_forwarded_to_opencv_create(monkeypatch, tmp_path):
+    """score/nms/top_k reach the real FaceDetectorYN.create call (via the
+    default factory), matching the OpenCV Zoo YuNet class parameters."""
+    import sirah.perception.yunet as yunet_mod
+
+    model = tmp_path / "yunet.onnx"
+    model.touch()
+
+    seen: dict[str, object] = {}
+
+    def fake_detector(
+        model_path: Path, *, score_threshold: float, nms_threshold: float, top_k: int
+    ) -> object:
+        assert model_path == model
+        seen["score_threshold"] = score_threshold
+        seen["nms_threshold"] = nms_threshold
+        seen["top_k"] = top_k
+        return object()
+
+    monkeypatch.setattr(yunet_mod, "_opencv_detector", fake_detector)
+    YuNetFaceDetector(
+        model,
+        score_threshold=0.7,
+        nms_threshold=0.4,
+        top_k=100,
+    )
+    assert seen == {"score_threshold": 0.7, "nms_threshold": 0.4, "top_k": 100}
+
+
+def test_default_detection_parameters_match_zoo_library(monkeypatch, tmp_path):
+    """Defaults are the OpenCV Zoo YuNet class values (score 0.6, nms 0.3)."""
+    import sirah.perception.yunet as yunet_mod
+
+    model = tmp_path / "yunet.onnx"
+    model.touch()
+
+    seen: dict[str, object] = {}
+
+    def fake_detector(
+        model_path: Path, *, score_threshold: float, nms_threshold: float, top_k: int
+    ) -> object:
+        seen.update(
+            score_threshold=score_threshold,
+            nms_threshold=nms_threshold,
+            top_k=top_k,
+        )
+        return object()
+
+    monkeypatch.setattr(yunet_mod, "_opencv_detector", fake_detector)
+    YuNetFaceDetector(model)
+    assert seen == {"score_threshold": 0.6, "nms_threshold": 0.3, "top_k": 5000}
 
 
 def test_detector_reports_every_face_via_detect_many(tmp_path):
