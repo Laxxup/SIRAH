@@ -17,6 +17,7 @@ perception = [
     "opencv-python-headless<5",
     "numpy",
 ]
+gesture = ["mediapipe"]
 serial = ["pyserial-asyncio>=0.6"]
 cli = ["pyyaml>=6"]
 audio = [
@@ -69,6 +70,7 @@ module = [
     "kokoro",
     "edge_tts",
     "serial_asyncio",
+    "mediapipe",
 ]
 ignore_missing_imports = true
 

@@ -23,3 +23,21 @@ def test_install_yunet_rejects_checksum_mismatch(tmp_path, monkeypatch):
 
     with pytest.raises(ValueError, match="SHA-256"):
         models.install_yunet(tmp_path)
+
+
+def test_install_gesture_writes_verified_model(tmp_path, monkeypatch):
+    payload = b"gesture-model"
+    monkeypatch.setattr(models, "GESTURE_SHA256", models.sha256(payload).hexdigest())
+    monkeypatch.setattr(models, "urlopen", lambda *_args, **_kwargs: io.BytesIO(payload))
+
+    path = models.install_gesture(tmp_path)
+
+    assert path == tmp_path / models.GESTURE_FILENAME
+    assert path.read_bytes() == payload
+
+
+def test_install_gesture_rejects_checksum_mismatch(tmp_path, monkeypatch):
+    monkeypatch.setattr(models, "urlopen", lambda *_args, **_kwargs: io.BytesIO(b"wrong"))
+
+    with pytest.raises(ValueError, match="SHA-256"):
+        models.install_gesture(tmp_path)
