@@ -19,3 +19,5 @@ repository's own record of the decisions that govern it.
 | ADR-0010 | Testing strategy: fake, replay and HIL gates |
 | ADR-0011 | PCA9685 + external 5 V power for the servo rail (accepted 2026-08-09) |
 | ADR-0012 | Attention, arbitration and world state as opt-in deterministic layers over the perception→behavior chain (accepted 2026-08-16) |
+| ADR-0013 | Telepresence and single camera ownership: one camera owner, fan-out, freshness (proposed, research track) |
+| ADR-0014 | Evidence layer: raw perception is never authority; only stable state/events reach behavior and conversation (accepted, M2) |

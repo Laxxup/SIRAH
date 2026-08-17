@@ -130,5 +130,10 @@ runtime — probar sin hardware no es un mock improvisado.
 - ADR-0010: estrategia fake/replay/HIL.
 - ADR-0011: PCA9685 + fuente externa 5 V para el rail de servos; canales
   VERIFIED 2026-08-09.
+- ADR-0012: atención/arbitraje/world-state como capas deterministas opt-in
+  sobre la cadena percepción→comportamiento.
+- ADR-0013: una sola cámara dueña del runtime; `FrameBroker` reparte el
+  último frame a percepción, telepresencia y VLM sin colas ni backlog
+  (investigación de telepresencia).
 - La conversación, incluidos STT, LLM, TTS y reproducción, permanece aislada
   del runtime físico hasta una decisión explícita y pruebas de seguridad.
