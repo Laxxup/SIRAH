@@ -35,7 +35,11 @@ def map_face(face: FaceBox, *, width: int, height: int) -> GazeTarget:
 
 
 class YuNetFaceDetector:
-    """OpenCV YuNet adapter; model loading is explicit and local-only."""
+    """OpenCV YuNet adapter; model loading is explicit and local-only.
+
+    Implements both contracts: `detect` (largest face, backwards
+    compatible) and `detect_many` (every face, for the attention layer).
+    """
 
     def __init__(
         self,
@@ -46,21 +50,35 @@ class YuNetFaceDetector:
         if not model_path.is_file():
             raise FileNotFoundError(f"YuNet model not found: {model_path}")
         self._detector = (detector_factory or _opencv_detector)(model_path)
+        self._width = 0
+        self._height = 0
 
     def detect(self, frame: Frame) -> GazeTarget | None:
+        face = select_largest_face(self._boxes(frame))
+        return (
+            map_face(face, width=self._width, height=self._height)
+            if face is not None
+            else None
+        )
+
+    def detect_many(self, frame: Frame) -> Sequence[GazeTarget]:
+        return [
+            map_face(face, width=self._width, height=self._height)
+            for face in self._boxes(frame)
+        ]
+
+    def _boxes(self, frame: Frame) -> Sequence[FaceBox]:
         if frame.payload is None:
-            return None
-        height, width = frame.payload.shape[:2]  # type: ignore[attr-defined]
-        self._detector.setInputSize((width, height))  # type: ignore[attr-defined]
+            return []
+        self._height, self._width = frame.payload.shape[:2]  # type: ignore[attr-defined]
+        self._detector.setInputSize((self._width, self._height))  # type: ignore[attr-defined]
         _, rows = self._detector.detect(frame.payload)  # type: ignore[attr-defined]
         if rows is None:
-            return None
-        faces = [
+            return []
+        return [
             FaceBox(float(row[0]), float(row[1]), float(row[2]), float(row[3]), float(row[-1]))
             for row in rows
         ]
-        face = select_largest_face(faces)
-        return map_face(face, width=width, height=height) if face is not None else None
 
 
 def _opencv_detector(model_path: Path) -> object:

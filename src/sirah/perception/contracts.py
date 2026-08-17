@@ -14,6 +14,7 @@ camera fills it; tests/fakes leave it None).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from math import isfinite
 from typing import Literal, Protocol, runtime_checkable
@@ -27,11 +28,18 @@ class Frame:
 
     `payload` carries the source-specific image (e.g. a numpy BGR array
     from OpenCV) without importing it here; the detector is the only
-    consumer that needs to know the concrete type.
+    consumer that needs to know the concrete type. `captured_at` is the
+    source's monotonic capture timestamp so consumers can measure frame
+    age without importing a clock (freshness > processing every frame).
     """
 
     index: int
     payload: object | None = None
+    captured_at: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.captured_at is not None and not isfinite(self.captured_at):
+            raise ValueError("captured_at must be finite")
 
 
 @dataclass(frozen=True)
@@ -110,3 +118,15 @@ class FaceDetector(Protocol):
     """
 
     def detect(self, frame: Frame) -> GazeTarget | None: ...
+
+
+@runtime_checkable
+class MultiFaceDetector(Protocol):
+    """Frame → zero or more normalized faces.
+
+    Detection OBSERVES every face; choosing the primary target is a
+    separate attention responsibility (attention layer, not the detector).
+    Implementations that only satisfy `FaceDetector` remain valid.
+    """
+
+    def detect_many(self, frame: Frame) -> Sequence[GazeTarget]: ...

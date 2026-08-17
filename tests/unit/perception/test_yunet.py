@@ -49,3 +49,27 @@ def test_detector_returns_largest_face_as_target(tmp_path):
     target = detector.detect(Frame(1, image))
     assert target is not None
     assert (target.x, target.y, target.confidence) == pytest.approx((0.2, -0.2, 0.9))
+
+
+def test_detector_reports_every_face_via_detect_many(tmp_path):
+    model = tmp_path / "yunet.onnx"
+    model.touch()
+
+    class Image:
+        shape = (100, 100, 3)
+
+    image = Image()
+
+    class FakeDetector:
+        def setInputSize(self, size):
+            assert size == (100, 100)
+
+        def detect(self, payload):
+            assert payload is image
+            return None, [[0, 0, 10, 10, 0, 0, 0, 0, 0, 0.7], [50, 50, 20, 20, 0, 0, 0, 0, 0, 0.9]]
+
+    detector = YuNetFaceDetector(model, detector_factory=lambda _: FakeDetector())
+    faces = detector.detect_many(Frame(1, image))
+    assert len(faces) == 2
+    assert (faces[0].x, faces[0].y, faces[0].confidence) == pytest.approx((-0.9, 0.9, 0.7))
+    assert (faces[1].x, faces[1].y, faces[1].confidence) == pytest.approx((0.2, -0.2, 0.9))

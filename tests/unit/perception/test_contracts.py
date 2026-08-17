@@ -11,6 +11,7 @@ from sirah.perception.contracts import (
     FaceDetector,
     Frame,
     GazeTarget,
+    MultiFaceDetector,
     PerceptionSnapshot,
     snapshot_from_target,
 )
@@ -39,8 +40,13 @@ def test_isinstance_checks_against_nominal_protocols():
         def detect(self, frame: Frame) -> GazeTarget | None:
             return None
 
+    class FakeMultiDetector:
+        def detect_many(self, frame: Frame):
+            return []
+
     assert isinstance(FakeCamera(), CameraSource)
     assert isinstance(FakeDetector(), FaceDetector)
+    assert isinstance(FakeMultiDetector(), MultiFaceDetector)
     assert isinstance(GazeBehavior(), Behavior)
 
 
