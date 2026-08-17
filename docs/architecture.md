@@ -17,11 +17,16 @@ SIRAH mantiene dos sistemas con límites explícitos:
 
 ```
  percepción (Stage 8)                   webcam USB → camera_source → face_detector
+                                        instrumentada: fps · dropped · frame_age
+              ↓ GazeTarget(s) (multi-face)
+ atención (visión en vivo)              AttentionManager → primario estable (anti-flicker)
               ↓ GazeTarget (x, y, conf)
  comportamiento (Stage 8)               gaze_behavior → Setpoint + LostFacePolicy
               ↓ Setpoint (normalizado)
+ arbitraje (visión en vivo)             EyeArbiter → SAFETY > MANUAL > face_tracking
+              ↓ Setpoint otorgado
  runtime estable (PC / Raspberry Pi)    RuntimeApp (lifecycle + registry) ·
-                                        HeartbeatWriter · SetpointGate
+                                        HeartbeatWriter · SetpointGate · WorldState
               ↓ comandos v1.0 (TARGET / BLINK / HEARTBEAT / STATUS / ERR)
  transporte                             EyeTransport (contrato, ADR-0002)
               ↓ serial (o twin in-memory)
@@ -57,9 +62,22 @@ Dependency direction is always toward stable layers: `cli → runtime →
 - Arranque: `_start_eyes()` (transport.connect, falla → DEGRADED, la app
   sigue viva) y `_start_camera()` (mismo patrón, Stage 8).
 - Detención limpia: `stop` Event → cancel de tasks → teardown.
-- Pipeline (Stage 7): `_pipeline_loop` solo sostiene el heartbeat; el cable
-  frame → detect → behavior → gate → TARGET llega en Stage 8 con
-  Protocol nominales en `src/sirah/perception|behavior`.
+- Pipeline (Stage 8 + visión en vivo): `_pipeline_tick` recorre
+  frame → detect → atención → behavior → arbitraje → gate → TARGET. La
+  detección multi-cara (`MultiFaceDetector`) OBSERVA cada cara y la
+  atención elige un primario estable; sin atención, el camino clásico de
+  detector único sigue intacto.
+- `EyeArbiter` arbitra cada tick entre productores con prioridad
+  SAFETY > MANUAL > face_tracking > idle; un productor manual o de
+  seguridad puede tomar los ojos aunque el rostro esté en silencio. El
+  cable permanece quieto si el setpoint otorgado no cambió (gate de
+  último envío) y el firmware suaviza el movimiento físico.
+- `WorldState` es una instantánea inmutable por tick (rostro presente,
+  objetivo atendido, frescura del frame, setpoint otorgado, percepción
+  disponible) construida con `WorldStateBuilder`; es de solo lectura para
+  los consumidores.
+- `sirah-perceive` es el CLI de diagnóstico: cámara → detector sin armar
+  ojos ni abrir el serial; núcleo `perceive()` probado con fakes.
 
 ## 5. Laboratorio conversacional
 
@@ -89,7 +107,7 @@ micrófono → SoundDeviceAudioSource → Silero VAD local
 
 | Suite | Contenido | Gate |
 |---|---|---|
-| tests/unit | runtime · config · hardware · policies — 169 hoy | CI siempre |
+| tests/unit | runtime · config · hardware · policies · percepción · atención · arbitraje — 498 en verde hoy | CI siempre |
 | tests/contract | corpus golden 91 casos, parser Python ↔ C++ | CI |
 | tests/integration | E2E offline (fake camera → detector → behavior → gate → FakeESP32 → STATE) | CI (desde Stage 8) |
 | tests/replay | datasets grabados (driver a crear; LFS) | CI |

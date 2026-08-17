@@ -15,6 +15,7 @@ la situación de los ojos, el laboratorio conversacional y el trabajo posterior.
 | 6 | Simulador conductual `FakeESP32` | Completado | ADR-0009/0010 y 22 pruebas |
 | 7 | Runtime con `asyncio`, registro de componentes, políticas y CLI | Completado | `app.py`, `cli/run.py` y 169 pruebas |
 | 8 | Seguimiento 2D con fuente de cámara, detector facial y comportamiento de mirada | Completado | Pipeline cableado, OpenCV/YuNet opcional, E2E offline y `lost_face_center_s` |
+| 8b | Visión en vivo: instrumentación de cámara (fps/dropped/edad de frame), percepción multi-cara, atención anti-flicker, arbitraje de ojos y estado del mundo | Completado | `sirah-perceive`, `AttentionManager`, `EyeArbiter`, `WorldState` y `--attention` en el runtime |
 | 9 | Laboratorio conversacional con VAD, STT, LLM, TTS y medición de latencia | Experimental validado en software y laboratorio | `sirah-conversation`, 401 pruebas, `docs/conversation.md` y protocolo de laboratorio |
 
 ## En curso y próximo trabajo
@@ -48,7 +49,14 @@ la situación de los ojos, el laboratorio conversacional y el trabajo posterior.
   hasta decidir su función tras la etapa 8 (decisión del director, 2026-08-09).
 - La cámara física con OpenCV y YuNet se incorporará después de validar los
   contratos y las fuentes fake o de reproducción. La instalación base no exige
-  OpenCV ni el modelo; véase ADR-0006.
+  OpenCV ni el modelo; véase ADR-0006. `sirah-perceive` permite observar la
+  cámara/detector sin armar ojos ni abrir el serial (ADR-0009).
+- La atención (`--attention`), el arbitraje de ojos y el estado del mundo son
+  capacidades de la etapa 8b: opt-in y deterministas; la línea base sigue
+  funcionando igual sin ellas.
+- La validación física (cámara real + modelo YuNet + foco) y la medición de
+  equilibrio productor/consumidor en Raspberry Pi quedan pendientes de
+  hardware; los contadores `CameraStats` están listos para ello.
 - Los informes de investigación y auditoría del directorio local `informes/`
   no se guardan en el repositorio. Las decisiones se documentan en los ADR y en
   esta hoja de ruta.

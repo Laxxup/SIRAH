@@ -56,7 +56,23 @@ sirah-calibrate validate
 Comprueba que `config/actuators.yaml` espeja sin divergencias
 `firmware/sirah-eyes/config/calibration.h` y `platform/pins.h` (ADR-0009).
 
-## 4. Problemas frecuentes
+## 4. Observar la visión (sin ojos)
+
+Con una webcam USB y el modelo YuNet (extra opcional `[perception]`):
+
+```bash
+sirah-perceive --camera-device /dev/video0 --yunet-model models/face_detection_yunet_2023mar.onnx
+```
+
+`--max-frames N` limita la duración (0 = hasta que la fuente termine) y
+`--interval` fija el ritmo entre lecturas. El CLI imprime por frame el
+objetivo normalizado (`face x=... y=... conf=... age=...`) o `no face`, más
+un resumen de frescura: `frames`, `faces` y, si la fuente la instrumenta,
+`captured`/`consumed`/`dropped` y `capture_fps` (`CameraStats`). No arma los
+ojos ni abre el serial (ADR-0009). También acepta `--replay-jsonl` y
+`--replay-video` como fuentes.
+
+## 5. Problemas frecuentes
 
 | Síntoma | Causa probable | Fix |
 |---|---|---|
@@ -65,7 +81,7 @@ Comprueba que `config/actuators.yaml` espeja sin divergencias
 | `eyes: DEGRADED` al bootear | Serial ocupada o ESP32 sin flash | Cerrar otros programas, verificar cable |
 | Servos no responden | Falta la fuente 5 V / brownout | Fuente externa + GND común (ADR-0011) |
 
-## 5. Conversación experimental por voz
+## 6. Conversación experimental por voz
 
 El laboratorio conversacional no requiere ojos ni ESP32. Instala audio, VAD,
 conversación y Edge TTS, además de `ffmpeg`:

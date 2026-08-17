@@ -3,6 +3,37 @@
 SIRAH = **Sistema Inteligente Robótico de Asistencia Humana** (solo en
 español). Histórico de releases. Formato: Conventional Commits.
 
+## Unreleased — Visión en vivo (en desarrollo)
+
+### Percepción
+- `feat(perception)`: `Frame.captured_at` (marca de tiempo monotónica de la
+  fuente) y `OpenCVCameraSource` instrumentada: `CameraStats` con frames
+  capturados/consumidos/descartados, `capture_fps` y edad del último frame;
+  semántica de frame más reciente (frescura > procesar cada frame).
+- `feat(perception)`: contrato `MultiFaceDetector` + `YuNetFaceDetector.detect_many`
+  para observar cada cara; `detect` (mayor cara) sigue siendo compatible.
+- `feat(cli)`: `sirah-perceive`, CLI de diagnóstico cámara → detector sin
+  armar ojos ni abrir el serial.
+
+### Comportamiento y runtime
+- `feat(behavior)`: `AttentionManager` (atención opt-in): primario estable a
+  partir de detecciones multi-cara con histéresis de adquisición/cambio,
+  continuidad por proximidad y retención ante pérdida breve (anti-flicker).
+- `feat(runtime)`: `EyeArbiter` arbitra los ojos por prioridad
+  SAFETY > MANUAL > face_tracking > idle; la cadena frame → detect → atención
+  → behavior → arbitraje → gate → TARGET se documenta en `architecture.md`.
+- `feat(runtime)`: `WorldState` inmutable por tick (rostro, objetivo, frescura,
+  setpoint otorgado, percepción disponible); `RuntimeResult` expone
+  `gaze_producer` y `last_frame_age_s`; el cable permanece quieto si el
+  setpoint otorgado no cambió.
+- `feat(cli)`: `sirah-runtime --attention` activa la atención con fuente de
+  cámara o reproducción.
+
+### Límites conocidos
+- La visión en vivo requiere OpenCV/YuNet (extra opcional) y aún no se ha
+  validado físicamente con cámara real; `CameraStats` mide el equilibrio
+  productor/consumidor para la Raspberry Pi.
+
 ## v0.3.1 — Laboratorio conversacional y observabilidad (2026-08-13)
 
 ### Conversación
