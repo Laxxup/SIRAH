@@ -3,6 +3,8 @@ deterministic and needs no OpenCV, model, camera or hardware."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from sirah.cli.perceive import build_parser, perceive
@@ -92,3 +94,20 @@ def test_parser_requires_exactly_one_source_and_model():
     assert args.camera_device == "/dev/video0"
     assert args.yunet_model == "yunet.onnx"
     assert args.max_frames == 10
+
+
+def test_parser_gesture_model_is_optional():
+    parser = build_parser()
+    without = parser.parse_args(["--camera-device", "/dev/video0", "--yunet-model", "yunet.onnx"])
+    assert without.gesture_model is None
+    with_gesture = parser.parse_args(
+        [
+            "--camera-device",
+            "/dev/video0",
+            "--yunet-model",
+            "yunet.onnx",
+            "--gesture-model",
+            "gesture.task",
+        ]
+    )
+    assert with_gesture.gesture_model == Path("gesture.task")

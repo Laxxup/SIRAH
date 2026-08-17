@@ -36,13 +36,66 @@ class GestureCategory:
 
 
 @dataclass(frozen=True)
+class Landmark:
+    """One hand landmark in a normalized coordinate space.
+
+    `x`/`y` in [0, 1] image coordinates; `z` is the approximate depth
+    from the wrist (MediaPipe `NormalizedLandmark`) or a world-space
+    metric value (MediaPipe `Landmark`), depending on which result field
+    produced it. Preserved so M6 Wave can use hand geometry without a
+    separate HandLandmarker.
+    """
+
+    x: float
+    y: float
+    z: float
+
+
+@dataclass(frozen=True)
 class HandGesture:
-    """One recognized hand: allowlisted gesture, confidence and identity."""
+    """One recognized hand: allowlisted gesture, confidence and identity.
+
+    `landmarks`/`world_landmarks` carry the raw MediaPipe 21-point hand
+    geometry normalized at the adapter boundary (empty when the source
+    does not provide them), so downstream layers never see vendor types.
+    """
 
     gesture: str  # canonical value, e.g. "thumb_up" (not a MediaPipe category)
     confidence: float
     handedness: str  # "Left", "Right" or "Unknown"
     index: int  # 0-based hand index in the frame
+    landmarks: tuple[Landmark, ...] = ()
+    world_landmarks: tuple[Landmark, ...] = ()
+
+
+@dataclass(frozen=True)
+class RawHand:
+    """What MediaPipe actually reported for one hand, allowlisted or not.
+
+    Diagnostic only: the best category name/score before SIRAH's semantic
+    allowlist is applied, so an operator can see WHY a category produced
+    no observation (not in the allowlist). Never becomes behavior input.
+    """
+
+    index: int
+    handedness: str
+    category: str  # raw MediaPipe category, e.g. "Closed_Fist"
+    confidence: float
+    landmarks: tuple[Landmark, ...] = ()
+    world_landmarks: tuple[Landmark, ...] = ()
+
+
+@dataclass(frozen=True)
+class GestureDetection:
+    """One recognition pass: allowlisted hands plus everything MediaPipe saw.
+
+    `hands` feeds the evidence layer (`gesture_observations`); `raw` is
+    the full diagnostic view used by the preview to explain rejections.
+    """
+
+    hands: tuple[HandGesture, ...]
+    raw: tuple[RawHand, ...]
+    timestamp_ms: int
 
 
 def canonical_value(category: str) -> str | None:
@@ -64,12 +117,16 @@ def classify_hands(
     hands: Sequence[Sequence[GestureCategory]],
     *,
     handedness: Sequence[str] | None = None,
+    landmarks: Sequence[Sequence[Landmark]] | None = None,
+    world_landmarks: Sequence[Sequence[Landmark]] | None = None,
 ) -> list[HandGesture]:
     """Map per-hand category lists to allowlisted hand gestures.
 
     `hands[i]` is the top-k classification list for hand i, already sorted
     by score by the recognizer. Only the best category of each hand is
-    considered; non-allowlisted gestures yield no observation.
+    considered; non-allowlisted gestures yield no observation. When
+    provided, `landmarks[i]`/`world_landmarks[i]` (21-point geometry) are
+    attached to the matching hand so downstream layers keep the raw shape.
     """
     if handedness is None:
         handedness = ("Unknown",) * len(hands)
@@ -87,9 +144,52 @@ def classify_hands(
                 confidence=best.score,
                 handedness=handedness[index] if index < len(handedness) else "Unknown",
                 index=index,
+                landmarks=tuple(landmarks[index]) if landmarks and index < len(landmarks) else (),
+                world_landmarks=(
+                    tuple(world_landmarks[index])
+                    if world_landmarks and index < len(world_landmarks)
+                    else ()
+                ),
             )
         )
     return observed
+
+
+def raw_hands(
+    hands: Sequence[Sequence[GestureCategory]],
+    *,
+    handedness: Sequence[str] | None = None,
+    landmarks: Sequence[Sequence[Landmark]] | None = None,
+    world_landmarks: Sequence[Sequence[Landmark]] | None = None,
+) -> list[RawHand]:
+    """The full diagnostic view of one recognition pass, allowlist ignored.
+
+    Every detected hand is reported with its best category (raw MediaPipe
+    name), so the preview can explain why a gesture did NOT become a
+    stable observation (e.g. `Closed_Fist` is simply not allowlisted).
+    """
+    if handedness is None:
+        handedness = ("Unknown",) * len(hands)
+    seen: list[RawHand] = []
+    for index, categories in enumerate(hands):
+        best = best_category(categories)
+        if best is None:
+            continue
+        seen.append(
+            RawHand(
+                index=index,
+                handedness=handedness[index] if index < len(handedness) else "Unknown",
+                category=best.name,
+                confidence=best.score,
+                landmarks=tuple(landmarks[index]) if landmarks and index < len(landmarks) else (),
+                world_landmarks=(
+                    tuple(world_landmarks[index])
+                    if world_landmarks and index < len(world_landmarks)
+                    else ()
+                ),
+            )
+        )
+    return seen
 
 
 def gesture_observations(

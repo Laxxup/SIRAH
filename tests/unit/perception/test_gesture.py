@@ -106,22 +106,42 @@ class FakeRecognizer:
     def __init__(self, results: list[object]) -> None:
         self._results = iter(results)
         self.timestamps: list[int] = []
+        self.closed = False
 
     def recognize_for_video(self, image: object, timestamp_ms: int) -> object:
         self.timestamps.append(timestamp_ms)
         return next(self._results)
 
+    def close(self) -> None:
+        self.closed = True
+
 
 class FakeResult:
-    def __init__(self, gestures: list[list[object]], handedness: list[list[object]]) -> None:
+    def __init__(
+        self,
+        gestures: list[list[object]],
+        handedness: list[list[object]],
+        *,
+        hand_landmarks: list[list[object]] | None = None,
+        hand_world_landmarks: list[list[object]] | None = None,
+    ) -> None:
         self.gestures = gestures
         self.handedness = handedness
+        self.hand_landmarks = hand_landmarks or []
+        self.hand_world_landmarks = hand_world_landmarks or []
 
 
 class FakeCategory:
     def __init__(self, name: str, score: float) -> None:
         self.category_name = name
         self.score = score
+
+
+class FakeLandmark:
+    def __init__(self, x: float, y: float, z: float) -> None:
+        self.x = x
+        self.y = y
+        self.z = z
 
 
 @pytest.fixture()
@@ -134,6 +154,16 @@ def model_file(tmp_path):
 def test_adapter_requires_existing_model(tmp_path):
     with pytest.raises(FileNotFoundError):
         MediaPipeGestureRecognizer(tmp_path / "missing.task")
+
+
+def test_adapter_reports_mediapipe_missing(tmp_path, monkeypatch):
+    path = tmp_path / "gesture_recognizer.task"
+    path.write_bytes(b"fake")
+    import sys
+
+    monkeypatch.setitem(sys.modules, "mediapipe", None)
+    with pytest.raises(RuntimeError, match="gesture support"):
+        MediaPipeGestureRecognizer(path)
 
 
 def test_adapter_maps_video_result_to_hand_gestures(model_file):
@@ -181,6 +211,99 @@ def test_adapter_emits_monotonic_timestamps(model_file):
 def test_adapter_validates_num_hands(model_file):
     with pytest.raises(ValueError):
         MediaPipeGestureRecognizer(model_file, num_hands=0)
+
+
+def test_adapter_close_releases_recognizer(model_file):
+    recognizer = MediaPipeGestureRecognizer(
+        model_file, recognizer_factory=lambda _path: FakeRecognizer([FakeResult([], [])])
+    )
+    recognizer.close()
+    assert recognizer._recognizer.closed  # type: ignore[attr-defined]
+
+
+def test_adapter_preserves_landmarks_and_world_landmarks(model_file):
+    fake = FakeRecognizer(
+        [
+            FakeResult(
+                gestures=[[FakeCategory("Thumb_Up", 0.93)]],
+                handedness=[[FakeCategory("Right", 0.99)]],
+                hand_landmarks=[[FakeLandmark(0.1, 0.2, 0.3), FakeLandmark(0.4, 0.5, 0.6)]],
+                hand_world_landmarks=[[FakeLandmark(1.0, 2.0, 3.0)]],
+            )
+        ]
+    )
+    recognizer = MediaPipeGestureRecognizer(model_file, recognizer_factory=lambda _path: fake)
+    detection = recognizer.recognize_detailed(
+        Frame(index=0, payload=np.zeros((10, 10, 3), dtype=np.uint8))
+    )
+    assert len(detection.hands) == 1
+    hand = detection.hands[0]
+    assert hand.gesture == "thumb_up"
+    assert len(hand.landmarks) == 2
+    assert hand.landmarks[0].x == pytest.approx(0.1)
+    assert hand.landmarks[1].y == pytest.approx(0.5)
+    assert len(hand.world_landmarks) == 1
+    assert hand.world_landmarks[0].z == pytest.approx(3.0)
+
+
+def test_adapter_raw_hands_report_non_allowlisted_categories(model_file):
+    fake = FakeRecognizer(
+        [
+            FakeResult(
+                gestures=[[FakeCategory("Closed_Fist", 0.95), FakeCategory("Thumb_Up", 0.3)]],
+                handedness=[[FakeCategory("Right", 0.99)]],
+            )
+        ]
+    )
+    recognizer = MediaPipeGestureRecognizer(model_file, recognizer_factory=lambda _path: fake)
+    detection = recognizer.recognize_detailed(
+        Frame(index=0, payload=np.zeros((10, 10, 3), dtype=np.uint8))
+    )
+    # allowlisted subset: closed_fist is not allowlisted → no hand observation
+    assert detection.hands == ()
+    # diagnostic raw view still reports what MediaPipe actually saw
+    assert len(detection.raw) == 1
+    assert detection.raw[0].category == "Closed_Fist"
+    assert detection.raw[0].confidence == pytest.approx(0.95)
+
+
+def test_adapter_converts_bgr_to_contiguous_rgb_at_boundary(model_file):
+    """The recognizer must receive a contiguous SRGB array, and the shared
+    BGR frame must never be mutated in place."""
+    bgr = np.zeros((4, 6, 3), dtype=np.uint8)
+    bgr[:, :, 0] = 200  # blue
+    bgr[:, :, 1] = 100  # green
+    bgr[:, :, 2] = 50  # red
+
+    seen: list[object] = []
+
+    class CapturingRecognizer(FakeRecognizer):
+        def recognize_for_video(self, image: object, timestamp_ms: int) -> object:
+            seen.append(image)
+            return FakeResult([], [])
+
+    recognizer = MediaPipeGestureRecognizer(
+        model_file, recognizer_factory=lambda _path: CapturingRecognizer([FakeResult([], [])])
+    )
+    recognizer.recognize(Frame(index=0, payload=bgr))
+
+    assert len(seen) == 1
+    rgb = seen[0]
+    assert rgb.flags["C_CONTIGUOUS"]  # type: ignore[union-attr]
+    assert rgb[0, 0, 0] == 50  # BGR red channel moved to R
+    assert rgb[0, 0, 1] == 100  # green unchanged
+    assert rgb[0, 0, 2] == 200  # BGR blue channel moved to B
+    # the shared broker frame is untouched
+    assert bgr[0, 0, 0] == 200
+
+
+def test_adapter_no_payload_returns_empty_detection(model_file):
+    recognizer = MediaPipeGestureRecognizer(
+        model_file, recognizer_factory=lambda _path: FakeRecognizer([])
+    )
+    detection = recognizer.recognize_detailed(Frame(index=0, payload=None))
+    assert detection.hands == ()
+    assert detection.raw == ()
 
 
 def test_gesture_observations_reject_below_min_confidence():

@@ -84,6 +84,17 @@ class FrameBroker:
         self._subscribers: list[FrameSubscriber] = []
         self._task: asyncio.Task[None] | None = None
 
+    @property
+    def source(self) -> CameraSource:
+        """The single physical camera this broker owns."""
+        return self._source
+
+    @property
+    def source_stats(self):
+        """Underlying camera freshness stats, when the source exposes them."""
+        stats = getattr(self._source, "stats", None)
+        return stats() if callable(stats) else None
+
     def subscribe(self) -> FrameSubscriber:
         """Register a new latest-frame consumer (allowed before start)."""
         subscriber = FrameSubscriber(_Slot())

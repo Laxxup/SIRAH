@@ -36,6 +36,7 @@ from sirah.perception.evidence import (
     RejectedObservation,
     StableState,
 )
+from sirah.perception.gesture import HandGesture, RawHand
 
 
 @dataclass(frozen=True)
@@ -150,6 +151,161 @@ def _p95(values: tuple[float, ...]) -> float | None:
     ordered = sorted(values)
     index = min(len(ordered) - 1, int(0.95 * len(ordered)))
     return round(ordered[index], 3)
+
+
+@dataclass(frozen=True)
+class GesturePreviewObservation:
+    """One preview tick with the gesture worker's latest detection snapshot."""
+
+    index: int
+    frame_age_s: float | None
+    detect_ms: float | None
+    target: GazeTarget | None
+    states: tuple[StableState, ...]
+    events: tuple[str, ...]
+    rejected: tuple[RejectedObservation, ...]
+    pending: tuple[PendingConfirmation, ...]
+    raw_hands: tuple[RawHand, ...]
+    hands: tuple[HandGesture, ...]
+
+
+@dataclass
+class GesturePreviewSummary:
+    """Face + evidence + gesture diagnostics for one preview run.
+
+    Extends the face-only preview with what MediaPipe saw (raw hands, the
+    allowlisted subset) and the worker's own timing so an operator can
+    tell exactly why a gesture did or did not become stable state.
+    """
+
+    observations: tuple[GesturePreviewObservation, ...]
+    faces: int
+    all_events: tuple[str, ...]
+    rejected_count: int
+    detect_ms: tuple[float, ...]
+    frame_age_s: tuple[float, ...]
+    gesture_inferences: int
+    gesture_errors: int
+    gesture_latency_ms: tuple[float, ...]
+    gesture_frame_age_s: tuple[float, ...]
+
+    @property
+    def frames(self) -> int:
+        return len(self.observations)
+
+    @property
+    def detect_p50(self) -> float | None:
+        return _p50(self.detect_ms)
+
+    @property
+    def detect_p95(self) -> float | None:
+        return _p95(self.detect_ms)
+
+    @property
+    def frame_age_p50(self) -> float | None:
+        return _p50(self.frame_age_s)
+
+    @property
+    def frame_age_p95(self) -> float | None:
+        return _p95(self.frame_age_s)
+
+    @property
+    def gesture_latency_p50(self) -> float | None:
+        return _p50(self.gesture_latency_ms)
+
+    @property
+    def gesture_latency_p95(self) -> float | None:
+        return _p95(self.gesture_latency_ms)
+
+    @property
+    def gesture_frame_age_p50(self) -> float | None:
+        return _p50(self.gesture_frame_age_s)
+
+    @property
+    def gesture_frame_age_p95(self) -> float | None:
+        return _p95(self.gesture_frame_age_s)
+
+
+async def perceive_gesture_preview(
+    camera: CameraSource,
+    detector: FaceDetector,
+    *,
+    gesture_worker,
+    max_frames: int = 0,
+    interval_s: float = 0.05,
+    clock: Callable[[], float] = time.monotonic,
+    attention: AttentionSelector | None = None,
+    evidence: EvidenceHub | None = None,
+) -> GesturePreviewSummary:
+    """Camera -> YuNet and MediaPipe in parallel, both into one EvidenceHub.
+
+    The face loop and the gesture worker each consume their own broker
+    subscription (latest-frame), so neither delays the other. Both feed
+    the SAME `EvidenceHub`, which is how a thumb_up becomes stable state
+    and an edge event. The gesture worker's latest raw detection is
+    snapshotted per tick so the preview can show what MediaPipe saw.
+    """
+    from sirah.behavior.attention import AttentionManager
+
+    evidence = evidence or EvidenceHub()
+    attention = attention or AttentionManager()
+    await camera.start()
+    await gesture_worker.start()
+    observations: list[GesturePreviewObservation] = []
+    faces = 0
+    all_events: list[str] = []
+    rejected_count = 0
+    detect_ms: list[float] = []
+    frame_ages: list[float] = []
+    try:
+        while True:
+            frame = await camera.next_frame()
+            if frame is None:
+                break
+            now = clock()
+            target = _attended(detector, frame, attention)
+            snapshot, latency = _evidence_tick(evidence, target, now)
+            if target is not None:
+                faces += 1
+            age = now - frame.captured_at if frame.captured_at is not None else None
+            if age is not None:
+                frame_ages.append(age)
+            detect_ms.append(latency)
+            rejected_count += len(snapshot.rejected)
+            all_events.extend(snapshot.event_values())
+            observations.append(
+                GesturePreviewObservation(
+                    index=frame.index,
+                    frame_age_s=age,
+                    detect_ms=latency,
+                    target=target,
+                    states=snapshot.states,
+                    events=snapshot.event_values(),
+                    rejected=snapshot.rejected,
+                    pending=snapshot.pending,
+                    raw_hands=gesture_worker.last_raw,
+                    hands=gesture_worker.last_hands,
+                )
+            )
+            if max_frames and len(observations) >= max_frames:
+                break
+            await asyncio.sleep(interval_s)
+    finally:
+        await gesture_worker.stop()
+        await camera.stop()
+    stats = gesture_worker.stats()
+    return GesturePreviewSummary(
+        observations=tuple(observations),
+        faces=faces,
+        all_events=tuple(all_events + list(gesture_worker.emitted_events)),
+        rejected_count=rejected_count,
+        detect_ms=tuple(detect_ms),
+        frame_age_s=tuple(frame_ages),
+        gesture_inferences=stats.inferences,
+        gesture_errors=stats.errors,
+        gesture_latency_ms=stats.latency_ms,
+        gesture_frame_age_s=stats.frame_age_s,
+    )
 
 
 async def perceive_preview(
@@ -286,6 +442,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--yunet-model", required=True, help="local verified YuNet ONNX model")
     parser.add_argument(
+        "--gesture-model",
+        type=Path,
+        default=None,
+        help="local verified MediaPipe gesture model (gesture_recognizer.task); "
+        "enables optional MediaPipe gesture perception alongside YuNet "
+        "(requires the 'gesture' extra)",
+    )
+    parser.add_argument(
         "--max-frames", type=int, default=0, help="stop after N frames (0 = until the source ends)"
     )
     parser.add_argument(
@@ -325,6 +489,8 @@ async def _entry(args: argparse.Namespace) -> int:
     detector: FaceDetector = YuNetFaceDetector(Path(args.yunet_model))
 
     try:
+        if args.gesture_model is not None:
+            return await _gesture_preview_entry(camera, detector, args)
         if args.preview:
             return await _preview_entry(camera, detector, args)
         summary = await perceive(
@@ -355,6 +521,111 @@ async def _entry(args: argparse.Namespace) -> int:
 
 def _fmt_age(age: float | None) -> str:
     return f"{age:.2f}s" if age is not None else "n/a"
+
+
+async def _gesture_preview_entry(camera: CameraSource, detector: FaceDetector, args: argparse.Namespace) -> int:
+    """Diagnostic preview with optional MediaPipe gesture perception.
+
+    The physical camera is owned by a single `FrameBroker`; YuNet and the
+    gesture worker each consume their own subscriber (latest-frame), so
+    neither delays the other and the camera is opened exactly once. The
+    recognizer is built BEFORE the camera is opened: a missing/corrupt
+    model or missing 'gesture' extra fails cleanly with a clear message
+    and never touches the camera. A MediaPipe failure mid-run is isolated
+    in the worker (recorded as gesture errors); YuNet perception and the
+    preview continue.
+    """
+    from sirah.behavior.attention import AttentionManager
+    from sirah.perception.evidence import EvidenceHub
+    from sirah.perception.fanout import FrameBroker
+    from sirah.perception.gesture_worker import GestureWorker
+    from sirah.perception.mediapipe_gesture import MediaPipeGestureRecognizer
+
+    recognizer = MediaPipeGestureRecognizer(args.gesture_model)
+    hub = EvidenceHub()
+    broker = FrameBroker(camera)
+    face_camera = broker.subscribe()
+    gesture_camera = broker.subscribe()
+    worker = GestureWorker(gesture_camera, recognizer, evidence=hub)
+    try:
+        async with broker:
+            summary = await perceive_gesture_preview(
+                face_camera,
+                detector,
+                gesture_worker=worker,
+                max_frames=args.max_frames,
+                interval_s=args.interval,
+                attention=AttentionManager(),
+                evidence=hub,
+            )
+    finally:
+        recognizer.close()
+    _print_gesture_preview(summary, broker)
+    return 0
+
+
+def _print_gesture_preview(summary: GesturePreviewSummary, broker) -> None:
+    for obs in summary.observations:
+        print(f"[{obs.index:04d}] age={_fmt_age(obs.frame_age_s)} det={_fmt_ms(obs.detect_ms)}")
+        if obs.target is not None:
+            print(
+                f"    target  x={obs.target.x:+.2f} y={obs.target.y:+.2f} "
+                f"conf={obs.target.confidence:.2f}"
+            )
+        for raw in obs.raw_hands:
+            print(
+                f"    gesture raw  {raw.handedness.lower()}_hand {raw.category} "
+                f"{raw.confidence:.2f}"
+            )
+        for hand in obs.hands:
+            print(
+                f"    gesture      {hand.gesture} conf={hand.confidence:.2f} "
+                f"({hand.handedness} hand {hand.index})"
+            )
+        for state in obs.states:
+            age = obs.frame_age_s if obs.frame_age_s is not None else 0.0
+            print(
+                f"    stable  {state.kind}={state.value} conf={state.confidence:.2f} "
+                f"age={age:.2f}s ttl={_fmt_ttl(state.expires_at, state.observed_at)}"
+            )
+        for event in obs.events:
+            print(f"    EVENT   {event}")
+        for rejected in obs.rejected:
+            print(
+                f"    REJECT  {rejected.raw.kind}={rejected.raw.value} "
+                f"conf={rejected.raw.confidence:.2f} reason={rejected.reason.value}"
+            )
+        for pending in obs.pending:
+            print(
+                f"    confirm {pending.kind}={pending.value} "
+                f"{pending.confirm_count}/{pending.confirm_samples}"
+            )
+        if not obs.raw_hands and not obs.states and not obs.events and not obs.rejected and not obs.pending:
+            print("    (nothing stable yet)")
+    print(
+        f"sirah-perceive: frames={summary.frames} faces={summary.faces} "
+        f"events={summary.all_events or '—'} rejected={summary.rejected_count}"
+    )
+    print(
+        f"sirah-perceive: detect_p50={_fmt_ms(summary.detect_p50)} "
+        f"detect_p95={_fmt_ms(summary.detect_p95)} "
+        f"frame_age_p50={_fmt_age(summary.frame_age_p50)} "
+        f"frame_age_p95={_fmt_age(summary.frame_age_p95)}"
+    )
+    print(
+        f"sirah-perceive: gesture_inferences={summary.gesture_inferences} "
+        f"gesture_errors={summary.gesture_errors} "
+        f"latency_p50={_fmt_ms(summary.gesture_latency_p50)} "
+        f"latency_p95={_fmt_ms(summary.gesture_latency_p95)} "
+        f"frame_age_p50={_fmt_age(summary.gesture_frame_age_p50)} "
+        f"frame_age_p95={_fmt_age(summary.gesture_frame_age_p95)}"
+    )
+    stats = getattr(broker, "source_stats", None)
+    if stats is not None:
+        print(
+            f"sirah-perceive: captured={stats.captured} consumed={stats.consumed} "
+            f"dropped={stats.dropped} capture_fps={stats.capture_fps:.1f}"
+        )
 
 
 async def _preview_entry(camera: CameraSource, detector: FaceDetector, args: argparse.Namespace) -> int:

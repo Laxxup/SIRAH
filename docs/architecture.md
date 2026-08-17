@@ -79,6 +79,44 @@ Dependency direction is always toward stable layers: `cli → runtime →
 - `sirah-perceive` es el CLI de diagnóstico: cámara → detector sin armar
   ojos ni abrir el serial; núcleo `perceive()` probado con fakes.
 
+### 4.1 Percepción de gestos (M5)
+
+```
+cámara USB (una sola, ADR-0013) → FrameBroker (último frame por suscriptor)
+        ├─ suscriptor percepción (YuNet → atención → behavior)
+        └─ suscriptor gestos → GestureWorker (hilo único, off asyncio)
+                → MediaPipe GestureRecognizer VIDEO → GestureDetection
+                → EvidenceHub (gestos) → eventos confirm/release
+```
+
+- `GestureWorker` (single-thread) corre la inferencia FUERA del loop de
+  asyncio con `run_in_executor`; consume el último frame del broker, no
+  encola backlog. Un fallo de MediaPipe aísla el worker sin tumbar la ruta
+  de YuNet ni el runtime.
+- SIRAH convierte BGR → SRGB contiguo (`np.ascontiguousarray`) y entrega a
+  MediaPipe un `mp.Image` (`recognize_for_video`, modo VIDEO). MediaPipe NO
+  acepta arrays numpy crudos en este modo.
+- Allowlist SIRAH: `Open_Palm`, `Thumb_Up`, `Thumb_Down`, `Victory`. Solo
+  gestos allowlist generan observaciones/estado; cualquier otra categoría
+  aparece únicamente como `raw` diagnóstico (nunca autoridad).
+
+#### Coordenadas / espejo / handedness (M5.1)
+
+- **No hay espejo en el núcleo**: la imagen se procesa tal como sale de la
+  cámara, sin voltear. El preview conserva la misma orientación de la cámara
+  que percibe el núcleo; si se añade espejo en la UI, será únicamente
+  presentación, nunca en la ruta de percepción.
+- **Handedness de MediaPipe asume entrada tipo selfie (espejada)**: la
+  clasificación Left/Right asume que la imagen está volteada horizontalmente.
+  Como SIRAH NO espeja, las etiquetas `Left`/`Right` de MediaPipe deben
+  interpretarse como "lado reportado por el modelo", no como lado anatómico
+  del usuario. En el preview se muestran tal cual; si una política futura
+  necesitara el lado anatómico, el mapeo se haría en la capa de
+  comportamiento, no en percepción, y se documentaría aquí.
+- Las coordenadas de `Landmark` se entregan sin normalizar/espejar; cualquier
+  mapeo a actuadores (ojos/cabeza) queda en capas posteriores y NO puede
+  provenir de percepción cruda (ADR-0014).
+
 ## 5. Laboratorio conversacional
 
 ```

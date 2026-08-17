@@ -196,6 +196,16 @@ def test_cooldown_suppresses_repeat_confirm():
     assert update.events == ()  # but no duplicate event
 
 
+def test_reactivation_after_cooldown_emits_new_confirm():
+    filt = EvidenceFilter("gesture", confirm_samples=1, release_window_s=0.1, cooldown_s=1.0)
+    filt.observe(_raw("thumb_up", 0.9, observed_at=0.0), now=0.0)
+    filt.observe(None, now=0.2)  # released
+    # re-confirm after the cooldown window → a brand new event
+    update = filt.observe(_raw("thumb_up", 0.9, observed_at=1.5), now=1.5)
+    assert update.state is not None
+    assert [e.event for e in update.events] == ["gesture_thumb_up_confirmed"]
+
+
 # ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
