@@ -72,6 +72,11 @@ un resumen de frescura: `frames`, `faces` y, si la fuente la instrumenta,
 ojos ni abre el serial (ADR-0009). También acepta `--replay-jsonl` y
 `--replay-video` como fuentes.
 
+Los umbrales del detector YuNet siguen los valores de la clase de OpenCV Zoo
+(score `0.6`, nms `0.3`, top_k `5000`), más permisivos que el default 0.9 de
+`cv2.FaceDetectorYN.create`; caras pequeñas o lejanas aparecen y la capa de
+atención decide si importan.
+
 ## 5. Problemas frecuentes
 
 | Síntoma | Causa probable | Fix |
@@ -80,6 +85,7 @@ ojos ni abre el serial (ADR-0009). También acepta `--replay-jsonl` y
 | Falta PyYAML al cargar config | Extra `[cli]` no instalado | `pip install -e ".[cli,serial]"` |
 | `eyes: DEGRADED` al bootear | Serial ocupada o ESP32 sin flash | Cerrar otros programas, verificar cable |
 | Servos no responden | Falta la fuente 5 V / brownout | Fuente externa + GND común (ADR-0011) |
+| `sirah-perceive` entrega frames pero `faces=0` con la cámara encendida | La exposición automática de la webcam sobreexpone | Ajustar exposición a mano (p. ej. `v4l2-ctl --set-ctrl exposure=150,auto_exposure=1`) y volver a medir |
 
 ## 6. Conversación experimental por voz
 
