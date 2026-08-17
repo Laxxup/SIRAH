@@ -149,6 +149,13 @@ async def _entry(args: argparse.Namespace) -> int:
         else:
             print(f"[{obs.index:04d}] no face age={_fmt_age(obs.frame_age_s)}")
     print(f"sirah-perceive: frames={summary.frames} faces={summary.faces}")
+    stats = getattr(camera, "stats", None)
+    if stats is not None:
+        s = stats()
+        print(
+            f"sirah-perceive: captured={s.captured} consumed={s.consumed} "
+            f"dropped={s.dropped} capture_fps={s.capture_fps:.1f}"
+        )
     return 0
 
 
