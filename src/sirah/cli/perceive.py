@@ -39,6 +39,7 @@ from sirah.perception.evidence import (
     StableState,
 )
 from sirah.perception.gesture import HandGesture, RawHand
+from sirah.perception.person import PersonTrack
 
 
 @dataclass(frozen=True)
@@ -109,6 +110,7 @@ class PreviewObservation:
     events: tuple[str, ...]
     rejected: tuple[RejectedObservation, ...]
     pending: tuple[PendingConfirmation, ...]
+    person_tracks: tuple[PersonTrack, ...] = ()
 
 
 @dataclass
@@ -121,6 +123,10 @@ class PreviewSummary:
     rejected_count: int
     detect_ms: tuple[float, ...]
     frame_age_s: tuple[float, ...]
+    person_inferences: int = 0
+    person_errors: int = 0
+    person_latency_ms: tuple[float, ...] = ()
+    person_frame_age_s: tuple[float, ...] = ()
 
     @property
     def frames(self) -> int:
@@ -141,6 +147,22 @@ class PreviewSummary:
     @property
     def frame_age_p95(self) -> float | None:
         return _p95(self.frame_age_s)
+
+    @property
+    def person_latency_p50(self) -> float | None:
+        return _p50(self.person_latency_ms)
+
+    @property
+    def person_latency_p95(self) -> float | None:
+        return _p95(self.person_latency_ms)
+
+    @property
+    def person_frame_age_p50(self) -> float | None:
+        return _p50(self.person_frame_age_s)
+
+    @property
+    def person_frame_age_p95(self) -> float | None:
+        return _p95(self.person_frame_age_s)
 
 
 def _p50(values: tuple[float, ...]) -> float | None:
@@ -169,6 +191,7 @@ class GesturePreviewObservation:
     pending: tuple[PendingConfirmation, ...]
     raw_hands: tuple[RawHand, ...]
     hands: tuple[HandGesture, ...]
+    person_tracks: tuple[PersonTrack, ...] = ()
 
 
 @dataclass
@@ -190,6 +213,10 @@ class GesturePreviewSummary:
     gesture_errors: int
     gesture_latency_ms: tuple[float, ...]
     gesture_frame_age_s: tuple[float, ...]
+    person_inferences: int = 0
+    person_errors: int = 0
+    person_latency_ms: tuple[float, ...] = ()
+    person_frame_age_s: tuple[float, ...] = ()
 
     @property
     def frames(self) -> int:
@@ -227,6 +254,22 @@ class GesturePreviewSummary:
     def gesture_frame_age_p95(self) -> float | None:
         return _p95(self.gesture_frame_age_s)
 
+    @property
+    def person_latency_p50(self) -> float | None:
+        return _p50(self.person_latency_ms)
+
+    @property
+    def person_latency_p95(self) -> float | None:
+        return _p95(self.person_latency_ms)
+
+    @property
+    def person_frame_age_p50(self) -> float | None:
+        return _p50(self.person_frame_age_s)
+
+    @property
+    def person_frame_age_p95(self) -> float | None:
+        return _p95(self.person_frame_age_s)
+
 
 async def perceive_gesture_preview(
     camera: CameraSource,
@@ -240,16 +283,17 @@ async def perceive_gesture_preview(
     attention: AttentionSelector | None = None,
     evidence: EvidenceHub | None = None,
     camera_stats_provider: Callable[[], object] | None = None,
+    person_worker=None,
 ) -> GesturePreviewSummary:
-    """Camera -> YuNet and MediaPipe in parallel, both into one EvidenceHub.
+    """Camera -> YuNet, MediaPipe gestures and (optionally) person tracking,
+    in parallel, each on its own broker subscription.
 
-    The face loop and the gesture worker each consume their own broker
-    subscription (latest-frame), so neither delays the other. Both feed
-    the SAME `EvidenceHub`, which is how a thumb_up becomes stable state
-    and an edge event. The gesture worker's latest raw detection is
-    snapshotted per tick so the preview can show what MediaPipe saw.
-
-    When `viewer` is provided, each tick also renders a
+    The face loop, the gesture worker and the person worker each consume
+    their own broker subscription (latest-frame), so none delays the
+    others. The gesture worker's latest raw detection and the person
+    worker's latest scene are snapshotted per tick; person tracks are only
+    attached when their source frame is not newer than the tick's frame
+    (temporal provenance). When `viewer` is provided, each tick renders a
     `DiagnosticSnapshot` into the viewer; the viewer consumes its own
     broker subscription and never reopens the camera. A user closing the
     viewer window (q/Esc) ends the preview cleanly.
@@ -260,6 +304,8 @@ async def perceive_gesture_preview(
     attention = attention or AttentionManager()
     await camera.start()
     await gesture_worker.start()
+    if person_worker is not None:
+        await person_worker.start()
     if viewer is not None:
         await viewer.start()
     observations: list[GesturePreviewObservation] = []
@@ -286,8 +332,9 @@ async def perceive_gesture_preview(
             detect_ms.append(latency)
             rejected_count += len(snapshot.rejected)
             all_events.extend(snapshot.event_values())
+            person_tracks = _person_tracks(person_worker, frame.index)
             if viewer is not None:
-                viewer.push(_diagnostic_snapshot(frame, now, detected_faces, snapshot, gesture_worker, camera_stats_provider))
+                viewer.push(_diagnostic_snapshot(frame, now, detected_faces, snapshot, gesture_worker, camera_stats_provider, person_worker))
             observations.append(
                 GesturePreviewObservation(
                     index=frame.index,
@@ -300,6 +347,7 @@ async def perceive_gesture_preview(
                     pending=snapshot.pending,
                     raw_hands=gesture_worker.last_raw,
                     hands=gesture_worker.last_hands,
+                    person_tracks=person_tracks,
                 )
             )
             if max_frames and len(observations) >= max_frames:
@@ -309,8 +357,11 @@ async def perceive_gesture_preview(
         if viewer is not None:
             await viewer.stop()
         await gesture_worker.stop()
+        if person_worker is not None:
+            await person_worker.stop()
         await camera.stop()
     stats = gesture_worker.stats()
+    person_stats = person_worker.stats() if person_worker is not None else None
     return GesturePreviewSummary(
         observations=tuple(observations),
         faces=faces,
@@ -322,6 +373,10 @@ async def perceive_gesture_preview(
         gesture_errors=stats.errors,
         gesture_latency_ms=stats.latency_ms,
         gesture_frame_age_s=stats.frame_age_s,
+        person_inferences=person_stats.inferences if person_stats else 0,
+        person_errors=person_stats.errors if person_stats else 0,
+        person_latency_ms=person_stats.latency_ms if person_stats else (),
+        person_frame_age_s=person_stats.frame_age_s if person_stats else (),
     )
 
 
@@ -336,6 +391,7 @@ async def perceive_preview(
     attention: AttentionSelector | None = None,
     evidence: EvidenceHub | None = None,
     camera_stats_provider: Callable[[], object] | None = None,
+    person_worker=None,
 ) -> PreviewSummary:
     """Camera → detector → evidence, with full diagnostic reporting.
 
@@ -346,16 +402,21 @@ async def perceive_preview(
     output. The camera is always stopped before returning (also on
     cancellation).
 
-    When `viewer` is provided, each tick also renders a
-    `DiagnosticSnapshot` into the viewer (faces and face-only evidence;
-    no gesture overlays). The viewer consumes its own broker subscription
-    and never reopens the camera.
+    When `person_worker` is provided, person tracking runs in parallel on
+    its own broker subscription and its scene is snapshotted per tick
+    (only when its source frame is not newer than the tick's frame). When
+    `viewer` is provided, each tick also renders a `DiagnosticSnapshot`
+    into the viewer (faces and face-only evidence; no gesture overlays).
+    The viewer consumes its own broker subscription and never reopens the
+    camera.
     """
     from sirah.behavior.attention import AttentionManager
 
     evidence = evidence or EvidenceHub()
     attention = attention or AttentionManager()
     await camera.start()
+    if person_worker is not None:
+        await person_worker.start()
     if viewer is not None:
         await viewer.start()
     observations: list[PreviewObservation] = []
@@ -382,8 +443,9 @@ async def perceive_preview(
             detect_ms.append(latency)
             rejected_count += len(snapshot.rejected)
             all_events.extend(snapshot.event_values())
+            person_tracks = _person_tracks(person_worker, frame.index)
             if viewer is not None:
-                viewer.push(_diagnostic_snapshot(frame, now, detected_faces, snapshot, None, camera_stats_provider))
+                viewer.push(_diagnostic_snapshot(frame, now, detected_faces, snapshot, None, camera_stats_provider, person_worker))
             observations.append(
                 PreviewObservation(
                     index=frame.index,
@@ -394,6 +456,7 @@ async def perceive_preview(
                     events=snapshot.event_values(),
                     rejected=snapshot.rejected,
                     pending=snapshot.pending,
+                    person_tracks=person_tracks,
                 )
             )
             if max_frames and len(observations) >= max_frames:
@@ -402,7 +465,10 @@ async def perceive_preview(
     finally:
         if viewer is not None:
             await viewer.stop()
+        if person_worker is not None:
+            await person_worker.stop()
         await camera.stop()
+    person_stats = person_worker.stats() if person_worker is not None else None
     return PreviewSummary(
         observations=tuple(observations),
         faces=faces,
@@ -410,6 +476,10 @@ async def perceive_preview(
         rejected_count=rejected_count,
         detect_ms=tuple(detect_ms),
         frame_age_s=tuple(frame_ages),
+        person_inferences=person_stats.inferences if person_stats else 0,
+        person_errors=person_stats.errors if person_stats else 0,
+        person_latency_ms=person_stats.latency_ms if person_stats else (),
+        person_frame_age_s=person_stats.frame_age_s if person_stats else (),
     )
 
 
@@ -494,12 +564,15 @@ def _diagnostic_snapshot(
     evidence_snapshot: EvidenceSnapshot,
     gesture_worker: object | None,
     camera_stats_provider: Callable[[], object] | None,
+    person_worker: object | None = None,
 ):
     """Build the immutable DiagnosticSnapshot for one tick (viewer only)."""
     from sirah.perception.diagnostic import DiagnosticSnapshot
 
     stats = getattr(gesture_worker, "stats", None)
     worker_stats = stats() if callable(stats) else None
+    person_stats = getattr(person_worker, "stats", None)
+    p_stats = person_stats() if callable(person_stats) else None
     camera_stats = camera_stats_provider() if camera_stats_provider is not None else None
     return DiagnosticSnapshot(
         frame_index=frame.index,
@@ -508,6 +581,7 @@ def _diagnostic_snapshot(
         faces=faces,
         raw_hands=getattr(gesture_worker, "last_raw", ()),
         hands=getattr(gesture_worker, "last_hands", ()),
+        person_tracks=_person_tracks(person_worker, frame.index),
         states=evidence_snapshot.states,
         events=evidence_snapshot.events,
         rejected=evidence_snapshot.rejected,
@@ -518,7 +592,27 @@ def _diagnostic_snapshot(
         gesture_errors=getattr(worker_stats, "errors", 0) if worker_stats is not None else 0,
         gesture_latency_ms=getattr(worker_stats, "latency_ms", ()) if worker_stats is not None else (),
         gesture_frame_age_s=getattr(worker_stats, "frame_age_s", ()) if worker_stats is not None else (),
+        person_inferences=getattr(p_stats, "inferences", 0) if p_stats is not None else 0,
+        person_errors=getattr(p_stats, "errors", 0) if p_stats is not None else 0,
+        person_latency_ms=getattr(p_stats, "latency_ms", ()) if p_stats is not None else (),
+        person_frame_age_s=getattr(p_stats, "frame_age_s", ()) if p_stats is not None else (),
     )
+
+
+def _person_tracks(person_worker: object | None, frame_index: int) -> tuple:
+    """Person tracks for a displayed frame, temporally aligned.
+
+    The worker's scene is only used when its `source_frame_index` is not
+    newer than the frame being described — a detection from a future frame
+    is never painted onto an older frame (temporal provenance invariant).
+    """
+    if person_worker is None:
+        return ()
+    scene_for = getattr(person_worker, "scene_for", None)
+    if not callable(scene_for):
+        return ()
+    scene = scene_for(frame_index)
+    return getattr(scene, "tracks", ())
 
 
 def _camera_fps(stats: object | None) -> float | None:
@@ -589,6 +683,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="local verified MediaPipe gesture model (gesture_recognizer.task); "
         "enables optional MediaPipe gesture perception alongside YuNet "
         "(requires the 'gesture' extra)",
+    )
+    parser.add_argument(
+        "--person-model",
+        type=Path,
+        default=None,
+        help="local verified MediaPipe person model (efficientdet_lite0.tflite, "
+        "see 'sirah-models person'); enables M6 person-centric live tracking "
+        "alongside YuNet (requires the 'gesture' extra; implies preview)",
     )
     parser.add_argument(
         "--max-frames", type=int, default=0, help="stop after N frames (0 = until the source ends)"
@@ -679,7 +781,7 @@ async def _entry(args: argparse.Namespace) -> int:
     try:
         if args.gesture_model is not None:
             return await _gesture_preview_entry(camera, detector, args)
-        if args.preview or args.preview_window:
+        if args.preview or args.preview_window or args.person_model is not None:
             return await _preview_entry(camera, detector, args)
         summary = await perceive(
             camera, detector, max_frames=args.max_frames, interval_s=args.interval
@@ -735,6 +837,7 @@ async def _gesture_preview_entry(camera: CameraSource, detector: FaceDetector, a
     face_camera = broker.subscribe()
     gesture_camera = broker.subscribe()
     worker = GestureWorker(gesture_camera, recognizer, evidence=hub)
+    person_worker = _make_person_worker(broker, args)
     viewer = _make_viewer(broker, args) if args.preview_window else None
     try:
         async with broker:
@@ -748,12 +851,33 @@ async def _gesture_preview_entry(camera: CameraSource, detector: FaceDetector, a
                 attention=AttentionManager(),
                 evidence=hub,
                 camera_stats_provider=lambda: broker.source_stats,
+                person_worker=person_worker,
             )
     finally:
         recognizer.close()
+        if person_worker is not None:
+            await person_worker.stop()
     _print_gesture_preview(summary, broker)
     _print_viewer_stats(viewer)
     return 0
+
+
+def _make_person_worker(broker, args: argparse.Namespace):
+    """Build an M6 person detection worker on a fresh broker subscription.
+
+    Returns None when `--person-model` is not set. The MediaPipe person
+    detector is built BEFORE the camera is opened: a missing/corrupt model
+    or missing mediapipe fails cleanly and never touches the camera. The
+    worker consumes its own latest-frame subscription like every other
+    consumer; it never opens /dev/videoN.
+    """
+    if args.person_model is None:
+        return None
+    from sirah.perception.mediapipe_person import MediaPipePersonDetector
+    from sirah.perception.person_worker import PersonDetectionWorker
+
+    detector = MediaPipePersonDetector(args.person_model)
+    return PersonDetectionWorker(broker.subscribe(), detector)
 
 
 def _print_viewer_stats(viewer) -> None:
@@ -790,6 +914,12 @@ def _print_gesture_preview(summary: GesturePreviewSummary, broker) -> None:
                 f"    gesture      {hand.gesture} conf={hand.confidence:.2f} "
                 f"({hand.handedness} hand {hand.index})"
             )
+        for track in obs.person_tracks:
+            print(
+                f"    person #{track.track_id} {track.lifecycle.value} "
+                f"x={track.x:.2f} y={track.y:.2f} w={track.width:.2f} "
+                f"h={track.height:.2f} conf={track.confidence:.2f}"
+            )
         for state in obs.states:
             age = obs.frame_age_s if obs.frame_age_s is not None else 0.0
             print(
@@ -808,7 +938,14 @@ def _print_gesture_preview(summary: GesturePreviewSummary, broker) -> None:
                 f"    confirm {pending.kind}={pending.value} "
                 f"{pending.confirm_count}/{pending.confirm_samples}"
             )
-        if not obs.raw_hands and not obs.states and not obs.events and not obs.rejected and not obs.pending:
+        if (
+            not obs.person_tracks
+            and not obs.raw_hands
+            and not obs.states
+            and not obs.events
+            and not obs.rejected
+            and not obs.pending
+        ):
             print("    (nothing stable yet)")
     print(
         f"sirah-perceive: frames={summary.frames} faces={summary.faces} "
@@ -828,6 +965,15 @@ def _print_gesture_preview(summary: GesturePreviewSummary, broker) -> None:
         f"frame_age_p50={_fmt_age(summary.gesture_frame_age_p50)} "
         f"frame_age_p95={_fmt_age(summary.gesture_frame_age_p95)}"
     )
+    if summary.person_inferences or summary.person_latency_ms:
+        print(
+            f"sirah-perceive: person_inferences={summary.person_inferences} "
+            f"person_errors={summary.person_errors} "
+            f"latency_p50={_fmt_ms(summary.person_latency_p50)} "
+            f"latency_p95={_fmt_ms(summary.person_latency_p95)} "
+            f"frame_age_p50={_fmt_age(summary.person_frame_age_p50)} "
+            f"frame_age_p95={_fmt_age(summary.person_frame_age_p95)}"
+        )
     stats = getattr(broker, "source_stats", None)
     if stats is not None:
         print(
@@ -842,12 +988,14 @@ async def _preview_entry(camera: CameraSource, detector: FaceDetector, args: arg
     from sirah.perception.evidence import EvidenceHub
     from sirah.perception.fanout import FrameBroker
 
-    if args.preview_window:
-        # the viewer needs its own broker subscription; the camera is
-        # still owned exactly once, by the broker.
+    if args.preview_window or args.person_model is not None:
+        # the viewer (and the M6 person worker) need their own broker
+        # subscriptions; the camera is still owned exactly once, by the
+        # broker.
         broker = FrameBroker(camera)
         face_camera = broker.subscribe()
-        viewer = _make_viewer(broker, args)
+        viewer = _make_viewer(broker, args) if args.preview_window else None
+        person_worker = _make_person_worker(broker, args)
         async with broker:
             summary = await perceive_preview(
                 face_camera,
@@ -858,7 +1006,10 @@ async def _preview_entry(camera: CameraSource, detector: FaceDetector, args: arg
                 attention=AttentionManager(),
                 evidence=EvidenceHub(),
                 camera_stats_provider=lambda: broker.source_stats,
+                person_worker=person_worker,
             )
+        if person_worker is not None:
+            await person_worker.stop()
         stats_source: object = broker
     else:
         summary = await perceive_preview(
@@ -876,6 +1027,12 @@ async def _preview_entry(camera: CameraSource, detector: FaceDetector, args: arg
             print(
                 f"    target  x={obs.target.x:+.2f} y={obs.target.y:+.2f} "
                 f"conf={obs.target.confidence:.2f}"
+            )
+        for track in obs.person_tracks:
+            print(
+                f"    person #{track.track_id} {track.lifecycle.value} "
+                f"x={track.x:.2f} y={track.y:.2f} w={track.width:.2f} "
+                f"h={track.height:.2f} conf={track.confidence:.2f}"
             )
         for state in obs.states:
             age = obs.frame_age_s if obs.frame_age_s is not None else 0.0
@@ -895,7 +1052,7 @@ async def _preview_entry(camera: CameraSource, detector: FaceDetector, args: arg
                 f"    confirm {pending.kind}={pending.value} "
                 f"{pending.confirm_count}/{pending.confirm_samples}"
             )
-        if not obs.states and not obs.events and not obs.rejected and not obs.pending:
+        if not obs.person_tracks and not obs.states and not obs.events and not obs.rejected and not obs.pending:
             print("    (nothing stable yet)")
     print(
         f"sirah-perceive: frames={summary.frames} faces={summary.faces} "
@@ -907,6 +1064,15 @@ async def _preview_entry(camera: CameraSource, detector: FaceDetector, args: arg
         f"frame_age_p50={_fmt_age(summary.frame_age_p50)} "
         f"frame_age_p95={_fmt_age(summary.frame_age_p95)}"
     )
+    if summary.person_inferences or summary.person_latency_ms:
+        print(
+            f"sirah-perceive: person_inferences={summary.person_inferences} "
+            f"person_errors={summary.person_errors} "
+            f"latency_p50={_fmt_ms(summary.person_latency_p50)} "
+            f"latency_p95={_fmt_ms(summary.person_latency_p95)} "
+            f"frame_age_p50={_fmt_age(summary.person_frame_age_p50)} "
+            f"frame_age_p95={_fmt_age(summary.person_frame_age_p95)}"
+        )
     stats = getattr(stats_source, "source_stats", None) or getattr(stats_source, "stats", None)
     if stats is not None:
         s = stats() if callable(stats) else stats

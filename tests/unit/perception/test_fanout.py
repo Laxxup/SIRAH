@@ -56,6 +56,18 @@ class InfiniteCamera(FakeCamera):
         return frame
 
 
+class InstantCamera(FakeCamera):
+    """Finite source that yields every frame in a single task turn — the
+    shape of a JSONL/video replay source (no pacing between frames)."""
+
+    async def next_frame(self) -> Frame | None:
+        try:
+            index = next(self._frames)
+        except StopIteration:
+            return None
+        return Frame(index=index, payload=None, captured_at=float(index))
+
+
 async def collect(camera, count: int) -> list[int]:
     """Sequentially read `count` frames from one subscriber (realistic)."""
     indexes = []
@@ -134,6 +146,33 @@ async def test_end_of_stream_propagates_to_all_subscribers():
     assert seen_right == [1, 2, 3]
     assert (await left.next_frame()) is None
     assert (await right.next_frame()) is None
+    await broker.stop()
+
+
+async def test_subscriber_gets_final_frame_when_source_ends_before_consumption():
+    """A finite source that ends before a consumer starts reading (e.g. a
+    replay clip) must still hand the consumer its last buffered frame once,
+    then report end-of-stream — never silently drop the tail."""
+    source = InstantCamera([7, 8, 9])
+    broker = FrameBroker(source)
+    subscriber = broker.subscribe()
+    await broker.start()
+    # let the pump run to completion before the consumer ever reads
+    await asyncio.sleep(0)
+    frame = await subscriber.next_frame()
+    assert frame.index == 9  # the final frame, not a lost tail
+    assert await subscriber.next_frame() is None
+    await broker.stop()
+
+
+async def test_subscriber_never_replays_a_delivered_frame():
+    source = InstantCamera([7, 8, 9])
+    broker = FrameBroker(source)
+    subscriber = broker.subscribe()
+    await broker.start()
+    await asyncio.sleep(0)
+    assert (await subscriber.next_frame()).index == 9
+    assert (await subscriber.next_frame()) is None
     await broker.stop()
 
 

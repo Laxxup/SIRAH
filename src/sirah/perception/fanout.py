@@ -53,14 +53,18 @@ class FrameSubscriber:
     async def next_frame(self) -> Frame | None:
         slot = self._slot
         while True:
-            if slot.ended:
+            if slot.ended and slot.frame is None:
                 return None
             await slot.event.wait()
             slot.event.clear()
-            if slot.ended:
+            if slot.ended and slot.frame is None:
                 return None
-            if slot.frame is not None:
-                return slot.frame
+            frame = slot.frame
+            if frame is not None:
+                # delivered once: a consumer that has not yet read the
+                # latest frame still sees it before the end-of-stream
+                slot.frame = None
+                return frame
 
     async def stop(self) -> None:
         # lifecycle belongs to the broker, not the subscriber

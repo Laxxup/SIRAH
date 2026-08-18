@@ -27,6 +27,7 @@ from sirah.perception.evidence import (
     StableState,
 )
 from sirah.perception.gesture import HandGesture, RawHand
+from sirah.perception.person import PersonTrack
 
 
 def _normalized(value: float) -> bool:
@@ -78,6 +79,7 @@ class DiagnosticSnapshot:
     faces: tuple[DiagnosticFace, ...] = ()
     raw_hands: tuple[RawHand, ...] = ()
     hands: tuple[HandGesture, ...] = ()
+    person_tracks: tuple[PersonTrack, ...] = ()
     states: tuple[StableState, ...] = ()
     events: tuple[StableEvent, ...] = ()
     rejected: tuple[RejectedObservation, ...] = ()
@@ -88,6 +90,10 @@ class DiagnosticSnapshot:
     gesture_errors: int = 0
     gesture_latency_ms: tuple[float, ...] = ()
     gesture_frame_age_s: tuple[float, ...] = ()
+    person_inferences: int = 0
+    person_errors: int = 0
+    person_latency_ms: tuple[float, ...] = ()
+    person_frame_age_s: tuple[float, ...] = ()
 
     def __post_init__(self) -> None:
         if self.frame_index < 0:
@@ -101,6 +107,12 @@ class DiagnosticSnapshot:
         for value in self.gesture_frame_age_s:
             if value < 0 or not isfinite(value):
                 raise ValueError("gesture frame ages must be finite and non-negative")
+        for value in self.person_latency_ms:
+            if value < 0 or not isfinite(value):
+                raise ValueError("person latency values must be finite and non-negative")
+        for value in self.person_frame_age_s:
+            if value < 0 or not isfinite(value):
+                raise ValueError("person frame ages must be finite and non-negative")
         if self.camera_fps is not None and (self.camera_fps < 0 or not isfinite(self.camera_fps)):
             raise ValueError("camera_fps must be finite and non-negative")
 

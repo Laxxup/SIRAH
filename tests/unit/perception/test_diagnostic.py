@@ -28,6 +28,13 @@ def test_snapshot_rejects_negative_index_and_bad_fps():
         DiagnosticSnapshot(frame_index=0, created_at=1.0, captured_at=1.0, camera_fps=-1.0)
 
 
+def test_snapshot_rejects_bad_person_timing_values():
+    with pytest.raises(ValueError):
+        DiagnosticSnapshot(frame_index=0, created_at=1.0, captured_at=1.0, person_latency_ms=(-1.0,))
+    with pytest.raises(ValueError):
+        DiagnosticSnapshot(frame_index=0, created_at=1.0, captured_at=1.0, person_frame_age_s=(float("nan"),))
+
+
 def test_event_ttl_elapsed_filters_by_observed_at():
     fresh = StableEvent("appear", "face", "face_appeared", 9.5, 0.9)
     old = StableEvent("appear", "hand", "hand_appeared", 7.0, 0.8)

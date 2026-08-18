@@ -48,6 +48,7 @@ from typing import Final
 from sirah.perception.contracts import Frame
 from sirah.perception.diagnostic import DiagnosticSnapshot
 from sirah.perception.gesture import HandGesture, Landmark, RawHand
+from sirah.perception.person import PersonTrack, TrackLifecycle
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -75,6 +76,9 @@ _COLOR_STABLE = (80, 255, 80)
 _COLOR_EVENT = (255, 255, 0)
 _COLOR_PERF = (220, 220, 220)
 _COLOR_STALE = (120, 120, 120)
+_COLOR_PERSON = (0, 180, 255)  # confirmed person (BGR orange)
+_COLOR_PERSON_TENTATIVE = (0, 120, 200)  # too few hits yet
+_COLOR_PERSON_LOST = (130, 130, 130)  # recently observed, not current
 
 FONT = None  # resolved lazily to avoid importing cv2 at module import time
 
@@ -261,6 +265,20 @@ def _draw_hud(cv2, canvas, snapshot: DiagnosticSnapshot | None, context: RenderC
             lines.append(f"gesture frame age p50 {p50a:.3f}s p95 {p95a:.3f}s")
         if snapshot.gesture_errors:
             lines.append(f"gesture errors {snapshot.gesture_errors}")
+        if snapshot.person_tracks:
+            active = [t for t in snapshot.person_tracks if t.observed_now]
+            lost = [t for t in snapshot.person_tracks if not t.observed_now]
+            lines.append(f"person {len(active)}" + (f" ({len(lost)} lost)" if lost else ""))
+        person_lat = snapshot.person_latency_ms
+        if person_lat:
+            p50, p95 = _percentiles(person_lat)
+            lines.append(f"person p50 {p50:.1f}ms p95 {p95:.1f}ms")
+        person_age = snapshot.person_frame_age_s
+        if person_age:
+            p50a, p95a = _percentiles(person_age)
+            lines.append(f"person frame age p50 {p50a:.3f}s p95 {p95a:.3f}s")
+        if snapshot.person_errors:
+            lines.append(f"person errors {snapshot.person_errors}")
     if display_fps is not None:
         lines.append(f"display {display_fps:.1f} fps")
     _draw_text_block(cv2, canvas, lines, x=6, y=14, size=0.5, color=_COLOR_PERF)
@@ -281,6 +299,8 @@ def _draw_overlays(
 ) -> None:
     for face in snapshot.faces:
         _draw_face(cv2, out, face, width, height, mirror=mirror, stale=stale)
+    for track in snapshot.person_tracks:
+        _draw_person(cv2, out, track, width, height, mirror=mirror, stale=stale)
     for index, raw in enumerate(snapshot.raw_hands):
         stable = _matching_hand(snapshot.hands, index, raw.index)
         _draw_hand(
@@ -323,6 +343,53 @@ def _draw_face(cv2, out, face, width: int, height: int, *, mirror: bool, stale: 
 def _draw_crosshair(cv2, out, cx: int, cy: int, color) -> None:
     cv2.line(out, (cx - 8, cy), (cx + 8, cy), color, 1)
     cv2.line(out, (cx, cy - 8), (cx, cy + 8), color, 1)
+
+
+def _project_person_box(
+    track: PersonTrack, width: int, height: int, *, mirror: bool
+) -> tuple[int, int, int, int]:
+    """Presentation-only projection of a person box.
+
+    A person box may legitimately spill a few pixels past the frame edge
+    (the observation stays canonical and truthful); projection clips to
+    the image because pixels outside it are not drawable. This is the same
+    tolerant-clip policy the hand path uses for entering/leaving landmarks
+    — an undrawable part is skipped, never a pipeline failure.
+    """
+    x0 = project_x(max(0.0, min(1.0, track.x)), width, mirror=mirror)
+    y0 = project_y(max(0.0, min(1.0, track.y)), height)
+    x1 = project_x(max(0.0, min(1.0, track.x + track.width)), width, mirror=mirror)
+    y1 = project_y(max(0.0, min(1.0, track.y + track.height)), height)
+    return x0, y0, x1, y1
+
+
+def _draw_person(
+    cv2,
+    out,
+    track: PersonTrack,
+    width: int,
+    height: int,
+    *,
+    mirror: bool,
+    stale: bool,
+) -> None:
+    x0, y0, x1, y1 = _project_person_box(track, width, height, mirror=mirror)
+    if track.lifecycle is TrackLifecycle.CONFIRMED:
+        color, thickness = _COLOR_PERSON, 2
+    elif track.lifecycle is TrackLifecycle.TENTATIVE:
+        color, thickness = _COLOR_PERSON_TENTATIVE, 1
+    else:  # TEMPORARILY_LOST: last observed, NOT currently detected
+        color, thickness = _COLOR_PERSON_LOST, 1
+    if stale:
+        color, thickness = _COLOR_STALE, 1
+    cv2.rectangle(out, (x0, y0), (x1, y1), color, thickness)
+    tag = {
+        TrackLifecycle.CONFIRMED: "",
+        TrackLifecycle.TENTATIVE: " T",
+        TrackLifecycle.TEMPORARILY_LOST: " LOST",
+    }[track.lifecycle]
+    label = f"#{track.track_id} {track.confidence:.2f}{tag}"
+    _draw_text(cv2, out, label, x0, max(0, y0 - 5), size=0.4, color=color)
 
 
 def _draw_hand(
