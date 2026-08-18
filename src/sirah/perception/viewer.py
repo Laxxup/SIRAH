@@ -1,9 +1,9 @@
 """Diagnostic viewer: broker subscription -> renderer -> display backend.
 
-The viewer is the async glue of M5.2B. It consumes a `CameraSource` that
-is always a `FrameBroker` subscriber (the physical camera is owned exactly
-once by the broker — the viewer never opens `/dev/videoN`), pulls the
-newest frame at a bounded display rate, renders the latest
+The viewer is the async glue of M5.2B/5.2C. It consumes a `CameraSource`
+that is always a `FrameBroker` subscriber (the physical camera is owned
+exactly once by the broker — the viewer never opens `/dev/videoN`), pulls
+the newest frame at a bounded display rate, renders the latest
 `DiagnosticSnapshot` on a private copy and hands the result to the
 `DisplayBackend`.
 
@@ -22,11 +22,18 @@ frames and the backend keeps exactly one latest-frame slot, so a slow
 display drops intermediate frames instead of queueing them (freshness >
 completeness). `user_closed` is surfaced to the perceive loop so q/Esc on
 the ffplay window shuts the whole preview down cleanly.
+
+Failure containment (M5.2C): an unexpected renderer exception must never
+kill the camera/broker/worker pipeline. The display loop increments
+`render_errors`, logs the first occurrence (then rate-limits), falls back
+to showing a plain unannotated copy of the frame so the camera image never
+freezes, and keeps running. Cancellation is never swallowed.
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from collections import deque
 from collections.abc import Callable
@@ -37,8 +44,11 @@ from sirah.perception.diagnostic import DiagnosticSnapshot
 from sirah.perception.display import DisplayBackend
 from sirah.perception.renderer import DiagnosticRenderer, RenderContext
 
+_LOGGER = logging.getLogger(__name__)
+
 _DEFAULT_DISPLAY_INTERVAL_S = 0.05  # ~20 fps display budget
 _SNAPSHOT_WINDOW = 8
+_RENDER_ERROR_LOG_INTERVAL_S = 5.0
 
 
 @dataclass
@@ -48,6 +58,9 @@ class ViewerStats:
     displayed: int = 0
     dropped: int = 0
     display_fps: float | None = None
+    render_errors: int = 0
+    out_of_bounds_landmarks: int = 0
+    nonfinite_landmarks: int = 0
 
     @property
     def frames(self) -> int:
@@ -85,6 +98,8 @@ class DiagnosticViewer:
         self._stats = ViewerStats()
         self._mirror = False
         self._frame_times: deque[float] = deque()
+        self._render_error_first_logged = False
+        self._last_render_error_log: float | None = None
 
     @property
     def stats(self) -> ViewerStats:
@@ -136,9 +151,48 @@ class DiagnosticViewer:
             if self._backend.user_closed:
                 break
             snapshot = self._best_snapshot(frame.index)
-            self._render_and_show(frame, snapshot)
-            self._stats.displayed += 1
+            try:
+                self._render_and_show(frame, snapshot)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - viewer failure boundary
+                # Unexpected rendering failure: keep perception alive. Show a
+                # plain unannotated copy so the camera image never freezes.
+                self._stats.render_errors += 1
+                self._log_render_error(exc, frame.index)
+                fallback = _plain_copy(frame)
+                if fallback is not None:
+                    self._backend.show(fallback)
+            else:
+                self._stats.displayed += 1
+            self._sync_anomaly_stats()
             await asyncio.sleep(self._display_interval_s)
+
+    def _sync_anomaly_stats(self) -> None:
+        self._stats.out_of_bounds_landmarks = self._renderer.out_of_bounds_landmarks
+        self._stats.nonfinite_landmarks = self._renderer.nonfinite_landmarks
+
+    def _log_render_error(self, exc: Exception, frame_index: int) -> None:
+        now = self._clock()
+        if not self._render_error_first_logged:
+            self._render_error_first_logged = True
+            _LOGGER.error(
+                "viewer render failed (degrading to raw frame): frame=%d exc=%s: %s",
+                frame_index,
+                type(exc).__name__,
+                exc,
+            )
+            return
+        last = self._last_render_error_log
+        if last is None or now - last >= _RENDER_ERROR_LOG_INTERVAL_S:
+            self._last_render_error_log = now
+            _LOGGER.error(
+                "viewer render failures: %d total (last at frame=%d): %s: %s",
+                self._stats.render_errors,
+                frame_index,
+                type(exc).__name__,
+                exc,
+            )
 
     def _render_and_show(self, frame: Frame, snapshot: DiagnosticSnapshot | None) -> None:
         now = self._clock()
@@ -165,3 +219,17 @@ class DiagnosticViewer:
             span = self._frame_times[-1] - self._frame_times[0]
             if span > 0:
                 self._stats.display_fps = (len(self._frame_times) - 1) / span
+
+
+def _plain_copy(frame: Frame) -> object | None:
+    """A safe unannotated copy of the frame for viewer degradation.
+
+    Returns None when the payload is not an ndarray image so the viewer
+    simply skips showing rather than freezing or crashing.
+    """
+    import numpy as np
+
+    payload = frame.payload
+    if payload is None or not isinstance(payload, np.ndarray) or payload.ndim < 2:
+        return None
+    return np.array(payload, copy=True)

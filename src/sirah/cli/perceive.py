@@ -752,7 +752,24 @@ async def _gesture_preview_entry(camera: CameraSource, detector: FaceDetector, a
     finally:
         recognizer.close()
     _print_gesture_preview(summary, broker)
+    _print_viewer_stats(viewer)
     return 0
+
+
+def _print_viewer_stats(viewer) -> None:
+    if viewer is None:
+        return
+    stats = viewer.stats
+    print(
+        f"sirah-perceive: display_fps={_fmt_fps(stats.display_fps)} "
+        f"rendered={stats.displayed} render_errors={stats.render_errors} "
+        f"out_of_bounds_landmarks={stats.out_of_bounds_landmarks} "
+        f"nonfinite_landmarks={stats.nonfinite_landmarks}"
+    )
+
+
+def _fmt_fps(value: float | None) -> str:
+    return f"{value:.1f}" if value is not None else "n/a"
 
 
 def _print_gesture_preview(summary: GesturePreviewSummary, broker) -> None:
@@ -897,6 +914,7 @@ async def _preview_entry(camera: CameraSource, detector: FaceDetector, args: arg
             f"sirah-perceive: captured={s.captured} consumed={s.consumed} "
             f"dropped={s.dropped} capture_fps={s.capture_fps:.1f}"
         )
+    _print_viewer_stats(viewer if args.preview_window else None)
     return 0
 
 

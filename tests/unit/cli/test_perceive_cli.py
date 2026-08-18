@@ -154,6 +154,32 @@ def test_make_viewer_raises_actionable_error_when_ffplay_missing(monkeypatch, tm
         perceive_cli._make_viewer(broker, args)
 
 
+def test_print_viewer_stats_summarizes_anomalies_and_errors(capsys):
+    from sirah.perception.viewer import ViewerStats
+
+    class FakeViewer:
+        def __init__(self) -> None:
+            self.stats = ViewerStats(
+                displayed=120,
+                render_errors=1,
+                out_of_bounds_landmarks=3,
+                nonfinite_landmarks=2,
+            )
+
+    perceive_cli._print_viewer_stats(FakeViewer())
+    out = capsys.readouterr().out
+    assert "display_fps=n/a" in out
+    assert "rendered=120" in out
+    assert "render_errors=1" in out
+    assert "out_of_bounds_landmarks=3" in out
+    assert "nonfinite_landmarks=2" in out
+
+
+def test_print_viewer_stats_noop_when_no_viewer(capsys):
+    perceive_cli._print_viewer_stats(None)
+    assert capsys.readouterr().out == ""
+
+
 def test_preview_window_routes_to_preview_entry(monkeypatch, tmp_path):
     """--preview-window alone (no gesture model) must go to the preview path,
     not the headless perceive() path."""

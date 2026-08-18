@@ -1,15 +1,23 @@
 """DiagnosticViewer tests (M5.2B): temporal correspondence, latest-frame
 display semantics, user_closed propagation and clean teardown. Uses fakes
 for the camera source, renderer and backend — no display server needed.
+
+M5.2C adds: unexpected renderer exceptions must not kill the pipeline —
+the viewer increments `render_errors`, shows a plain copy of the frame,
+and keeps rendering subsequent frames.
 """
 
 from __future__ import annotations
 
 import asyncio
+import time
+
+import numpy as np
 
 from sirah.perception.contracts import CameraSource, Frame
 from sirah.perception.diagnostic import DiagnosticSnapshot
 from sirah.perception.display import DisplayBackend
+from sirah.perception.gesture import Landmark, RawHand
 from sirah.perception.renderer import DiagnosticRenderer
 from sirah.perception.viewer import DiagnosticViewer, ViewerStats
 
@@ -158,6 +166,67 @@ async def _run_until(viewer: DiagnosticViewer, frames: int) -> None:
             break
         await asyncio.sleep(0.005)
     await viewer.stop()
+
+
+class FlakyRenderer(RecordingRenderer):
+    def __init__(self, fail_on: int) -> None:
+        super().__init__()
+        self.fail_on = fail_on
+
+    def render(self, frame, snapshot, context):
+        if frame.index == self.fail_on:
+            raise RuntimeError("render boom")
+        return super().render(frame, snapshot, context)
+
+
+def _array_frame(index: int) -> Frame:
+    return Frame(index=index, payload=np.zeros((8, 8, 3), dtype=np.uint8), captured_at=float(index))
+
+
+def test_viewer_survives_renderer_exception_and_degrades_to_raw():
+    renderer = FlakyRenderer(fail_on=2)
+    backend = FakeBackend()
+    camera = FakeCamera([_array_frame(i) for i in range(1, 5)])
+    viewer = DiagnosticViewer(camera, renderer, backend, display_interval_s=0.001)
+    asyncio.run(_run_until(viewer, 4))
+    assert viewer.stats.displayed == 3  # frame 2 failed, 1/3/4 rendered
+    assert viewer.stats.render_errors == 1
+    assert len(backend.frames) == 4  # degraded frame 2 still shown as raw copy
+    assert backend.frames[1] is not None  # a frame reached the backend for frame 2
+
+
+def test_viewer_keeps_rendering_after_renderer_failure():
+    renderer = FlakyRenderer(fail_on=2)
+    backend = FakeBackend()
+    camera = FakeCamera([_array_frame(i) for i in range(1, 4)])
+    viewer = DiagnosticViewer(camera, renderer, backend, display_interval_s=0.001)
+    viewer.push(_snap(3))
+    asyncio.run(_run_until(viewer, 3))
+    assert viewer.stats.render_errors == 1
+    assert renderer.seen[-1] == (3, 3)  # loop kept going after the failure
+
+
+def test_viewer_syncs_anomaly_stats_from_renderer():
+    renderer = DiagnosticRenderer()
+    backend = FakeBackend()
+    camera = FakeCamera([_array_frame(1)])
+    viewer = DiagnosticViewer(camera, renderer, backend, display_interval_s=0.001)
+    raw = RawHand(
+        index=0,
+        handedness="Right",
+        category="Open_Palm",
+        confidence=0.9,
+        landmarks=(Landmark(1.5, 0.2, 0.0), Landmark(0.2, 0.3, 0.0), Landmark(0.3, 0.3, 0.0)),
+    )
+    now = time.monotonic()
+    viewer.push(
+        DiagnosticSnapshot(
+            frame_index=1, created_at=now, captured_at=now, raw_hands=(raw,)
+        )
+    )
+    asyncio.run(_run_until(viewer, 1))
+    assert viewer.stats.out_of_bounds_landmarks == 1
+    assert viewer.stats.nonfinite_landmarks == 0
 
 
 class _MirrorRecordingRenderer(RecordingRenderer):

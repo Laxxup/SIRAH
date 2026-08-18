@@ -1,4 +1,4 @@
-"""Deterministic diagnostic renderer (M5.2B).
+"""Deterministic diagnostic renderer (M5.2B/5.2C).
 
 Turns a camera frame + `DiagnosticSnapshot` into an annotated BGR image.
 The renderer is pure and display-independent:
@@ -24,10 +24,22 @@ Overlay semantics are explicit:
 - overlays whose source frame is too old are dimmed and tagged STALE,
   and beyond the hard drop age they are not drawn at all — stale
   detections are never silently painted onto a newer frame.
+
+Off-frame robustness (M5.2C): a hand landmark that MediaPipe reports
+just outside the image (a hand entering/leaving the frame) is NOT a
+pipeline failure. This renderer follows MediaPipe's own drawing parity:
+a finite landmark with no drawable pixel is skipped, and a connection is
+drawn only when both endpoints are drawable. Non-finite landmarks are
+skipped and counted. Core landmark values are never mutated or clamped;
+only their *projection* is presentation policy. The face path keeps the
+strict normalized-invariant projection because face boxes are guaranteed
+normalized at the snapshot boundary.
 """
 
 from __future__ import annotations
 
+import logging
+import math
 import statistics
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -35,7 +47,12 @@ from typing import Final
 
 from sirah.perception.contracts import Frame
 from sirah.perception.diagnostic import DiagnosticSnapshot
-from sirah.perception.gesture import HandGesture, RawHand
+from sirah.perception.gesture import HandGesture, Landmark, RawHand
+
+_LOGGER = logging.getLogger(__name__)
+
+# Rate limit for repeating anomaly warnings: bounded, not every frame.
+_ANOMALY_LOG_INTERVAL_S = 5.0
 
 # SIRAH consumes MediaPipe's normalized 21-point hand topology; the
 # renderer only needs that topology as plain indices, never the vendor
@@ -103,6 +120,39 @@ def project_y(y: float, height: int) -> int:
     return round(y * (height - 1))
 
 
+def hand_pixel(
+    x: float,
+    y: float,
+    width: int,
+    height: int,
+    *,
+    mirror: bool = False,
+) -> tuple[int, int] | None:
+    """Tolerant projection for diagnostic hand landmarks.
+
+    Returns pixel coordinates only when the point is drawable: both
+    normalized coordinates must be finite AND within [0, 1]. A finite
+    point just outside the image (MediaPipe reports these while a hand
+    enters/leaves the frame) and any non-finite value return `None` —
+    MediaPipe parity: an undrawable landmark has no pixel coordinate and
+    is skipped by the caller, never converted to an integer pixel.
+
+    Core landmark values are never modified or clamped here; this is
+    purely a presentation transform. `width`/`height` must be positive.
+    """
+    if width <= 0 or height <= 0:
+        raise ValueError("frame dimensions must be positive")
+    if not (math.isfinite(x) and math.isfinite(y)):
+        return None
+    if not 0.0 <= x <= 1.0 or not 0.0 <= y <= 1.0:
+        return None
+    px = round(x * (width - 1))
+    py = round(y * (height - 1))
+    if mirror:
+        px = (width - 1) - px
+    return px, py
+
+
 def raw_hand_label(raw: RawHand) -> str:
     """Presentation label for raw perception: MediaPipe-reported data."""
     return f"{raw.handedness.lower()} hand {raw.category} {raw.confidence:.2f}"
@@ -114,7 +164,13 @@ def stable_hand_label(hand: HandGesture) -> str:
 
 
 class DiagnosticRenderer:
-    """Pure renderer: (Frame, DiagnosticSnapshot | None) -> annotated BGR copy."""
+    """Pure renderer: (Frame, DiagnosticSnapshot | None) -> annotated BGR copy.
+
+    Aggregate anomaly counters (`out_of_bounds_landmarks`,
+    `nonfinite_landmarks`, `render_errors`) make the diagnostic viewer
+    observable without logging every occurrence: the first occurrence of
+    each class is logged with full detail, later ones are rate-limited.
+    """
 
     def __init__(
         self,
@@ -130,6 +186,13 @@ class DiagnosticRenderer:
         self.event_ttl_s = event_ttl_s
         self.stale_after_s = stale_after_s
         self.drop_after_s = drop_after_s
+        self.out_of_bounds_landmarks = 0
+        self.nonfinite_landmarks = 0
+        self.render_errors = 0
+        self._oob_first_logged = False
+        self._nonfinite_first_logged = False
+        self._last_oob_log: float | None = None
+        self._last_nonfinite_log: float | None = None
 
     def render(
         self,
@@ -171,6 +234,7 @@ class DiagnosticRenderer:
             stale=stale,
             now=context.now,
             event_ttl_s=self.event_ttl_s,
+            renderer=self,
         )
         return out
 
@@ -213,12 +277,25 @@ def _draw_overlays(
     stale: bool,
     now: float,
     event_ttl_s: float,
+    renderer: DiagnosticRenderer,
 ) -> None:
     for face in snapshot.faces:
         _draw_face(cv2, out, face, width, height, mirror=mirror, stale=stale)
     for index, raw in enumerate(snapshot.raw_hands):
         stable = _matching_hand(snapshot.hands, index, raw.index)
-        _draw_hand(cv2, out, raw, stable, width, height, mirror=mirror, stale=stale)
+        _draw_hand(
+            cv2,
+            out,
+            raw,
+            stable,
+            width,
+            height,
+            mirror=mirror,
+            stale=stale,
+            now=now,
+            frame_index=snapshot.frame_index,
+            renderer=renderer,
+        )
     _draw_evidence(cv2, out, snapshot, width, stale=stale)
     _draw_events(cv2, out, snapshot, now, event_ttl_s, width, stale=stale)
     if stale:
@@ -258,26 +335,115 @@ def _draw_hand(
     *,
     mirror: bool,
     stale: bool,
+    now: float,
+    frame_index: int,
+    renderer: DiagnosticRenderer,
 ) -> None:
     landmarks = raw.landmarks
     if not landmarks:
         return
+    pixels: dict[int, tuple[int, int]] = {}
+    nonfinite = 0
+    out_of_bounds = 0
+    first_nonfinite: tuple[int, Landmark] | None = None
+    first_oob: tuple[int, Landmark] | None = None
+    for i, landmark in enumerate(landmarks):
+        if not (math.isfinite(landmark.x) and math.isfinite(landmark.y)):
+            nonfinite += 1
+            if first_nonfinite is None:
+                first_nonfinite = (i, landmark)
+            continue
+        px = hand_pixel(landmark.x, landmark.y, width, height, mirror=mirror)
+        if px is None:
+            out_of_bounds += 1
+            if first_oob is None:
+                first_oob = (i, landmark)
+            continue
+        pixels[i] = px
+    if nonfinite:
+        renderer.nonfinite_landmarks += nonfinite
+        _log_landmark_anomaly(
+            renderer,
+            kind="non-finite hand landmark",
+            counter_attr="nonfinite_landmarks",
+            first=(first_nonfinite, nonfinite),
+            first_logged_attr="_nonfinite_first_logged",
+            last_logged_attr="_last_nonfinite_log",
+            now=now,
+            hand=raw,
+            frame_index=frame_index,
+        )
+    if out_of_bounds:
+        renderer.out_of_bounds_landmarks += out_of_bounds
+        _log_landmark_anomaly(
+            renderer,
+            kind="out-of-bounds hand landmark",
+            counter_attr="out_of_bounds_landmarks",
+            first=(first_oob, out_of_bounds),
+            first_logged_attr="_oob_first_logged",
+            last_logged_attr="_last_oob_log",
+            now=now,
+            hand=raw,
+            frame_index=frame_index,
+        )
     edge_color = _COLOR_STALE if stale else _COLOR_HAND
     for a, b in HAND_EDGES:
-        if a >= len(landmarks) or b >= len(landmarks):
-            continue
-        ax, ay = project_x(landmarks[a].x, width, mirror=mirror), project_y(landmarks[a].y, height)
-        bx, by = project_x(landmarks[b].x, width, mirror=mirror), project_y(landmarks[b].y, height)
-        cv2.line(out, (ax, ay), (bx, by), edge_color, 1)
-    for point in landmarks:
-        px, py = project_x(point.x, width, mirror=mirror), project_y(point.y, height)
-        cv2.circle(out, (px, py), 2, _COLOR_STALE if stale else _COLOR_HAND, -1)
-    wrist = landmarks[0]
-    wx = project_x(wrist.x, width, mirror=mirror)
-    wy = project_y(wrist.y, height)
+        if a in pixels and b in pixels:
+            cv2.line(out, pixels[a], pixels[b], edge_color, 1)
+    point_color = _COLOR_STALE if stale else _COLOR_HAND
+    for px in pixels.values():
+        cv2.circle(out, px, 2, point_color, -1)
+    wrist = pixels.get(0)
+    if wrist is None:
+        return  # no drawable anchor for the labels
     if stable is not None:
-        _draw_text(cv2, out, stable_hand_label(stable), wx, max(0, wy - 14), size=0.4, color=_COLOR_STABLE)
-    _draw_text(cv2, out, raw_hand_label(raw), wx, max(0, wy - 2), size=0.4, color=_COLOR_STALE if stale else _COLOR_RAW)
+        _draw_text(cv2, out, stable_hand_label(stable), wrist[0], max(0, wrist[1] - 14), size=0.4, color=_COLOR_STABLE)
+    _draw_text(cv2, out, raw_hand_label(raw), wrist[0], max(0, wrist[1] - 2), size=0.4, color=_COLOR_STALE if stale else _COLOR_RAW)
+
+
+def _log_landmark_anomaly(
+    renderer: DiagnosticRenderer,
+    *,
+    kind: str,
+    counter_attr: str,
+    first: tuple[tuple[int, Landmark] | None, int],
+    first_logged_attr: str,
+    last_logged_attr: str,
+    now: float,
+    hand: RawHand,
+    frame_index: int,
+) -> None:
+    """First-occurrence detail, then a rate-limited summary (bounded output)."""
+    first_sample, count = first
+    first_logged = getattr(renderer, first_logged_attr)
+    if not first_logged and first_sample is not None:
+        setattr(renderer, first_logged_attr, True)
+        i, lm = first_sample
+        _LOGGER.warning(
+            "%s skipped: frame=%d hand_idx=%d handedness=%s category=%s "
+            "landmark=%d x=%r y=%r z=%r",
+            kind,
+            frame_index,
+            hand.index,
+            hand.handedness,
+            hand.category,
+            i,
+            lm.x,
+            lm.y,
+            lm.z,
+        )
+        return
+    last = getattr(renderer, last_logged_attr)
+    if last is None or now - last >= _ANOMALY_LOG_INTERVAL_S:
+        setattr(renderer, last_logged_attr, now)
+        total = getattr(renderer, counter_attr)
+        _LOGGER.warning(
+            "%s: %d more (total %d, frame=%d)",
+            kind,
+            count,
+            total,
+            frame_index,
+        )
 
 
 def _matching_hand(hands: Sequence[HandGesture], raw_index: int, raw_hand_index: int) -> HandGesture | None:
