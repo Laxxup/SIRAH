@@ -41,7 +41,9 @@ def test_config_validation():
     with pytest.raises(ValueError):
         GreedyIoUTracker(match_thresh=1.5)
     with pytest.raises(ValueError):
-        GreedyIoUTracker(track_buffer_frames=0)
+        GreedyIoUTracker(track_buffer_seconds=0)
+    with pytest.raises(ValueError):
+        GreedyIoUTracker(track_buffer_seconds=-1.0)
     with pytest.raises(ValueError):
         GreedyIoUTracker(confirm_frames=0)
 
@@ -67,16 +69,16 @@ def test_tentative_to_confirmed_and_velocity():
 
 
 def test_miss_becomes_temporarily_lost_then_expires():
-    tr = GreedyIoUTracker(track_buffer_frames=5)
+    tr = GreedyIoUTracker(track_buffer_seconds=0.5)
     t0 = 100.0
     tr.update([det(0.2, 0.2, 0.3, 0.6, 0.9, 0, t0)], source_frame_index=0, now=t0)
     tr.update([det(0.2, 0.2, 0.3, 0.6, 0.9, 1, t0 + 0.1)], source_frame_index=1, now=t0 + 0.1)
     lost = tr.update([], source_frame_index=2, now=t0 + 0.2)
     assert _lifecycle(lost) == ["temporarily_lost"]
-    # still alive within buffer
+    # still alive within the monotonic-time buffer (0.3 s lost < 0.5 s)
     alive = tr.update([], source_frame_index=4, now=t0 + 0.4)
     assert _lifecycle(alive) == ["temporarily_lost"]
-    # frame-delta expiry: 5 frames since last sight -> expired
+    # wall-time expiry: 0.6 s since last sight -> expired
     gone = tr.update([], source_frame_index=7, now=t0 + 0.7)
     assert gone == ()
     assert tr.expirations == 1
@@ -200,11 +202,41 @@ def test_deterministic_output_ordering():
     assert [t.track_id for t in one] == sorted(t.track_id for t in one)
 
 
-def test_frame_delta_based_buffer_not_wall_clock():
-    tr = GreedyIoUTracker(track_buffer_frames=3)
+def test_expiry_is_monotonic_time_independent_of_frame_rate():
+    """The "recently observed" window is wall time, NOT camera-frame count.
+
+    The same physical occlusion must expire after the same duration at
+    10 Hz (~7 missed frames) and at 30 Hz (~21 missed frames); under
+    frame-delta semantics the 30 Hz camera would have expired ~3x sooner.
+    """
+    for period in (0.1, 0.033):  # ~10 Hz vs ~30 Hz camera
+        tr = GreedyIoUTracker(track_buffer_seconds=0.5)
+        t0 = 100.0
+        tr.update([det(0.2, 0.2, 0.3, 0.6, 0.9, 0, t0)], source_frame_index=0, now=t0)
+        tr.update(
+            [det(0.2, 0.2, 0.3, 0.6, 0.9, 1, t0 + period)],
+            source_frame_index=1, now=t0 + period,
+        )
+        # 0.4 s since the first observation: still inside the 0.5 s window
+        tracks = tr.update([], source_frame_index=2, now=t0 + 0.4)
+        assert _lifecycle(tracks) == ["temporarily_lost"]
+        # 0.7 s wall gap: expired at BOTH rates
+        tracks = tr.update([], source_frame_index=3, now=t0 + 0.7)
+        assert tracks == ()
+        assert tr.expirations == 1
+
+
+def test_detector_stall_does_not_extend_lost_window_in_wall_time():
+    """A long detector stall (no updates) between two sighting frames must
+    not keep a track "recently observed": the wall-time gap expires it as
+    soon as the tracker processes the next frame."""
+    tr = GreedyIoUTracker(track_buffer_seconds=0.5)
     t0 = 100.0
     tr.update([det(0.2, 0.2, 0.3, 0.6, 0.9, 0, t0)], source_frame_index=0, now=t0)
-    tr.update([det(0.2, 0.2, 0.3, 0.6, 0.9, 1, t0 + 0.1)], source_frame_index=1, now=t0 + 0.1)
-    # wall time passes but only ONE frame gap: still alive
-    tracks = tr.update([], source_frame_index=2, now=t0 + 10.0)
-    assert _lifecycle(tracks) == ["temporarily_lost"]
+    tr.update(
+        [det(0.2, 0.2, 0.3, 0.6, 0.9, 1, t0 + 0.1)], source_frame_index=1, now=t0 + 0.1
+    )
+    # stall: next update arrives 10 s later with only one frame delta
+    gone = tr.update([], source_frame_index=2, now=t0 + 10.0)
+    assert gone == ()
+    assert tr.expirations == 1

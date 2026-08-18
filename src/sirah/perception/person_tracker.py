@@ -10,9 +10,12 @@ Association follows ByteTrack's BYTE idea — every detection is valuable:
 - unmatched high detections spawn tentative tracks (confirmed after
   `confirm_frames` consecutive hits);
 - confirmed/tentative tracks missed by both stages become
-  TEMPORARILY_LOST for up to `track_buffer_frames` camera frames
-  (frame-delta based, so detector stalls never extend the buffer in wall
-  time), then EXPIRED and dropped;
+  TEMPORARILY_LOST for up to `track_buffer_seconds` of MONOTONIC wall
+  time since their last observation, then EXPIRED and dropped. Time is
+  used (not camera-frame deltas) so the "recently observed" window does
+  not stretch when the camera/detector runs at a different effective
+  rate: the same physical occlusion expires after the same wall duration
+  at 10 Hz, 20 Hz or 30 Hz;
 - velocity is a smoothed normalized-units-per-second box-center estimate.
 
 Properties that matter for M6:
@@ -75,7 +78,7 @@ class _InternalTrack:
     last_source_frame_index: int
     detector: str
     hit_streak: int
-    lost_frames: int
+    lost_seconds: float
     velocity: tuple[float, float] | None
     prev_center: tuple[float, float] | None = None
     prev_time: float | None = None
@@ -90,7 +93,7 @@ class GreedyIoUTracker:
         track_thresh: float = 0.5,
         low_thresh: float = 0.25,
         match_thresh: float = 0.4,
-        track_buffer_frames: int = 45,
+        track_buffer_seconds: float = 2.0,
         confirm_frames: int = 2,
         velocity_smoothing: float = 0.5,
     ) -> None:
@@ -98,8 +101,8 @@ class GreedyIoUTracker:
             raise ValueError("require 0 < low_thresh <= track_thresh <= 1")
         if not 0.0 <= match_thresh <= 1.0:
             raise ValueError("match_thresh must be normalized")
-        if track_buffer_frames < 1:
-            raise ValueError("track_buffer_frames must be positive")
+        if track_buffer_seconds <= 0:
+            raise ValueError("track_buffer_seconds must be positive")
         if confirm_frames < 1:
             raise ValueError("confirm_frames must be positive")
         if not 0.0 < velocity_smoothing <= 1.0:
@@ -107,7 +110,7 @@ class GreedyIoUTracker:
         self.track_thresh = track_thresh
         self.low_thresh = low_thresh
         self.match_thresh = match_thresh
-        self.track_buffer_frames = track_buffer_frames
+        self.track_buffer_seconds = track_buffer_seconds
         self.confirm_frames = confirm_frames
         self.velocity_smoothing = velocity_smoothing
         self._tracks: list[_InternalTrack] = []
@@ -165,13 +168,13 @@ class GreedyIoUTracker:
 
         for track in self._tracks:
             if track.track_id not in matched_ids:
-                self._mark_miss(track, source_frame_index)
+                self._mark_miss(track, now)
 
         for det in high:
             if det not in matched:
                 self._spawn(det, source_frame_index)
 
-        self._expire(source_frame_index)
+        self._expire()
         return self._snapshot(now)
 
     @property
@@ -240,7 +243,7 @@ class GreedyIoUTracker:
         track.confidence = det.confidence
         track.last_seen = det.produced_at
         track.last_source_frame_index = source_frame_index
-        track.lost_frames = 0
+        track.lost_seconds = 0.0
         track.hit_streak += 1
         if track.lifecycle is TrackLifecycle.TEMPORARILY_LOST or (
             track.lifecycle is TrackLifecycle.TENTATIVE
@@ -248,12 +251,15 @@ class GreedyIoUTracker:
         ):
             track.lifecycle = TrackLifecycle.CONFIRMED
 
-    def _mark_miss(self, track: _InternalTrack, source_frame_index: int) -> None:
+    def _mark_miss(self, track: _InternalTrack, now: float) -> None:
         if track.lifecycle is TrackLifecycle.TENTATIVE:
             # never confirmed: it was noise; drop it, do not keep it "lost"
             track.lifecycle = TrackLifecycle.EXPIRED
             return
-        track.lost_frames = source_frame_index - track.last_source_frame_index
+        # monotonic wall time since the person was last observed: the
+        # "recently observed" window is a real duration, independent of
+        # the camera/detector effective rate
+        track.lost_seconds = max(0.0, now - track.last_seen)
         if track.lifecycle is TrackLifecycle.CONFIRMED:
             track.lifecycle = TrackLifecycle.TEMPORARILY_LOST
 
@@ -272,7 +278,7 @@ class GreedyIoUTracker:
             last_source_frame_index=source_frame_index,
             detector=det.detector,
             hit_streak=1,
-            lost_frames=0,
+            lost_seconds=0.0,
             velocity=None,
             prev_center=(cx, cy),
             prev_time=det.produced_at,
@@ -281,12 +287,12 @@ class GreedyIoUTracker:
         self._spawns += 1
         self._tracks.append(track)
 
-    def _expire(self, source_frame_index: int) -> None:
+    def _expire(self) -> None:
         keep: list[_InternalTrack] = []
         for track in self._tracks:
             if (
                 track.lifecycle is TrackLifecycle.TEMPORARILY_LOST
-                and track.lost_frames >= self.track_buffer_frames
+                and track.lost_seconds >= self.track_buffer_seconds
             ):
                 track.lifecycle = TrackLifecycle.EXPIRED
                 self._expirations += 1

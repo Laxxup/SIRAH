@@ -47,7 +47,7 @@ def test_walk_left_to_right_stays_one_track():
 def test_leave_and_reenter_gets_new_track_id_not_identity():
     """Exit + re-entry: a NEW track_id is honest; reusing the old id would
     claim identity the tracker cannot prove."""
-    tr = GreedyIoUTracker(track_buffer_frames=10)
+    tr = GreedyIoUTracker(track_buffer_seconds=1.0)
     t0 = 100.0
     for fidx in range(5):  # A present
         tr.update([det(0.2, 0.2, 0.3, 0.6, 0.9, fidx, t0 + fidx * 0.1)],
@@ -66,7 +66,7 @@ def test_leave_and_reenter_gets_new_track_id_not_identity():
 
 
 def test_brief_occlusion_is_temporarily_lost_then_recovered():
-    tr = GreedyIoUTracker(track_buffer_frames=20)
+    tr = GreedyIoUTracker(track_buffer_seconds=1.0)
     t0 = 100.0
     for fidx in range(6):  # A visible
         tr.update([det(0.2, 0.2, 0.3, 0.6, 0.9, fidx, t0 + fidx * 0.1)],
@@ -112,7 +112,7 @@ def test_crossing_tracks_may_swap_ids_but_never_invent_identity():
 def test_detector_drops_a_person_for_observations():
     """Detector misses B for several observations: B stays recently-observed
     (never "current"), A stays current, and the counts stay truthful."""
-    tr = GreedyIoUTracker(track_buffer_frames=10)
+    tr = GreedyIoUTracker(track_buffer_seconds=1.0)
     t0 = 100.0
     # both present for a while
     for fidx in range(4):
