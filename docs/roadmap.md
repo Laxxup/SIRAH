@@ -65,8 +65,8 @@ la situación de los ojos, el laboratorio conversacional y el trabajo posterior.
 - Los informes de investigación y auditoría del directorio local `informes/`
   no se guardan en el repositorio. Las decisiones se documentan en los ADR y en
   esta hoja de ruta.
-- La arquitectura futura de comportamiento y LLM está en
-  `docs/behavior-llm-architecture.md`; no añade dependencias ni autoridad sobre
-  el hardware.
+- El diseño histórico de comportamiento y LLM está archivado en
+  `docs/archive/behavior-llm-architecture.md`; no añade dependencias ni
+  autoridad sobre el hardware.
 - `PerceptionSnapshot` marca el límite semántico para eventos y modo sombra.
   Los frames sin procesar permanecen fuera del dominio de comportamiento.
