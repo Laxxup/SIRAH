@@ -26,6 +26,20 @@ _GESTURE_VALUES = {
     "Victory": "victory",
 }
 
+# Acquisition window for gesture keys (seconds). A HELD gesture must still
+# reach confirm_samples=2 — a single frame is never stable truth. MediaPipe
+# hand recognition on edge hardware is real-time but NOT sample-locked: hand
+# landmark dropout and classification confidence jitter mean two valid
+# allowlisted detections of a maintained gesture can land more than the
+# global confirm_window_s (0.5 s) apart, which resets the candidate and
+# postpones confirmation for many seconds while the pose is actually held.
+# This window only grants the second genuine observation enough time; it is
+# gesture-specific via EvidenceHub(kind_overrides=...), so face/person keep
+# the global policy. Derived from the expected live cadence (5-15 Hz
+# inference -> 70-200 ms between feeds, plus dropout/confidence gaps) with a
+# ~2-7x margin; tune per physical measurement if it is still too tight.
+GESTURE_CONFIRM_WINDOW_S = 1.5
+
 
 @dataclass(frozen=True)
 class GestureCategory:

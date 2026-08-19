@@ -298,8 +298,11 @@ async def perceive_gesture_preview(
     viewer window (q/Esc) ends the preview cleanly.
     """
     from sirah.behavior.attention import AttentionManager
+    from sirah.perception.gesture import GESTURE_CONFIRM_WINDOW_S
 
-    evidence = evidence or EvidenceHub()
+    evidence = evidence or EvidenceHub(
+        kind_overrides={"gesture": {"confirm_window_s": GESTURE_CONFIRM_WINDOW_S}}
+    )
     attention = attention or AttentionManager()
     await camera.start()
     await gesture_worker.start()

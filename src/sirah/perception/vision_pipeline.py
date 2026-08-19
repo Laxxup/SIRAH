@@ -38,7 +38,8 @@ from sirah.perception.contracts import (
 )
 from sirah.perception.evidence import EvidenceHub
 from sirah.perception.fanout import FrameBroker
-from sirah.perception.gesture_worker import GestureWorker
+from sirah.perception.gesture import GESTURE_CONFIRM_WINDOW_S
+from sirah.perception.gesture_worker import GestureTelemetry, GestureWorker
 from sirah.perception.person import ObservedScene
 from sirah.perception.person_worker import PersonDetectionWorker
 from sirah.perception.vision_context import (
@@ -58,7 +59,11 @@ class VisionPipeline:
     built by the caller (e.g. from verified local model paths); when omitted
     the corresponding worker is not started and the missing facts simply
     never enter the evidence layer (the AI still sees whatever the
-    configured sensors provide).
+    configured sensors provide). The shared evidence hub applies a
+    gesture-specific confirmation window (see GESTURE_CONFIRM_WINDOW_S) so
+    a held gesture confirms at realistic MediaPipe cadence without changing
+    face/person policy; `gesture_observer` receives per-feed telemetry for
+    physical latency diagnosis (opt-in, never enabled by default).
     """
 
     def __init__(
@@ -70,6 +75,7 @@ class VisionPipeline:
         person_detector: object | None = None,
         attention: AttentionSelector | None = None,
         clock: Callable[[], float] = time.monotonic,
+        gesture_observer: Callable[[GestureTelemetry], None] | None = None,
     ) -> None:
         self._camera = camera
         self._face_detector = face_detector
@@ -77,7 +83,11 @@ class VisionPipeline:
         self._attention = attention or AttentionManager()
         self._broker = FrameBroker(camera)
         self._face_camera = self._broker.subscribe()
-        self._hub = EvidenceHub()
+        self._hub = EvidenceHub(
+            kind_overrides={
+                "gesture": {"confirm_window_s": GESTURE_CONFIRM_WINDOW_S}
+            }
+        )
         self._provider = VisionContextProvider(clock=clock)
         self._world = WorldStateBuilder()
         self._world_state: WorldState | None = None
@@ -88,7 +98,11 @@ class VisionPipeline:
         self._degraded = False
         if gesture_recognizer is not None:
             self._gesture_worker = GestureWorker(
-                self._broker.subscribe(), gesture_recognizer, evidence=self._hub, clock=clock
+                self._broker.subscribe(),
+                gesture_recognizer,
+                evidence=self._hub,
+                clock=clock,
+                observer=gesture_observer,
             )
         if person_detector is not None:
             self._person_worker = PersonDetectionWorker(

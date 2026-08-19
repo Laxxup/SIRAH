@@ -6,6 +6,15 @@ español). Histórico de releases. Formato: Conventional Commits.
 ## Unreleased — Visión en vivo (en desarrollo)
 
 ### Percepción
+- `fix(perception)`: M8.1.1 — un gesto mantenido (p. ej. Victory con una sola
+  mano) confirma sin demoras de varios segundos. `EvidenceHub` acepta políticas
+  por tipo (`kind_overrides`) y los gestos usan `GESTURE_CONFIRM_WINDOW_S`
+  (1.5 s, siguen siendo 2 muestras, nunca un solo frame); rostro/persona
+  conservan la política global. `GestureWorker` expone telemetría por feed
+  (`GestureTelemetry`: latencia de inferencia, edad de frame, gestos
+  allowlisted, candidato X/2, eventos; nunca landmarks ni frames) y
+  `sirah-conversation vision-chat --log-gesture-telemetry` la imprime durante
+  la validación física.
 - `feat(perception)`: `Frame.captured_at` (marca de tiempo monotónica de la
   fuente) y `OpenCVCameraSource` instrumentada: `CameraStats` con frames
   capturados/consumidos/descartados, `capture_fps` y edad del último frame;

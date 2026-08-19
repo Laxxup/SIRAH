@@ -255,3 +255,155 @@ async def test_worker_detects_cancellation_without_leaking_executor():
     await worker.stop()
     assert worker._executor is None  # type: ignore[attr-defined]  # shut down
     assert recognizer.closed
+
+
+# ---------------------------------------------------------------------------
+# M8.1.1: gesture confirmation at realistic MediaPipe cadence
+# ---------------------------------------------------------------------------
+
+
+def _victory(confidence: float = 0.9) -> HandGesture:
+    return HandGesture("victory", confidence, "Right", 0)
+
+
+def _seq_clock(values: list[float]):
+    """A deterministic clock; each call returns the next value (last repeats).
+
+    The worker reads the clock twice per recognition (start/end) and once
+    per evidence feed, so per-frame feed times are spaced by three values.
+    """
+    state = {"i": 0}
+
+    def clock() -> float:
+        index = min(state["i"], len(values) - 1)
+        state["i"] += 1
+        return values[index]
+
+    return clock
+
+
+async def test_worker_confirm_held_victory_at_realistic_cadence():
+    """Two valid detections 0.6 s apart (beyond the global 0.5 s window)
+    still confirm: the worker's own hub uses the gesture window, so a held
+    Victory never waits several seconds."""
+    camera = FakeCamera([0.0, 0.1])
+    recognizer = FakeRecognizer([[_victory()], [_victory()]])
+    worker = GestureWorker(
+        camera, recognizer, clock=_seq_clock([0.0, 0.0, 0.0, 0.6, 0.6, 0.6])
+    )
+    await worker.start()
+    await _pump()
+    await worker.stop()
+
+    # confirmed after the SECOND valid feed (0.6 s latency, not seconds)
+    assert "gesture_victory_confirmed" in worker.emitted_events
+    state = worker._evidence.state_for("gesture", "Right")  # type: ignore[attr-defined]
+    assert state is not None and state.value == "victory"
+
+
+async def test_worker_default_policy_still_requires_window_cadence():
+    """The failure mode: with the GLOBAL 0.5 s window, two detections
+    0.6 s apart reset the candidate and never confirm."""
+    camera = FakeCamera([0.0, 0.1])
+    recognizer = FakeRecognizer([[_victory()], [_victory()]])
+    worker = GestureWorker(
+        camera,
+        recognizer,
+        evidence=EvidenceHub(),  # explicit default: no gesture override
+        clock=_seq_clock([0.0, 0.0, 0.0, 0.6, 0.6, 0.6]),
+    )
+    await worker.start()
+    await _pump()
+    await worker.stop()
+
+    assert "gesture_victory_confirmed" not in worker.emitted_events
+    pending = worker._evidence.state_for("gesture", "Right")  # type: ignore[attr-defined]
+    assert pending is None
+
+
+async def test_worker_single_isolated_detection_never_confirms():
+    camera = FakeCamera([0.0, 0.1])
+    recognizer = FakeRecognizer([[_victory()], []])
+    worker = GestureWorker(
+        camera,
+        recognizer,
+        clock=_seq_clock([0.0, 0.0, 0.0, 0.6, 0.6, 0.6]),
+    )
+    await worker.start()
+    await _pump()
+    await worker.stop()
+
+    assert "gesture_victory_confirmed" not in worker.emitted_events
+
+
+async def test_worker_intermittent_victory_confirms_without_false_positive():
+    """MediaPipe losing the hand for one feed must not prevent confirmation
+    of two genuine detections, nor confirm a single blip."""
+    camera = FakeCamera([0.0, 0.1, 0.2, 0.3])
+    recognizer = FakeRecognizer([[_victory()], [], [_victory()], []])
+    worker = GestureWorker(
+        camera,
+        recognizer,
+        clock=_seq_clock(
+            [0.0, 0.0, 0.0, 0.6, 0.6, 0.6, 1.2, 1.2, 1.2, 1.8, 1.8, 1.8]
+        ),
+    )
+    await worker.start()
+    await _pump()
+    await worker.stop()
+
+    # two genuine detections (0.0 s and 1.2 s apart) confirm; the empty
+    # feeds neither reset the candidate nor fabricate one
+    assert "gesture_victory_confirmed" in worker.emitted_events
+
+
+async def test_worker_release_still_works_after_confirmation():
+    camera = FakeCamera([0.0, 0.1, 0.2, 0.3])
+    recognizer = FakeRecognizer([[_victory()], [_victory()], [], []])
+    worker = GestureWorker(
+        camera,
+        recognizer,
+        clock=_seq_clock(
+            [0.0, 0.0, 0.0, 0.6, 0.6, 0.6, 1.2, 1.2, 1.2, 1.8, 1.8, 1.8]
+        ),
+    )
+    await worker.start()
+    await _pump()
+    await worker.stop()
+
+    # confirmed at 0.6 s, released once the release grace elapsed (1.8 - 0.6)
+    assert "gesture_victory_confirmed" in worker.emitted_events
+    assert "gesture_victory_released" in worker.emitted_events
+    assert worker._evidence.state_for("gesture", "Right") is None  # type: ignore[attr-defined]
+
+
+async def test_worker_telemetry_exposes_latency_cadence_and_evidence_state():
+    collected: list = []
+    camera = FakeCamera([0.0, 0.1])
+    recognizer = FakeRecognizer([[_victory()], [_victory()]])
+    worker = GestureWorker(
+        camera,
+        recognizer,
+        clock=_seq_clock([0.0, 0.0, 0.0, 0.6, 0.6, 0.6]),
+        observer=collected.append,
+    )
+    await worker.start()
+    await _pump()
+    await worker.stop()
+
+    assert len(collected) == 2
+    first, second = collected
+    # monotonic timestamps and latency/frame-age for the physical test
+    assert first.monotonic_s == 0.0
+    assert second.monotonic_s == 0.6
+    assert first.inference_latency_ms >= 0.0
+    assert first.frame_age_ms is not None
+    # allowlisted detection only, never landmarks or frames
+    assert first.raw_gestures == (("victory", 0.9),)
+    assert second.raw_gestures == (("victory", 0.9),)
+    # candidate state X/2 -> confirmed with the emitted event
+    assert first.pending[0].confirm_count == 1
+    assert first.pending[0].confirm_samples == 2
+    assert second.stable == (("victory", 0.9),)
+    assert second.events == ("gesture_victory_confirmed",)
+    assert first.events == ()

@@ -35,8 +35,13 @@ from dataclasses import dataclass
 from typing import Self
 
 from sirah.perception.contracts import CameraSource, Frame
-from sirah.perception.evidence import EvidenceHub
+from sirah.perception.evidence import (
+    EvidenceHub,
+    EvidenceSnapshot,
+    PendingConfirmation,
+)
 from sirah.perception.gesture import (
+    GESTURE_CONFIRM_WINDOW_S,
     GestureDetection,
     HandGesture,
     RawHand,
@@ -70,6 +75,24 @@ class GestureWorkerStats:
         return _p95(self.frame_age_s)
 
 
+@dataclass(frozen=True)
+class GestureTelemetry:
+    """One gesture evidence feed, for physical latency diagnosis.
+
+    Never carries landmarks or pixel frames — only the allowlisted
+    gesture values, confidence and evidence state an operator needs to
+    tell "slow inference" apart from "intermittent detection".
+    """
+
+    monotonic_s: float  # feed time (same clock as evidence ticks)
+    inference_latency_ms: float  # MediaPipe call duration for this frame
+    frame_age_ms: float | None  # feed time - camera capture time
+    raw_gestures: tuple[tuple[str, float], ...]  # (value, confidence), allowlisted
+    pending: tuple[PendingConfirmation, ...]  # in-acquisition gesture candidates
+    stable: tuple[tuple[str, float], ...]  # (value, confidence) stable gestures
+    events: tuple[str, ...]  # gesture evidence events emitted this feed
+
+
 def _p50(values: Sequence[float]) -> float | None:
     return round(statistics.median(values), 3) if values else None
 
@@ -99,11 +122,17 @@ class GestureWorker:
         *,
         evidence: EvidenceHub | None = None,
         clock: Callable[[], float] = time.monotonic,
+        observer: Callable[[GestureTelemetry], None] | None = None,
     ) -> None:
         self._camera = camera
         self._recognizer = recognizer
-        self._evidence = evidence or EvidenceHub()
+        self._evidence = evidence or EvidenceHub(
+            kind_overrides={
+                "gesture": {"confirm_window_s": GESTURE_CONFIRM_WINDOW_S}
+            }
+        )
         self._clock = clock
+        self._observer = observer
         self._executor: concurrent.futures.ThreadPoolExecutor | None = None
         self._task: asyncio.Task[None] | None = None
         self._last_detection: GestureDetection | None = None
@@ -184,31 +213,68 @@ class GestureWorker:
             frame = await self._camera.next_frame()
             if frame is None:
                 break
-            detection = await loop.run_in_executor(
+            detection, latency_ms = await loop.run_in_executor(
                 self._executor, self._recognize, frame
             )
-            self._feed(detection, frame)
+            self._feed(detection, frame, latency_ms)
 
-    def _recognize(self, frame: Frame) -> GestureDetection:
+    def _recognize(self, frame: Frame) -> tuple[GestureDetection, float]:
         started = self._clock()
         try:
             detection = self._recognizer.recognize_detailed(frame)  # type: ignore[attr-defined]
-            self._latency_ms.append((self._clock() - started) * 1000.0)
+            latency_ms = (self._clock() - started) * 1000.0
+            self._latency_ms.append(latency_ms)
             self._inferences += 1
-            return detection
+            return detection, latency_ms
         except Exception:  # noqa: BLE001 - isolate the gesture subsystem
             self._errors += 1
-            self._latency_ms.append((self._clock() - started) * 1000.0)
-            return GestureDetection(hands=(), raw=(), timestamp_ms=0)
+            latency_ms = (self._clock() - started) * 1000.0
+            self._latency_ms.append(latency_ms)
+            return GestureDetection(hands=(), raw=(), timestamp_ms=0), latency_ms
 
-    def _feed(self, detection: GestureDetection, frame: Frame) -> None:
+    def _feed(self, detection: GestureDetection, frame: Frame, latency_ms: float) -> None:
         self._last_detection = detection
         now = self._clock()
         raws = gesture_observations(detection.hands, observed_at=now)
         snapshot = self._evidence.observe(raws, now=now)
         self._emitted_events.extend(snapshot.event_values())
-        if frame.captured_at is not None:
-            self._frame_ages.append(now - frame.captured_at)
+        frame_age = now - frame.captured_at if frame.captured_at is not None else None
+        if frame_age is not None:
+            self._frame_ages.append(frame_age)
+        self._emit_telemetry(detection, snapshot, now, latency_ms, frame_age)
+
+    def _emit_telemetry(
+        self,
+        detection: GestureDetection,
+        snapshot: EvidenceSnapshot,
+        now: float,
+        latency_ms: float,
+        frame_age: float | None,
+    ) -> None:
+        """Deliver one feed's diagnosis to the observer (opt-in, no landmarks)."""
+        if self._observer is None:
+            return
+        raw = tuple((hand.gesture, hand.confidence) for hand in detection.hands)
+        pending = tuple(p for p in snapshot.pending if p.kind == "gesture")
+        stable = tuple(
+            (state.value, state.confidence)
+            for state in snapshot.states
+            if state.kind == "gesture"
+        )
+        events = tuple(
+            event.event for event in snapshot.events if event.kind == "gesture"
+        )
+        self._observer(
+            GestureTelemetry(
+                monotonic_s=now,
+                inference_latency_ms=latency_ms,
+                frame_age_ms=frame_age,
+                raw_gestures=raw,
+                pending=pending,
+                stable=stable,
+                events=events,
+            )
+        )
 
     @property
     def emitted_events(self) -> tuple[str, ...]:

@@ -131,6 +131,13 @@ def build_parser() -> argparse.ArgumentParser:
     vision_chat.add_argument(
         "--ollama-model", default=os.getenv("SIRAH_OLLAMA_MODEL", "gpt-oss:20b-cloud")
     )
+    vision_chat.add_argument(
+        "--log-gesture-telemetry",
+        action="store_true",
+        help="print one diagnostic line per gesture evidence feed (latency, "
+        "frame age, allowlisted gestures, candidate X/samples, events); "
+        "never logs landmarks or frames",
+    )
     tts = commands.add_parser("tts-check", help="check Azure TTS configuration")
     tts.add_argument("--live", action="store_true")
     tts.add_argument("--provider", choices=("local", "azure", "edge"), default=os.getenv("SIRAH_TTS_PROVIDER", "local"))
@@ -444,6 +451,23 @@ async def _listen(args: argparse.Namespace) -> int:
     return 0
 
 
+def _gesture_telemetry_logger(telemetry) -> None:
+    """Print one gesture evidence feed for physical latency diagnosis."""
+    pending = ", ".join(
+        f"{p.value} {p.confirm_count}/{p.confirm_samples}" for p in telemetry.pending
+    )
+    age = f"{telemetry.frame_age_ms:.1f}ms" if telemetry.frame_age_ms is not None else "n/a"
+    print(
+        f"[gesture t={telemetry.monotonic_s:.3f}s "
+        f"infer={telemetry.inference_latency_ms:.1f}ms "
+        f"age={age} "
+        f"raw={telemetry.raw_gestures} "
+        f"pending={pending or '-'} "
+        f"stable={telemetry.stable or '-'} "
+        f"events={telemetry.events or '-'}]"
+    )
+
+
 async def _vision_chat(args: argparse.Namespace) -> int:
     """Cloud text chat grounded on live vision: camera → workers → evidence
     → WorldState → compact AI context → the normal LLM path."""
@@ -469,11 +493,13 @@ async def _vision_chat(args: argparse.Namespace) -> int:
         if args.person_model
         else None
     )
+    observer = _gesture_telemetry_logger if args.log_gesture_telemetry else None
     pipeline = VisionPipeline(
         camera=camera,
         face_detector=detector,
         gesture_recognizer=gesture_recognizer,
         person_detector=person_detector,
+        gesture_observer=observer,
     )
     await pipeline.start()
     print("visión en vivo lista; Ctrl-C para detener")
