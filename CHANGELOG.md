@@ -3,7 +3,9 @@
 SIRAH = **Sistema Inteligente Robótico de Asistencia Humana** (solo en
 español). Histórico de releases. Formato: Conventional Commits.
 
-## Unreleased — Visión en vivo (en desarrollo)
+## Unreleased
+
+## v0.4.0 — Visión en vivo (2026-08-18)
 
 ### Percepción
 - `feat(conversation)`: M8.1.3 — el modo de voz (`sirah-conversation
