@@ -1,4 +1,4 @@
-# Laboratorio conversacional v0.3.1
+# Laboratorio conversacional
 
 SIRAH incluye un laboratorio conversacional experimental separado del runtime
 ocular. Puede escuchar un turno, reconocerlo, generar una respuesta validada y
@@ -104,10 +104,10 @@ uv run sirah-conversation ollama-stream-probe --live --think low
 ```
 
 `replay` es completamente offline: usa transcripciones de fixture, Ollama falso,
-TTS falso y reproduccion falsa. No abre dispositivos ni envia datos.
+TTS falso y reproducción falsa. No abre dispositivos ni envía datos.
 
-Los comandos con `--live` pueden abrir un microfono o enviar una transcripcion
-al proveedor configurado. El operador debe ejecutarlos de forma explicita:
+Los comandos con `--live` pueden abrir un micrófono o enviar una transcripción
+al proveedor configurado. El operador debe ejecutarlos de forma explícita:
 
 ```bash
 uv run sirah-conversation ollama-check --live
@@ -156,10 +156,10 @@ uv run sirah-conversation listen --live --text-only
 ```
 
 Muestra `escuchando`, `procesando`, `hablando`, `interrumpido`,
-`recuperandose` y `detenido`. Usa Silero VAD local para abrir y cerrar cada
+`recuperándose` y `detenido`. Usa Silero VAD local para abrir y cerrar cada
 turno. `Ctrl-C` detiene la captura, cancela el trabajo pendiente y libera los
-buffers. `push-to-talk` queda como diagnostico, alternativa de accesibilidad y
-fallback cuando VAD no este disponible.
+buffers. `push-to-talk` queda como diagnóstico, alternativa de accesibilidad y
+fallback cuando VAD no esté disponible.
 
 Para medir la latencia real sin guardar texto ni audio, añade `--lab`:
 
@@ -203,20 +203,20 @@ Para evaluar `low` en la conversación real sin tocar el comando, establece
 El protocolo de línea base y estrés para la computadora de laboratorio está en
 [`docs/laboratory/voice-latency-baseline.md`](laboratory/voice-latency-baseline.md).
 
-El microfono se analiza continuamente solo en memoria. Solo se transcribe un
-turno cerrado y solo una transcripcion final no vacia se envia al LLM. Los
+El micrófono se analiza continuamente solo en memoria. Solo se transcribe un
+turno cerrado y solo una transcripción final no vacía se envía al LLM. Los
 fragmentos cortos, ruido y silencio se descartan localmente.
 
-La primera version usa umbrales mas estrictos y una ventana de confirmacion
+La primera versión usa umbrales más estrictos y una ventana de confirmación
 para una nueva voz durante TTS. Esto reduce disparos falsos, pero no sustituye
-la cancelacion de eco acustico: SIRAH no puede distinguir perfectamente al
+la cancelación de eco acústico: SIRAH no puede distinguir perfectamente al
 usuario de su propia voz sin AEC real.
 
 El modo predeterminado es semidúplex: mientras SIRAH reproduce una respuesta,
 descarta frames del micrófono y aplica una guarda corta antes de volver a VAD.
 `--barge-in` es experimental y muestra una advertencia porque no hay AEC.
 
-`push-to-talk` queda para diagnostico, accesibilidad y como fallback. La prueba
+`push-to-talk` queda para diagnóstico, accesibilidad y como fallback. La prueba
 manual pendiente requiere confirmar micrófono, bocina y comportamiento acústico.
 No se ha verificado la calidad de transcripción con voz humana.
 
@@ -294,7 +294,7 @@ uv run sirah-conversation logs diagnose latest
 Los comandos de borrado solo reconocen identificadores de archivos de sesión
 en ese directorio; no aceptan rutas arbitrarias.
 
-## Configuracion
+## Configuración
 
 Para conversación cloud, crea tu archivo privado a partir de la plantilla:
 
@@ -344,10 +344,10 @@ SIRAH_VAD_MAX_TURN_SECONDS=15
 SIRAH_VAD_PRE_ROLL_MS=300
 ```
 
-El daemon local puede gestionar la autenticacion de modelos Cloud. No definas
-una API key para `127.0.0.1` salvo que tu instalacion la requiera.
+El daemon local puede gestionar la autenticación de modelos Cloud. No definas
+una API key para `127.0.0.1` salvo que tu instalación la requiera.
 
-## Limites
+## Límites
 
 Ollama Cloud no garantiza structured outputs. SIRAH pide JSON por prompt y
 valida externamente intent, emotion, action y speech. Una salida invalida se
