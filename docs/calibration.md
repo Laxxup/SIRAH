@@ -1,13 +1,15 @@
-# Calibration
+# Calibración
 
-`firmware/sirah-eyes/config/calibration.h` is the physical authority.
-`config/actuators.yaml` mirrors it for the runtime.
+`firmware/sirah-eyes/config/calibration.h` es la autoridad física.
+`config/actuators.yaml` la espeja para el runtime.
 
-1. Disarm the eyes and place the mechanism where it cannot bind.
-2. Change one physical limit in `calibration.h`.
-3. Run firmware host tests.
-4. Mirror the value in `actuators.yaml`.
-5. Run `sirah-calibrate validate` and the Python test suite.
-6. Record the date, hardware revision and observed limits in `pin-map.md`.
+1. Desarma los ojos y coloca el mecanismo donde no pueda atascarse.
+2. Cambia un límite físico en `calibration.h`.
+3. Ejecuta las pruebas host del firmware.
+4. Espeja el valor en `actuators.yaml`.
+5. Ejecuta `sirah-calibrate validate` y la suite de pruebas de Python.
+6. Registra la fecha, la revisión de hardware y los límites observados en
+   `pin-map.md`.
 
-Never introduce a serial calibration command. Limits remain firmware-owned.
+No introduzcas jamás un comando serie de calibración. Los límites siguen siendo
+propiedad del firmware.

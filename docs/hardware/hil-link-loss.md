@@ -1,57 +1,60 @@
-# HIL Validation: Link Loss, Watchdog and Safe Pose
+# Validación HIL: pérdida de enlace, watchdog y pose segura
 
-Physical validation procedure for the ESP32 eyes firmware watchdog
-(protocol.md §10) and the runtime's degraded-eyes behavior. Requires
-operator approval; not a CI gate (see `docs/testing.md`).
+Procedimiento de validación física para el watchdog del firmware ocular
+(protocol.md §10) y el comportamiento de ojos degradados del runtime. Requiere
+aprobación del operador; no es un gate de CI (ver `docs/testing.md`).
 
-## Scope
+## Alcance
 
-- Firmware watchdog: after 3 s without a valid command line the firmware
-  eases the gaze to the safe pose CENTER and holds it while the link stays
-  down (§10.2/§10.3). Blinking continues.
-- Firmware recovery: the first valid line after a timeout emits `READY 1`
-  exactly once and the link returns to normal (§10.4).
-- Runtime degradation: the eye-link supervisor reports the loss once and
-  stops sending TARGETs; the app marks eyes DEGRADED and keeps running.
+- Watchdog del firmware: tras 3 s sin una línea de comando válida, el firmware
+  suaviza la mirada hasta la pose segura CENTER y la mantiene mientras el
+  enlace siga caído (§10.2/§10.3). El parpadeo continúa.
+- Recuperación del firmware: la primera línea válida tras un timeout emite
+  `READY 1` exactamente una vez y el enlace vuelve a la normalidad (§10.4).
+- Degradación del runtime: el supervisor del enlace ocular reporta la pérdida
+  una sola vez y deja de enviar TARGETs; la app marca ojos DEGRADED y sigue
+  corriendo.
 
-## Preconditions
+## Precondiciones
 
-- ESP32 flashed with the current `platform/main.ino`.
-- Servos connected and powered from the external 5 V rail (see `build.md`).
-- Host on `/dev/sirah-eyes` (or `/dev/ttyUSB*`), eyes armed via
+- ESP32 flasheado con el `platform/main.ino` actual.
+- Servos conectados y alimentados desde el rail externo de 5 V (ver `build.md`).
+- Host en `/dev/sirah-eyes` (o `/dev/ttyUSB*`), ojos armados vía
   `sirah-runtime --eyes`.
 
-## Procedure
+## Procedimiento
 
-1. **Baseline tracking.** Run the runtime with a face in view. Confirm the
-   gaze follows and `STATE` replies converge to the commanded reference.
-2. **Heartbeat alive.** Confirm the supervisor keeps sending `HEARTBEAT`
-   every 1 s while the runtime is up (firmware stays tracking, watchdog
-   never fires).
-3. **Link loss.** Physically unplug the USB/serial cable (or the ESP32).
-   - Confirm the gaze eases to CENTER and stays there while the cable is
-     out (watchdog timeout ≤ 3 s).
-   - Confirm blinking continues during the link-down window.
-   - Confirm the host logs the eyes component as DEGRADED exactly once
-     and stops sending TARGETs (no retry storm).
-4. **Recovery.** Re-plug the cable.
-   - Confirm the firmware emits `READY 1` exactly once.
-   - Confirm tracking resumes as soon as the runtime sends a new
-     `TARGET` (recentered reference; no restart required on either side).
-5. **Recovery with the runtime already degraded.** With the runtime still
-   up after step 3, verify the serial adapter reconnects or the operator
-   restarts the runtime and the eyes re-arm cleanly.
+1. **Seguimiento de línea base.** Ejecuta el runtime con un rostro a la vista.
+   Confirma que la mirada sigue y que las respuestas `STATE` convergen a la
+   referencia comandada.
+2. **Heartbeat vivo.** Confirma que el supervisor sigue enviando `HEARTBEAT`
+   cada 1 s mientras el runtime esté arriba (el firmware sigue siguiendo; el
+   watchdog nunca dispara).
+3. **Pérdida de enlace.** Desconecta físicamente el cable USB/serie (o el
+   ESP32).
+   - Confirma que la mirada se suaviza hacia CENTER y se queda ahí mientras el
+     cable esté fuera (timeout de watchdog ≤ 3 s).
+   - Confirma que el parpadeo continúa durante la ventana de enlace caído.
+   - Confirma que el host registra el componente de ojos como DEGRADED
+     exactamente una vez y deja de enviar TARGETs (sin tormenta de reintentos).
+4. **Recuperación.** Reconecta el cable.
+   - Confirma que el firmware emite `READY 1` exactamente una vez.
+   - Confirma que el seguimiento se reanuda tan pronto como el runtime envíe
+     un `TARGET` nuevo (referencia re-centrada; sin reinicio de ningún lado).
+5. **Recuperación con runtime ya degradado.** Con el runtime aún arriba tras
+   el paso 3, verifica que el adaptador serie reconecta o que el operador
+   reinicia el runtime y los ojos se rearman limpiamente.
 
-## Acceptance
+## Aceptación
 
-- The gaze never moves away from CENTER while the link is down.
-- No unbounded retry loop: at most one DEGRADED transition and one
-  `READY 1` per link-loss episode.
-- Blinking is independent of the link in both directions.
+- La mirada nunca se aleja de CENTER mientras el enlace esté caído.
+- Sin bucle de reintentos sin límite: a lo sumo una transición DEGRADED y un
+  `READY 1` por episodio de pérdida de enlace.
+- El parpadeo es independiente del enlace en ambas direcciones.
 
-## Offline twin
+## Gemelo offline
 
 `tests/integration/test_e2e_offline.py::test_link_loss_safe_pose_recenters_firmware_via_watchdog`
-exercises the same contract against FakeESP32: tracking → link break →
-eyes DEGRADED → FakeESP32 watchdog eases to CENTER. Run it after any
-change to the watchdog or the eye-link supervisor.
+ejerce el mismo contrato contra FakeESP32: seguimiento → corte de enlace →
+ojos DEGRADED → watchdog de FakeESP32 suaviza a CENTER. Ejecútala tras
+cualquier cambio en el watchdog o en el supervisor del enlace ocular.

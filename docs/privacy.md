@@ -1,28 +1,31 @@
-# Privacy
+# Privacidad
 
-Do not commit camera captures, raw audio, transcripts, prompts, responses or
-derived user profiles. The conversational prototype keeps its context in RAM
-and does not persist audio or transcripts.
+No se versionan capturas de cámara, audio crudo, transcripciones, prompts,
+respuestas ni perfiles derivados de usuarios. El prototipo conversacional
+mantiene su contexto en RAM y no persiste audio ni transcripciones.
 
-Cloud conversation is opt-in. Before using a live command, the operator must
-know that the final transcript can be sent to the configured provider. Do not
-send frames, sensors, serial commands or hardware configuration to the model.
-The hands-free VAD loop never sends continuous or discarded audio to Cloud.
-Groq STT receives solo el turno WAV cerrado cuando se selecciona; Ollama recibe
-la transcripción final y contexto temporal; Edge TTS receives the validated
-reply text. Revisa los términos de cada proveedor antes de una demostración.
-Local Kokoro TTS receives only the response text in process memory. It sends no
-text or audio to a provider and does not write generated PCM to disk.
+La conversación cloud es opt-in. Antes de usar un comando `--live`, el
+operador debe saber que la transcripción final puede enviarse al proveedor
+configurado. No envíes frames, sensores, comandos serie ni configuración de
+hardware al modelo. El loop VAD manos libres nunca envía audio continuo ni
+descartado a la nube. Groq STT recibe solo el turno WAV cerrado cuando se
+selecciona; Ollama recibe la transcripción final y contexto temporal; Edge TTS
+recibe el texto validado de la respuesta. Revisa los términos de cada
+proveedor antes de una demostración. El Kokoro TTS local recibe únicamente el
+texto de la respuesta en memoria del proceso; no envía texto ni audio a ningún
+proveedor y no escribe PCM generado en disco.
 
-Diagnostic session files are opt-in. `--record-session` stores events and
-metrics only; `--include-text` also stores text for debugging after an explicit
-warning. Session JSONL files use mode `0600` outside the repository. Terminal
-scrollback is outside SIRAH's retention controls.
+Los archivos de sesión de diagnóstico son opt-in. `--record-session` guarda
+eventos y métricas únicamente; `--include-text` también guarda texto para
+depuración tras un aviso explícito. Los JSONL de sesión usan modo `0600`
+fuera del repositorio. El scrollback de la terminal queda fuera de los
+controles de retención de SIRAH.
 
-Camera work remains outside the conversational prototype. Obtain consent before
-recording or publishing identifiable people. Any future persistence requires a
-documented retention period, deletion method and operator controls.
+El trabajo con cámara permanece fuera del prototipo conversacional. Obtén
+consentimiento antes de grabar o publicar personas identificables. Cualquier
+persistencia futura requiere un período de retención documentado, un método de
+borrado y controles del operador.
 
-Las métricas de `--lab` y `ollama-stream-probe` están diseñadas para no imprimir
-contenido de respuestas. Aun así, la terminal y los servicios cloud son parte
-del entorno del operador, no mecanismos de retención de SIRAH.
+Las métricas de `--lab` y `ollama-stream-probe` están diseñadas para no
+imprimir contenido de respuestas. Aun así, la terminal y los servicios cloud
+son parte del entorno del operador, no mecanismos de retención de SIRAH.

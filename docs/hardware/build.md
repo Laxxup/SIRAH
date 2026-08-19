@@ -1,20 +1,21 @@
-# Hardware Build
+# Montaje de hardware
 
-This repository controls SIRAH's eyes subsystem: an ESP32, PCA9685 and six
-servos. Consult `pin-map.md` before changing wiring or calibration.
+Este repositorio controla el subsistema ocular de SIRAH: un ESP32, un PCA9685
+y seis servos. Consulta `pin-map.md` antes de cambiar cableado o calibración.
 
-## Power And Wiring
+## Alimentación y cableado
 
-- Connect PCA9685 at I2C address `0x40` using the pins declared in
+- Conecta el PCA9685 en la dirección I2C `0x40` usando los pines declarados en
   `firmware/sirah-eyes/platform/pins.h`.
-- Connect the six servos only to the channels in `config/actuators.yaml`.
-- Power servos from an external regulated 5 V rail sized for their stall load.
-- Join the external supply ground, PCA9685 ground and ESP32 ground.
-- Do not power the servo rail from the ESP32 USB connection. Brownouts can
-  reset the controller while a servo is under load.
+- Conecta los seis servos únicamente a los canales de `config/actuators.yaml`.
+- Alimenta los servos desde un rail externo regulado de 5 V dimensionado para
+  su carga de bloqueo.
+- Une el GND de la fuente externa, el del PCA9685 y el del ESP32.
+- No alimentes el rail de servos desde la conexión USB del ESP32. Un brownout
+  puede reiniciar el controlador con un servo bajo carga.
 
-## Runtime
+## Ejecución
 
-The serial device must be `/dev/ttyUSB*` or `/dev/sirah-eyes`. Begin disarmed,
-then use `sirah-runtime --eyes`. Stop and remove servo power before changing
-wiring.
+El dispositivo serie debe ser `/dev/ttyUSB*` o `/dev/sirah-eyes`. Arranca
+desarmado y luego usa `sirah-runtime --eyes`. Detén y retira la alimentación
+de servos antes de cambiar cableado.
