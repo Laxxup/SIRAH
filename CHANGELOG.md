@@ -6,6 +6,18 @@ español). Histórico de releases. Formato: Conventional Commits.
 ## Unreleased — Visión en vivo (en desarrollo)
 
 ### Percepción
+- `feat(conversation)`: M8.1.3 — el modo de voz (`sirah-conversation
+  listen --live`) puede usar la cámara con el MISMO `VisionPipeline` que
+  `vision-chat` (sin arquitectura paralela ni duplicar Evidence/WorldState):
+  flags opt-in `--camera-device --yunet-model [--gesture-model
+  --person-model]` (cámara y modelo YuNet van juntos) y diagnóstico
+  `--log-vision-context`/`--log-gesture-telemetry`; el `ConversationCore`
+  del flujo de voz recibe el mismo `VisionContextProvider`, la percepción
+  corre en sus propias tareas sin esperar a STT/Ollama/TTS, y Ctrl-C cierra
+  micrófono, audio, workers, `FrameBroker` y cámara una sola vez. Sin
+  cámara, la conversación por voz funciona exactamente igual que antes.
+  (El preview diagnóstico queda fuera de este milestone: sin segunda
+  cámara; headless por defecto.)
 - `fix(perception)`: M8.1.1/1.2 — la hipótesis de confirmación lenta de gesto
   fue refutada por la medición física (Victory mantenido confirma en ~40 ms,
   inferencia ~40-60 ms, detección continua; muy dentro de la ventana global

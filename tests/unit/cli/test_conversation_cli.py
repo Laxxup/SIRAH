@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 import sirah.cli.conversation as conversation_cli
 from sirah.audio.groq_stt import GroqWhisperSTT
 from sirah.audio.stt import FasterWhisperSTT
@@ -130,3 +132,46 @@ def test_ollama_stream_probe_accepts_live_prompt_and_context_limit():
     assert args.prompt == "prueba"
     assert args.context_limit == 4
     assert args.think == "false"
+
+
+def test_listen_parses_opt_in_vision_flags():
+    args = build_parser().parse_args(
+        (
+            "listen",
+            "--live",
+            "--camera-device",
+            "0",
+            "--yunet-model",
+            "/models/yunet.onnx",
+            "--gesture-model",
+            "/models/gesture.task",
+            "--person-model",
+            "/models/person.tflite",
+            "--log-vision-context",
+            "--log-gesture-telemetry",
+        )
+    )
+
+    assert args.camera_device == "0"
+    assert args.yunet_model == "/models/yunet.onnx"
+    assert args.gesture_model == "/models/gesture.task"
+    assert args.person_model == "/models/person.tflite"
+    assert args.log_vision_context is True
+    assert args.log_gesture_telemetry is True
+
+
+def test_listen_without_vision_flags_stays_voice_only():
+    args = build_parser().parse_args(("listen", "--live"))
+
+    assert args.camera_device is None
+    assert args.yunet_model is None
+
+
+def test_listen_rejects_camera_or_yunet_without_its_pair():
+    with pytest.raises(SystemExit) as camera_only:
+        conversation_cli.main(("listen", "--live", "--camera-device", "0"))
+    assert camera_only.value.code == 2
+
+    with pytest.raises(SystemExit) as yunet_only:
+        conversation_cli.main(("listen", "--live", "--yunet-model", "/models/yunet.onnx"))
+    assert yunet_only.value.code == 2

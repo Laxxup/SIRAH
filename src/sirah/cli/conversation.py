@@ -7,7 +7,9 @@ import asyncio
 import json
 import os
 import time
+from collections.abc import Awaitable
 from pathlib import Path
+from typing import Protocol
 
 from sirah.audio.capture import SoundDeviceAudioSource
 from sirah.audio.contracts import Transcript
@@ -93,6 +95,38 @@ def build_parser() -> argparse.ArgumentParser:
         "--tts-provider",
         choices=("local", "azure", "edge"),
         default=os.getenv("SIRAH_TTS_PROVIDER", "local"),
+    )
+    listen.add_argument(
+        "--camera-device",
+        default=None,
+        help="enable live vision for voice turns; requires --yunet-model",
+    )
+    listen.add_argument(
+        "--yunet-model",
+        default=None,
+        help="local verified YuNet face model (.onnx); enables vision with --camera-device",
+    )
+    listen.add_argument(
+        "--gesture-model",
+        default=None,
+        help="optional local verified MediaPipe gesture model (gesture_recognizer.task)",
+    )
+    listen.add_argument(
+        "--person-model",
+        default=None,
+        help="optional local verified MediaPipe person model (efficientdet_lite0.tflite)",
+    )
+    listen.add_argument(
+        "--log-gesture-telemetry",
+        action="store_true",
+        help="print one diagnostic line per gesture evidence feed (opt-in; "
+        "never logs landmarks or frames)",
+    )
+    listen.add_argument(
+        "--log-vision-context",
+        action="store_true",
+        help="print the exact vision block injected into each per-turn "
+        "LLM request (opt-in, per turn, never per frame)",
     )
     talk = commands.add_parser("push-to-talk", help="run real microphone capture only with --live")
     talk.add_argument("--live", action="store_true", help="acknowledge microphone and Cloud use")
@@ -192,6 +226,8 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--show-text requires --lab")
         if args.include_text and not args.record_session:
             parser.error("--include-text requires --record-session")
+        if (args.camera_device is None) != (args.yunet_model is None):
+            parser.error("--camera-device and --yunet-model must be provided together to enable vision")
         try:
             return asyncio.run(_listen(args))
         except KeyboardInterrupt:
@@ -348,6 +384,14 @@ async def _listen(args: argparse.Namespace) -> int:
     if not _ollama_configured():
         print("Ollama is not configured; no audio was captured")
         return 1
+    # Vision is opt-in: the ordinary voice flow must keep working without a
+    # camera. The pipeline is built (not started) here so its provider can
+    # feed the same ConversationCore; it starts only when the voice session
+    # is about to run, and perception then runs on its OWN tasks ahead of
+    # the conversation — never waiting for STT/Ollama/TTS.
+    pipeline = _build_vision_pipeline(args)
+    vision_context = pipeline.vision_context if pipeline is not None else None
+    vision_logger = _vision_context_logger if args.log_vision_context else None
     config = ContinuousSessionConfig(
         threshold=float(os.getenv("SIRAH_VAD_THRESHOLD", "0.5")),
         min_speech_ms=int(os.getenv("SIRAH_VAD_MIN_SPEECH_MS", "250")),
@@ -369,7 +413,15 @@ async def _listen(args: argparse.Namespace) -> int:
     timing = TurnTiming() if args.lab else None
     if args.text_only:
         proposer = _proposer(args.ollama_model)
-        conversation = _TextOnlyResponder(ConversationCore(proposer), show_text=args.show_text, log=log)
+        conversation = _TextOnlyResponder(
+            ConversationCore(
+                proposer,
+                vision_context=vision_context,
+                vision_logger=vision_logger,
+            ),
+            show_text=args.show_text,
+            log=log,
+        )
     else:
         if args.tts_provider == "local":
             from sirah.audio.kokoro_tts import KokoroTextToSpeech
@@ -395,7 +447,11 @@ async def _listen(args: argparse.Namespace) -> int:
             proposer,
             tts,
             player,
-            core=ConversationCore(proposer),
+            core=ConversationCore(
+                proposer,
+                vision_context=vision_context,
+                vision_logger=vision_logger,
+            ),
             on_response=observe_response,
             on_diagnostic=_show_lab_diagnostic if args.lab else None,
             timing=timing,
@@ -444,6 +500,9 @@ async def _listen(args: argparse.Namespace) -> int:
     print("escuchando; Ctrl-C para detener")
     if config.barge_in:
         print("El barge-in es experimental porque no existe cancelación de eco acústico.")
+    if pipeline is not None:
+        await pipeline.start()
+        print("visión en vivo lista")
     try:
         await session.run()
     except KeyboardInterrupt:
@@ -453,6 +512,8 @@ async def _listen(args: argparse.Namespace) -> int:
             log.close()
         if player is not None:
             await player.close()
+        if pipeline is not None:
+            await pipeline.stop()
         if args.lab:
             print(_capture_metrics(source.dropped_chunks, source.queue_high_water_mark))
     return 0
@@ -491,21 +552,36 @@ def _vision_context_logger(vision_block: str | None) -> None:
     print("[/vision-context]")
 
 
-async def _vision_chat(args: argparse.Namespace) -> int:
-    """Cloud text chat grounded on live vision: camera → workers → evidence
-    → WorldState → compact AI context → the normal LLM path."""
+class _VisionSurface(Protocol):
+    """The part of `VisionPipeline` a CLI mode needs (lazy-import safe)."""
+
+    def start(self) -> Awaitable[None]: ...
+    def stop(self) -> Awaitable[None]: ...
+    def vision_context(self) -> str | None: ...
+
+
+def _build_vision_pipeline(args: argparse.Namespace) -> _VisionSurface | None:
+    """Build (do NOT start) the shared VisionPipeline from CLI args.
+
+    Returns None when vision is not requested, so the ordinary voice flow
+    keeps working without a camera. Face grounding requires BOTH
+    --camera-device and --yunet-model; --gesture-model/--person-model are
+    optional extras. Every mode reuses the same VisionPipeline/Evidence/
+    WorldState provider — nothing here duplicates perception or
+    conversation logic.
+    """
+    camera_device = getattr(args, "camera_device", None)
+    yunet_model = getattr(args, "yunet_model", None)
+    if not camera_device or not yunet_model:
+        return None
+    from sirah.perception.mediapipe_gesture import MediaPipeGestureRecognizer
+    from sirah.perception.mediapipe_person import MediaPipePersonDetector
     from sirah.perception.opencv_camera import OpenCVCameraSource
     from sirah.perception.vision_pipeline import VisionPipeline
     from sirah.perception.yunet import YuNetFaceDetector
 
-    if not _ollama_configured():
-        print("Ollama is not configured; no vision chat was started")
-        return 1
-    from sirah.perception.mediapipe_gesture import MediaPipeGestureRecognizer
-    from sirah.perception.mediapipe_person import MediaPipePersonDetector
-
-    camera = OpenCVCameraSource(args.camera_device)
-    detector = YuNetFaceDetector(Path(args.yunet_model))
+    camera = OpenCVCameraSource(camera_device)
+    detector = YuNetFaceDetector(Path(yunet_model))
     gesture_recognizer = (
         MediaPipeGestureRecognizer(Path(args.gesture_model))
         if args.gesture_model
@@ -516,14 +592,30 @@ async def _vision_chat(args: argparse.Namespace) -> int:
         if args.person_model
         else None
     )
-    observer = _gesture_telemetry_logger if args.log_gesture_telemetry else None
-    pipeline = VisionPipeline(
+    observer = (
+        _gesture_telemetry_logger
+        if getattr(args, "log_gesture_telemetry", False)
+        else None
+    )
+    return VisionPipeline(
         camera=camera,
         face_detector=detector,
         gesture_recognizer=gesture_recognizer,
         person_detector=person_detector,
         gesture_observer=observer,
     )
+
+
+async def _vision_chat(args: argparse.Namespace) -> int:
+    """Cloud text chat grounded on live vision: camera → workers → evidence
+    → WorldState → compact AI context → the normal LLM path."""
+    if not _ollama_configured():
+        print("Ollama is not configured; no vision chat was started")
+        return 1
+    pipeline = _build_vision_pipeline(args)
+    if pipeline is None:
+        print("visión no configurada: se requieren --camera-device y --yunet-model")
+        return 1
     await pipeline.start()
     print("visión en vivo lista; Ctrl-C para detener")
     try:
