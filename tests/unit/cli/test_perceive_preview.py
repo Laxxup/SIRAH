@@ -71,10 +71,10 @@ async def test_preview_confirms_person_after_two_frames():
     )
     assert summary.frames == 4
     assert summary.faces == 2
-    # person confirmed after 2 samples → exactly one confirm event
-    assert summary.all_events.count("person_present_confirmed") == 1
+    # face confirmed after 2 samples → exactly one confirm event
+    assert summary.all_events.count("face_present_confirmed") == 1
     # face disappears after the release grace → released once
-    assert summary.all_events.count("person_present_released") == 1
+    assert summary.all_events.count("face_present_released") == 1
     assert camera.stopped
 
 
@@ -141,8 +141,8 @@ async def test_preview_accepts_injected_evidence_hub():
         attention=_minimal_attention(),
         evidence=hub,
     )
-    assert hub.state_for("person", "primary") is not None
-    assert "person_present_confirmed" in summary.all_events
+    assert hub.state_for("face", "primary") is not None
+    assert "face_present_confirmed" in summary.all_events
 
 def _minimal_attention() -> AttentionManager:
     return AttentionManager(acquire_samples=1, loss_hold_samples=1, switch_samples=1)

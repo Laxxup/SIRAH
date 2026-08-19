@@ -196,7 +196,7 @@ async def test_gesture_preview_isolates_gesture_failure():
     # the face path survived a MediaPipe failure
     assert summary.faces == 1
     assert summary.gesture_errors >= 1
-    assert hub.state_for("person", "primary") is not None
+    assert hub.state_for("face", "primary") is not None
 
 
 async def test_gesture_preview_stops_worker_and_camera_on_cancellation():

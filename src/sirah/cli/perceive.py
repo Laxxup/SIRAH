@@ -34,7 +34,6 @@ from sirah.perception.evidence import (
     EvidenceHub,
     EvidenceSnapshot,
     PendingConfirmation,
-    RawObservation,
     RejectedObservation,
     StableState,
 )
@@ -628,25 +627,11 @@ def _camera_captured(stats: object | None) -> int:
 def _evidence_tick(
     evidence: EvidenceHub, target: GazeTarget | None, now: float
 ) -> tuple[EvidenceSnapshot, float]:
-    """Feed the attended person into evidence; measure detector latency."""
+    """Feed the attended face into evidence; measure detector latency."""
+    from sirah.perception.vision_context import face_observation
+
     started = time.monotonic()
-    if target is not None:
-        raws = [
-            RawObservation(
-                "yunet",
-                "person",
-                "present",
-                target.confidence,
-                now,
-                "primary",
-            )
-        ]
-    else:
-        # confidence 0.0 surfaces as a below-confidence rejection diagnostic
-        raws = [
-            RawObservation("yunet", "person", "present", 0.0, now, "primary")
-        ]
-    snapshot = evidence.observe(raws, now=now)
+    snapshot = evidence.observe([face_observation(target, now=now)], now=now)
     latency_ms = (time.monotonic() - started) * 1000.0
     return snapshot, latency_ms
 
