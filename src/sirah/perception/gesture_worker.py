@@ -41,7 +41,6 @@ from sirah.perception.evidence import (
     PendingConfirmation,
 )
 from sirah.perception.gesture import (
-    GESTURE_CONFIRM_WINDOW_S,
     GestureDetection,
     HandGesture,
     RawHand,
@@ -126,11 +125,7 @@ class GestureWorker:
     ) -> None:
         self._camera = camera
         self._recognizer = recognizer
-        self._evidence = evidence or EvidenceHub(
-            kind_overrides={
-                "gesture": {"confirm_window_s": GESTURE_CONFIRM_WINDOW_S}
-            }
-        )
+        self._evidence = evidence or EvidenceHub()
         self._clock = clock
         self._observer = observer
         self._executor: concurrent.futures.ThreadPoolExecutor | None = None

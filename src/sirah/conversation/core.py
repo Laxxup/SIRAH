@@ -39,12 +39,14 @@ class ConversationCore:
         minimum_confidence: float = 0.6,
         context_limit: int = 12,
         vision_context: Callable[[], str | None] | None = None,
+        vision_logger: Callable[[str | None], None] | None = None,
     ) -> None:
         self._proposer = proposer
         self._clock = clock
         self._minimum_confidence = minimum_confidence
         self._context: deque[str] = deque(maxlen=context_limit)
         self._vision_context = vision_context
+        self._vision_logger = vision_logger
 
     async def respond(self, transcript: Transcript) -> IntentProposal:
         self._renew_proposal_budget()
@@ -104,13 +106,20 @@ class ConversationCore:
 
         The vision block reflects the CURRENT immutable snapshot at ask
         time and is never stored in the turn memory, so stale perception
-        cannot be replayed as current truth on later turns.
+        cannot be replayed as current truth on later turns. When a
+        `vision_logger` is installed (opt-in per-turn diagnosis), it
+        receives the EXACT block value injected — or None when the turn
+        has no visual grounding — before the request is sent.
         """
+        vision: str | None = None
         if self._vision_context is not None:
             vision = self._vision_context()
-            if vision:
-                return (vision,) + tuple(self._context)
-        return tuple(self._context)
+        context = tuple(self._context)
+        if vision:
+            context = (vision,) + context
+        if self._vision_logger is not None:
+            self._vision_logger(vision)
+        return context
 
     def _renew_proposal_budget(self) -> None:
         renew = getattr(self._proposer, "start_turn", None)

@@ -38,7 +38,6 @@ from sirah.perception.contracts import (
 )
 from sirah.perception.evidence import EvidenceHub
 from sirah.perception.fanout import FrameBroker
-from sirah.perception.gesture import GESTURE_CONFIRM_WINDOW_S
 from sirah.perception.gesture_worker import GestureTelemetry, GestureWorker
 from sirah.perception.person import ObservedScene
 from sirah.perception.person_worker import PersonDetectionWorker
@@ -59,11 +58,9 @@ class VisionPipeline:
     built by the caller (e.g. from verified local model paths); when omitted
     the corresponding worker is not started and the missing facts simply
     never enter the evidence layer (the AI still sees whatever the
-    configured sensors provide). The shared evidence hub applies a
-    gesture-specific confirmation window (see GESTURE_CONFIRM_WINDOW_S) so
-    a held gesture confirms at realistic MediaPipe cadence without changing
-    face/person policy; `gesture_observer` receives per-feed telemetry for
-    physical latency diagnosis (opt-in, never enabled by default).
+    configured sensors provide). `gesture_observer` receives per-feed
+    gesture telemetry for physical latency diagnosis (opt-in, never enabled
+    by default, and never carrying landmarks or frames).
     """
 
     def __init__(
@@ -83,11 +80,7 @@ class VisionPipeline:
         self._attention = attention or AttentionManager()
         self._broker = FrameBroker(camera)
         self._face_camera = self._broker.subscribe()
-        self._hub = EvidenceHub(
-            kind_overrides={
-                "gesture": {"confirm_window_s": GESTURE_CONFIRM_WINDOW_S}
-            }
-        )
+        self._hub = EvidenceHub()
         self._provider = VisionContextProvider(clock=clock)
         self._world = WorldStateBuilder()
         self._world_state: WorldState | None = None

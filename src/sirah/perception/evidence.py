@@ -27,7 +27,6 @@ Semantics:
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from typing import TypedDict, Unpack
@@ -180,7 +179,7 @@ def _event_name(kind: str, value: str, *, released: bool) -> str:
 
 
 class EvidenceFilterParams(TypedDict, total=False):
-    """Overridable `EvidenceFilter` parameters for a whole hub or a kind."""
+    """Overridable `EvidenceFilter` parameters for a whole hub."""
 
     min_confidence: float
     confirm_samples: int
@@ -466,32 +465,10 @@ class EvidenceHub:
     knowledge.
     """
 
-    def __init__(
-        self,
-        *,
-        kind_overrides: Mapping[str, EvidenceFilterParams] | None = None,
-        **filter_kwargs: Unpack[EvidenceFilterParams],
-    ) -> None:
+    def __init__(self, **filter_kwargs: Unpack[EvidenceFilterParams]) -> None:
         self._filters: dict[tuple[str, str | None], EvidenceFilter] = {}
         self._filter_kwargs: EvidenceFilterParams = filter_kwargs
-        self._kind_overrides: Mapping[str, EvidenceFilterParams] = (
-            kind_overrides or {}
-        )
         self._now: float = 0.0
-
-    def _make_filter(self, kind: str, track_id: str | None) -> EvidenceFilter:
-        """A filter for one (kind, track_id) key with the hub's policy.
-
-        Global defaults apply to every kind; `kind_overrides` (e.g. a
-        gesture-specific confirmation window) layer on top for that kind
-        only, so face/person acquisition semantics never change with a
-        gesture tuning.
-        """
-        params: EvidenceFilterParams = {
-            **self._filter_kwargs,
-            **self._kind_overrides.get(kind, {}),
-        }
-        return EvidenceFilter(kind, track_id, **params)
 
     def observe(
         self, raws: list[RawObservation] | tuple[RawObservation, ...], *, now: float
@@ -524,7 +501,7 @@ class EvidenceHub:
         for key, entry in by_key.items():
             if key not in self._filters:
                 kind, track_id = key
-                filt = self._make_filter(kind, track_id)
+                filt = EvidenceFilter(kind, track_id, **self._filter_kwargs)
                 self._filters[key] = filt
                 update = filt.observe(entry, now=now)
                 if update.state is not None:

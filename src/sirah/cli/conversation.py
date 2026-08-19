@@ -138,6 +138,13 @@ def build_parser() -> argparse.ArgumentParser:
         "frame age, allowlisted gestures, candidate X/samples, events); "
         "never logs landmarks or frames",
     )
+    vision_chat.add_argument(
+        "--log-vision-context",
+        action="store_true",
+        help="print the exact vision block injected into each per-turn "
+        "LLM request (opt-in, per turn, never per frame); no images, "
+        "landmarks, boxes or payloads",
+    )
     tts = commands.add_parser("tts-check", help="check Azure TTS configuration")
     tts.add_argument("--live", action="store_true")
     tts.add_argument("--provider", choices=("local", "azure", "edge"), default=os.getenv("SIRAH_TTS_PROVIDER", "local"))
@@ -468,6 +475,22 @@ def _gesture_telemetry_logger(telemetry) -> None:
     )
 
 
+def _vision_context_logger(vision_block: str | None) -> None:
+    """Print the EXACT vision block injected into one LLM turn.
+
+    Called by `ConversationCore` just before the request is sent; the
+    block is the same string the request carries (the core passes the
+    value it computed, the logger never re-reads vision). `None` means
+    the turn had no visual grounding.
+    """
+    print(f"[vision-context t={time.monotonic():.3f}s]")
+    if vision_block:
+        print(vision_block)
+    else:
+        print("(visión no disponible: sin grounding visual)")
+    print("[/vision-context]")
+
+
 async def _vision_chat(args: argparse.Namespace) -> int:
     """Cloud text chat grounded on live vision: camera → workers → evidence
     → WorldState → compact AI context → the normal LLM path."""
@@ -504,7 +527,12 @@ async def _vision_chat(args: argparse.Namespace) -> int:
     await pipeline.start()
     print("visión en vivo lista; Ctrl-C para detener")
     try:
-        core = ConversationCore(_proposer(args.ollama_model), vision_context=pipeline.vision_context)
+        vision_logger = _vision_context_logger if args.log_vision_context else None
+        core = ConversationCore(
+            _proposer(args.ollama_model),
+            vision_context=pipeline.vision_context,
+            vision_logger=vision_logger,
+        )
         while True:
             text = await asyncio.to_thread(input, "you> ")
             if not text.strip():

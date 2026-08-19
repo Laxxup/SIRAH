@@ -6,15 +6,21 @@ español). Histórico de releases. Formato: Conventional Commits.
 ## Unreleased — Visión en vivo (en desarrollo)
 
 ### Percepción
-- `fix(perception)`: M8.1.1 — un gesto mantenido (p. ej. Victory con una sola
-  mano) confirma sin demoras de varios segundos. `EvidenceHub` acepta políticas
-  por tipo (`kind_overrides`) y los gestos usan `GESTURE_CONFIRM_WINDOW_S`
-  (1.5 s, siguen siendo 2 muestras, nunca un solo frame); rostro/persona
-  conservan la política global. `GestureWorker` expone telemetría por feed
+- `fix(perception)`: M8.1.1/1.2 — la hipótesis de confirmación lenta de gesto
+  fue refutada por la medición física (Victory mantenido confirma en ~40 ms,
+  inferencia ~40-60 ms, detección continua; muy dentro de la ventana global
+  de 0.5 s), así que la adquisición de gestos vuelve a la política global
+  anterior y se conserva la telemetría útil: `GestureWorker` expone por feed
   (`GestureTelemetry`: latencia de inferencia, edad de frame, gestos
-  allowlisted, candidato X/2, eventos; nunca landmarks ni frames) y
-  `sirah-conversation vision-chat --log-gesture-telemetry` la imprime durante
-  la validación física.
+  allowlisted, candidato X/2, eventos; nunca landmarks ni frames) impresa por
+  `sirah-conversation vision-chat --log-gesture-telemetry`.
+- `feat(conversation)`: M8.1.2 — telemetría de contexto visual por turno,
+  opt-in y solo en cada pregunta: `sirah-conversation vision-chat
+  --log-vision-context` imprime, justo antes de enviar cada petición al LLM,
+  el bloque de visión exacto inyectado (sin imágenes, landmarks, cajas ni
+  payloads; con timestamp monotónico; `visión no disponible` cuando no hay
+  grounding visual). El logger observa el valor ya computado por
+  `ConversationCore`; no modifica la petición real.
 - `feat(perception)`: `Frame.captured_at` (marca de tiempo monotónica de la
   fuente) y `OpenCVCameraSource` instrumentada: `CameraStats` con frames
   capturados/consumidos/descartados, `capture_fps` y edad del último frame;

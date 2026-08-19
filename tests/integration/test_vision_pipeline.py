@@ -161,24 +161,3 @@ async def test_pipeline_stop_is_idempotent_and_closes_adapters():
     assert camera.stopped
     assert person.closed
     assert gesture.closed
-
-
-def test_pipeline_shared_hub_applies_gesture_confirmation_window():
-    """The pipeline's shared evidence hub carries the gesture-only window,
-    so a held Victory confirms at realistic cadence without touching the
-    face/person policy."""
-    from sirah.perception.evidence import RawObservation
-
-    pipeline = VisionPipeline(
-        camera=PacedCamera(count=1), face_detector=FakeFaceDetector()
-    )
-    hub = pipeline._hub  # type: ignore[attr-defined]
-    hub.observe(
-        [RawObservation("gesture", "gesture", "victory", 0.9, 0.0, "Right")],
-        now=0.0,
-    )
-    snapshot = hub.observe(
-        [RawObservation("gesture", "gesture", "victory", 0.9, 1.0, "Right")],
-        now=1.0,
-    )
-    assert "gesture_victory_confirmed" in snapshot.event_values()
