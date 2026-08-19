@@ -50,8 +50,8 @@ capture (16 kHz mono, 512-frame blocks = 32 ms)
 - `TTS: iniciando` / `primer PCM listo` / `Altavoz: iniciando` /
   `Altavoz: reproducción terminada` — `session.py:88-99`, `session.py:150-167`
 - `Respuesta: silenciosa` — `session.py:101`
-- Recovery/`RECOVERING` and capture queue metrics — `cli/conversation.py:417`,
-  `cli/conversation.py:467-470`
+- Recovery/`RECOVERING` and capture queue metrics — `cli/conversation_modes.py:254`,
+  `cli/conversation_modes.py:316`
 
 ### Static latency budget (from code, current configuration)
 
@@ -387,7 +387,7 @@ measurable experiment), REJECT (not worth it).
 **C17 — Kokoro startup/runtime on Pi**
 - CURRENT BOTTLENECK: local Kokoro synthesis on Pi 4 CPU is the largest local
   TTS risk; `preload()` warms the model at startup
-  (`kokoro_tts.py:53-55`; `cli/conversation.py:334-341`).
+  (`kokoro_tts.py:53-55`; `cli/conversation_modes.py:229`).
 - PROPOSED TECHNIQUE: measure Pi Kokoro per-sentence generation; if too slow,
   keep Kokoro strictly as Edge fallback and prefer Edge as primary on Pi.
 - HOW TO BENCHMARK: `tts-check --live --provider local --lab` on Pi.
