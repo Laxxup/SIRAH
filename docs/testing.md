@@ -1,22 +1,24 @@
 # Pruebas
 
-Run the complete software gate:
+Ejecuta el gate de software completo:
 
 ```bash
-.venv/bin/python -m pytest -q
-.venv/bin/ruff check .
-.venv/bin/python -m mypy src
+uv sync --all-extras
+uv run pytest -q
+uv run ruff check .
+uv run mypy
 make -C firmware/sirah-eyes/tests/host core_tests
 ```
 
-- Unit tests cover pure runtime, protocol, config and perception helpers.
-- Contract tests compare the Python and C++ parsers against the golden corpus.
-- Integration tests use fakes end to end and require no hardware.
-- Replay supports two sources: versioned JSONL manifests with small image
-  fixtures in `tests/replay/fixtures/`, and optional `.mp4` files with JSONL
-  annotations. Keep real recordings in `tests/replay/data/`, outside normal Git
-  or managed with Git LFS.
-- HIL tests require explicit operator approval and are not CI prerequisites.
+- Los unit tests cubren runtime puro, protocolo, config y helpers de percepción.
+- Los contract tests comparan los parsers de Python y C++ contra el corpus golden.
+- Los integration tests usan fakes de punta a punta y no requieren hardware.
+- Replay soporta dos fuentes: manifests JSONL versionados con fixtures de imagen
+  pequeñas en `tests/replay/fixtures/`, y archivos `.mp4` opcionales con
+  anotaciones JSONL. Guarda grabaciones reales en `tests/replay/data/`, fuera
+  del Git normal o con Git LFS.
+- Los tests HIL requieren aprobación explícita del operador y no son
+  prerequisitos de CI.
 - Las pruebas conversacionales usan fakes para STT, Ollama, TTS, `ffmpeg` y
   reproducción; no requieren micrófono, bocina, Edge, Groq ni Ollama Cloud.
 - Las pruebas live de conversación siguen el protocolo de

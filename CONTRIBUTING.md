@@ -24,11 +24,10 @@ contribuir a los ojos, el runtime o el laboratorio conversacional.
 ## Flujo de trabajo
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[cli,serial,dev]"
-pytest -q
-ruff check .
-mypy src
+uv sync --extra cli --extra serial --extra dev
+uv run pytest -q
+uv run ruff check .
+uv run mypy
 make -C firmware/sirah-eyes/tests/host core_tests
 ```
 
@@ -38,9 +37,9 @@ Commits en formato Conventional Commits (`feat(runtime):`, `fix(hardware):`,
 Para cambiar conversación, instala los extras y prueba primero sin dispositivos:
 
 ```bash
-pip install -e ".[audio,vad,conversation,edge-tts,dev]"
-pytest tests/unit/audio tests/unit/conversation tests/unit/cli -q
-sirah-conversation replay tests/fixtures/conversation/approved.jsonl
+uv sync --extra audio --extra vad --extra conversation --extra edge-tts --extra dev
+uv run pytest tests/unit/audio tests/unit/conversation tests/unit/cli -q
+uv run sirah-conversation replay tests/fixtures/conversation/approved.jsonl
 ```
 
 Las pruebas `--live` requieren autorización explícita del operador, pueden

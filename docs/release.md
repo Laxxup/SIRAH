@@ -9,13 +9,13 @@ Desde un entorno limpio, instala todas las dependencias de CI y ejecuta los
 gates antes de crear una release:
 
 ```bash
-pip install -e ".[audio,vad,conversation,edge-tts,cli,serial,dev,perception]"
-python -m pytest -q
-ruff check .
-python -m mypy src
+uv sync --all-extras
+uv run pytest -q
+uv run ruff check .
+uv run mypy
 make -C firmware/sirah-eyes/tests/host core_tests
 make -C firmware/sirah-eyes/tests/host contract_checker
-python -m pytest tests/contract -q
+uv run pytest tests/contract -q
 ```
 
 No descargues YuNet durante estos prechecks. El modelo se obtiene solo de forma
@@ -42,9 +42,9 @@ haya terminado correctamente para el commit etiquetado.
 Si la release cambia STT, LLM, TTS, VAD o salida de audio, ejecuta además:
 
 ```bash
-sirah-conversation tts-check --live --provider edge --lab
-sirah-conversation ollama-stream-probe --live --think default
-sirah-conversation ollama-stream-probe --live --think low
+uv run sirah-conversation tts-check --live --provider edge --lab
+uv run sirah-conversation ollama-stream-probe --live --think default
+uv run sirah-conversation ollama-stream-probe --live --think low
 ```
 
 Registra evidencia sin claves, transcripciones o respuestas. Separa los

@@ -4,16 +4,16 @@ SIRAH = **Sistema Inteligente Robótico de Asistencia Humana**. Hay dos rutas
 independientes: ojos con `FakeESP32` o hardware físico, y conversación por voz
 en laboratorio. La conversación no mueve el robot.
 
-Prerequisitos: Python ≥ 3.12 en PC o Raspberry Pi 4.
+Prerequisitos: `uv` (gestor de entornos y dependencias del proyecto) y
+Python ≥ 3.12 en PC o Raspberry Pi 4.
 
 ## 1. Sin hardware — FakeESP32 (recomendado primero)
 
 ```bash
 git clone <url-del-repo> sirah
 cd sirah
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[cli,serial]"
-sirah-runtime --fake --eyes
+uv sync --extra cli --extra serial
+uv run sirah-runtime --fake --eyes
 ```
 
 Qué debe pasar: el runtime arma los ojos sobre el gemelo FakeESP32,
@@ -43,14 +43,14 @@ Flasha el firmware (`platform/main.ino`, Arduino IDE o plataforma CLI) y
 arranca:
 
 ```bash
-sirah-runtime --eyes
-sirah-runtime --eyes --device /dev/sirah-eyes   # o el nombre del puerto
+uv run sirah-runtime --eyes
+uv run sirah-runtime --eyes --device /dev/sirah-eyes   # o el nombre del puerto
 ```
 
 ## 3. Validar la calibración
 
 ```bash
-sirah-calibrate validate
+uv run sirah-calibrate validate
 ```
 
 Comprueba que `config/actuators.yaml` espeja sin divergencias
@@ -61,7 +61,8 @@ Comprueba que `config/actuators.yaml` espeja sin divergencias
 Con una webcam USB y el modelo YuNet (extra opcional `[perception]`):
 
 ```bash
-sirah-perceive --camera-device /dev/video0 --yunet-model models/face_detection_yunet_2023mar.onnx
+uv sync --extra cli --extra serial --extra perception
+uv run sirah-perceive --camera-device /dev/video0 --yunet-model models/face_detection_yunet_2023mar.onnx
 ```
 
 `--max-frames N` limita la duración (0 = hasta que la fuente termine) y
@@ -82,7 +83,7 @@ atención decide si importan.
 | Síntoma | Causa probable | Fix |
 |---|---|---|
 | `device '...' not allowlisted` | El dispositivo no matchea la allowlist | Usar `/dev/ttyUSB*` o `/dev/sirah-eyes` |
-| Falta PyYAML al cargar config | Extra `[cli]` no instalado | `pip install -e ".[cli,serial]"` |
+| Falta PyYAML al cargar config | Extra `[cli]` no instalado | `uv sync --extra cli --extra serial` |
 | `eyes: DEGRADED` al bootear | Serial ocupada o ESP32 sin flash | Cerrar otros programas, verificar cable |
 | Servos no responden | Falta la fuente 5 V / brownout | Fuente externa + GND común (ADR-0011) |
 | `sirah-perceive` entrega frames pero `faces=0` con la cámara encendida | La exposición automática de la webcam sobreexpone | Ajustar exposición a mano (p. ej. `v4l2-ctl --set-ctrl exposure=150,auto_exposure=1`) y volver a medir |
@@ -93,7 +94,7 @@ El laboratorio conversacional no requiere ojos ni ESP32. Instala audio, VAD,
 conversación y Edge TTS, además de `ffmpeg`:
 
 ```bash
-pip install -e ".[audio,vad,conversation,edge-tts]"
+uv sync --extra audio --extra vad --extra conversation --extra edge-tts
 sudo apt install ffmpeg
 mkdir -p ~/.config/sirah
 cp config/conversation.env.example ~/.config/sirah/conversation.env
@@ -106,7 +107,7 @@ Completa Ollama y Groq en el archivo privado, cárgalo y abre la conversación:
 set -a
 source ~/.config/sirah/conversation.env
 set +a
-sirah-conversation listen --live --stt-provider groq --tts-provider edge --lab
+uv run sirah-conversation listen --live --stt-provider groq --tts-provider edge --lab
 ```
 
 La ruta local usa Faster-Whisper y Kokoro; la ruta cloud probada en laboratorio

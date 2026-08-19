@@ -48,8 +48,8 @@ no están implementadas.
 Sin hardware:
 
 ```bash
-pip install -e ".[cli,serial]"
-sirah-runtime --fake --eyes
+uv sync --extra cli --extra serial
+uv run sirah-runtime --fake --eyes
 ```
 
 Para conversación y sus requisitos locales, consulta
@@ -57,13 +57,13 @@ Para conversación y sus requisitos locales, consulta
 validada en laboratorio:
 
 ```bash
-pip install -e ".[audio,vad,conversation,edge-tts]"
+uv sync --extra audio --extra vad --extra conversation --extra edge-tts
 sudo apt install ffmpeg
 mkdir -p ~/.config/sirah
 cp config/conversation.env.example ~/.config/sirah/conversation.env
 # Edita el archivo privado con Ollama y Groq; nunca subas las claves.
 set -a && source ~/.config/sirah/conversation.env && set +a
-sirah-conversation listen --live --stt-provider groq --tts-provider edge --lab
+uv run sirah-conversation listen --live --stt-provider groq --tts-provider edge --lab
 ```
 
 Antes de conectar hardware físico, lee [docs/hardware/](docs/hardware/).

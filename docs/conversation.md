@@ -43,13 +43,13 @@ sudo apt install libportaudio2
 Ruta local con Faster-Whisper y Kokoro:
 
 ```bash
-pip install -e ".[audio,vad,conversation,local-tts]"
+uv sync --extra audio --extra vad --extra conversation --extra local-tts
 ```
 
 Ruta cloud medida en laboratorio con Groq y Edge:
 
 ```bash
-pip install -e ".[audio,vad,conversation,edge-tts]"
+uv sync --extra audio --extra vad --extra conversation --extra edge-tts
 sudo apt install ffmpeg
 ```
 
@@ -87,7 +87,7 @@ SIRAH_OLLAMA_THINK=low
 set -a
 source ~/.config/sirah/conversation.env
 set +a
-sirah-conversation listen --live --stt-provider groq --tts-provider edge --lab
+uv run sirah-conversation listen --live --stt-provider groq --tts-provider edge --lab
 ```
 
 `SIRAH_OLLAMA_THINK=low` es una opción de laboratorio: compara al menos diez
@@ -96,11 +96,11 @@ turnos con `default` antes de adoptarla en otro entorno.
 ## Comandos
 
 ```bash
-sirah-conversation devices
-sirah-conversation replay tests/fixtures/conversation/approved.jsonl
-sirah-conversation config
-sirah-conversation ollama-check
-sirah-conversation ollama-stream-probe --live --think low
+uv run sirah-conversation devices
+uv run sirah-conversation replay tests/fixtures/conversation/approved.jsonl
+uv run sirah-conversation config
+uv run sirah-conversation ollama-check
+uv run sirah-conversation ollama-stream-probe --live --think low
 ```
 
 `replay` es completamente offline: usa transcripciones de fixture, Ollama falso,
@@ -110,12 +110,12 @@ Los comandos con `--live` pueden abrir un microfono o enviar una transcripcion
 al proveedor configurado. El operador debe ejecutarlos de forma explicita:
 
 ```bash
-sirah-conversation ollama-check --live
-sirah-conversation text-chat --live
-sirah-conversation vision-chat --live --camera-device 0 --yunet-model <ruta> [--gesture-model <ruta>] [--person-model <ruta>]
-sirah-conversation push-to-talk --live --text-only --duration 5
-sirah-conversation tts-check --live --provider local
-sirah-conversation logs list
+uv run sirah-conversation ollama-check --live
+uv run sirah-conversation text-chat --live
+uv run sirah-conversation vision-chat --live --camera-device 0 --yunet-model <ruta> [--gesture-model <ruta>] [--person-model <ruta>]
+uv run sirah-conversation push-to-talk --live --text-only --duration 5
+uv run sirah-conversation tts-check --live --provider local
+uv run sirah-conversation logs list
 ```
 
 `vision-chat` es un chat de texto cloud anclado en visión en vivo: la cámara,
@@ -131,7 +131,7 @@ El modo principal es una sesión continua, iniciada una sola vez. Por defecto
 usa la voz local:
 
 ```bash
-sirah-conversation listen --live
+uv run sirah-conversation listen --live
 ```
 
 Para usar Groq Whisper Cloud en vez de Faster-Whisper local, crea una clave en
@@ -152,7 +152,7 @@ Para preparar la prueba sin Azure, TTS ni bocina, usa el modo de texto:
 ```bash
 SIRAH_OLLAMA_HOST=http://127.0.0.1:11434 \
 SIRAH_OLLAMA_MODEL=gpt-oss:20b-cloud \
-sirah-conversation listen --live --text-only
+uv run sirah-conversation listen --live --text-only
 ```
 
 Muestra `escuchando`, `procesando`, `hablando`, `interrumpido`,
@@ -164,7 +164,7 @@ fallback cuando VAD no este disponible.
 Para medir la latencia real sin guardar texto ni audio, añade `--lab`:
 
 ```bash
-sirah-conversation listen --live --stt-provider groq --tts-provider edge --lab
+uv run sirah-conversation listen --live --stt-provider groq --tts-provider edge --lab
 ```
 
 La terminal muestra la hora y duración acumulada de cada etapa: cierre de voz,
@@ -172,7 +172,7 @@ STT, Ollama, síntesis, inicio de altavoz y fin de reproducción. Para aislar
 solo TTS, reproduce una frase de prueba:
 
 ```bash
-sirah-conversation tts-check --live --provider edge --lab
+uv run sirah-conversation tts-check --live --provider edge --lab
 ```
 
 Compara el valor `turno` de `Altavoz: iniciando` entre pruebas. La mejora
@@ -188,7 +188,7 @@ transcripción ni la respuesta.
 Para investigar solo Ollama Cloud sin micrófono ni texto de respuesta, usa:
 
 ```bash
-sirah-conversation ollama-stream-probe --live --context-limit 0
+uv run sirah-conversation ollama-stream-probe --live --context-limit 0
 ```
 
 Imprime tiempos de primer evento, primer fragmento de contenido y respuesta
@@ -236,7 +236,7 @@ Prueba la voz antes de abrir el micrófono:
 
 ```bash
 SIRAH_LOCAL_TTS_CACHE="$HOME/.cache/sirah/kokoro" \
-sirah-conversation tts-check --live --provider local
+uv run sirah-conversation tts-check --live --provider local
 ```
 
 Debe reproducir: `Hola, soy SIRAH. Mi voz local está funcionando.`
@@ -247,7 +247,7 @@ Para conversación completa:
 SIRAH_OLLAMA_HOST=http://127.0.0.1:11434 \
 SIRAH_OLLAMA_MODEL=gpt-oss:20b-cloud \
 SIRAH_LOCAL_TTS_CACHE="$HOME/.cache/sirah/kokoro" \
-sirah-conversation listen --live --tts-provider local \
+uv run sirah-conversation listen --live --tts-provider local \
   --input-device "Default Source" --sample-rate 16000
 ```
 
@@ -263,7 +263,7 @@ Edge TTS usa las voces neuronales de Microsoft sin configurar una clave Azure.
 Instala el extra y `ffmpeg` para usarlo:
 
 ```bash
-pip install -e ".[audio,conversation,edge-tts]"
+uv sync --extra audio --extra conversation --extra edge-tts
 sudo apt install ffmpeg
 ```
 
@@ -285,10 +285,10 @@ o `~/.local/state/sirah/sessions/`, con permisos `0600`. Nunca incluyen audio,
 PCM, claves, tokens, headers ni variables de entorno.
 
 ```bash
-sirah-conversation logs list
-sirah-conversation logs latest
-sirah-conversation logs show latest
-sirah-conversation logs diagnose latest
+uv run sirah-conversation logs list
+uv run sirah-conversation logs latest
+uv run sirah-conversation logs show latest
+uv run sirah-conversation logs diagnose latest
 ```
 
 Los comandos de borrado solo reconocen identificadores de archivos de sesión
@@ -311,7 +311,7 @@ variables antes de ejecutar el CLI:
 set -a
 source ~/.config/sirah/conversation.env
 set +a
-sirah-conversation listen --live --stt-provider groq --tts-provider edge --lab
+uv run sirah-conversation listen --live --stt-provider groq --tts-provider edge --lab
 ```
 
 El CLI no carga ese archivo de forma automática: se mantiene explícito para no
