@@ -19,7 +19,8 @@ Rules (ADR-0007):
   authority over physical servos; proposals are reviewed and gated.
 - No "SIRAH Cortex" component exists or will be created under this name.
 
-As of Stage 7 this is still a scaffold: `README.md` + `INTERFACE.md` only.
-Nothing here is imported, started or wired by the stable runtime; the
-laboratory will host experiments only after the stable physical runtime
-exists.
+As of the publication pass, the directory contains `README.md`, `INTERFACE.md`
+and reusable latency diagnostics (`latency_aggregate.py`, its sample output
+`sample_lab_output.log`, and the Edge TTS first-audio probe). Nothing here is
+imported, started or wired by the stable runtime; experiments run only after
+the stable physical runtime exists.
