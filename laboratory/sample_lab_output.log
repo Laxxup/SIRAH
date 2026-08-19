@@ -1,0 +1,82 @@
+[12:01:00.123] Fin de voz detectado
+[12:01:00.133] STT Groq: iniciando | etapa 10 ms | turno 10 ms
+[12:01:00.345] STT Groq: listo | etapa 212 ms | turno 222 ms
+procesando
+[12:01:01.726] Ollama: iniciando | etapa 1381 ms | turno 1603 ms
+[12:01:03.106] Ollama: respuesta lista | etapa 1380 ms | turno 2983 ms
+[12:01:03.117] TTS: iniciando | etapa 11 ms | turno 2994 ms
+[12:01:03.428] TTS: primer PCM listo | etapa 311 ms | turno 3305 ms
+hablando
+[12:01:03.428] Altavoz: iniciando | etapa 0 ms | turno 3305 ms
+[12:01:05.738] Altavoz: reproducción terminada | etapa 2310 ms | turno 5615 ms
+escuchando
+[12:01:06.000] Fin de voz detectado
+[12:01:06.010] STT Groq: iniciando | etapa 10 ms | turno 10 ms
+[12:01:06.260] STT Groq: listo | etapa 250 ms | turno 260 ms
+procesando
+[12:01:07.660] Ollama: iniciando | etapa 1400 ms | turno 1660 ms
+[12:01:11.260] Ollama: respuesta lista | etapa 3600 ms | turno 5260 ms
+[12:01:11.270] TTS: iniciando | etapa 10 ms | turno 5270 ms
+[12:01:11.580] TTS: primer PCM listo | etapa 310 ms | turno 5580 ms
+hablando
+[12:01:11.580] Altavoz: iniciando | etapa 0 ms | turno 5580 ms
+[12:01:13.880] Altavoz: reproducción terminada | etapa 2300 ms | turno 7880 ms
+escuchando
+[12:01:14.000] Fin de voz detectado
+[12:01:14.012] STT Groq: iniciando | etapa 12 ms | turno 12 ms
+[12:01:14.220] STT Groq: listo | etapa 208 ms | turno 220 ms
+procesando
+[12:01:15.600] Ollama: iniciando | etapa 1380 ms | turno 1600 ms
+[12:01:16.980] Ollama: respuesta lista | etapa 1380 ms | turno 2980 ms
+diagnóstico: propuesta descartada: ValueError('confianza 0.31 < 0.40')
+recuperandose
+[12:01:17.000] Ollama: iniciando | etapa 20 ms | turno 3000 ms
+[12:01:18.380] Ollama: respuesta lista | etapa 1380 ms | turno 4380 ms
+[12:01:18.390] TTS: iniciando | etapa 10 ms | turno 4390 ms
+[12:01:18.700] TTS: primer PCM listo | etapa 310 ms | turno 4700 ms
+hablando
+[12:01:18.700] Altavoz: iniciando | etapa 0 ms | turno 4700 ms
+[12:01:21.000] Altavoz: reproducción terminada | etapa 2300 ms | turno 7000 ms
+escuchando
+[12:01:21.100] Fin de voz detectado
+[12:01:21.112] STT Groq: iniciando | etapa 12 ms | turno 12 ms
+[12:01:21.320] STT Groq: listo | etapa 208 ms | turno 220 ms
+procesando
+[12:01:22.700] Ollama: iniciando | etapa 1380 ms | turno 1600 ms
+[12:01:24.080] Ollama: respuesta lista | etapa 1380 ms | turno 2980 ms
+Respuesta: silenciosa
+escuchando
+[12:01:24.200] Fin de voz detectado
+[12:01:24.212] STT Groq: iniciando | etapa 12 ms | turno 12 ms
+[12:01:24.420] STT Groq: listo | etapa 208 ms | turno 220 ms
+procesando
+[12:01:25.800] Ollama: iniciando | etapa 1380 ms | turno 1600 ms
+[12:01:27.180] Ollama: respuesta lista | etapa 1380 ms | turno 2980 ms
+[12:01:27.190] TTS: iniciando | etapa 10 ms | turno 2990 ms
+[12:01:27.500] TTS: primer PCM listo | etapa 310 ms | turno 3300 ms
+hablando
+[12:01:27.500] Altavoz: iniciando | etapa 0 ms | turno 3300 ms
+[12:01:29.800] Altavoz: reproducción terminada | etapa 2300 ms | turno 5600 ms
+escuchando
+[12:01:30.000] Fin de voz detectado
+[12:01:30.012] STT Groq: iniciando | etapa 12 ms | turno 12 ms
+[12:01:30.220] STT Groq: listo | etapa 208 ms | turno 220 ms
+procesando
+[12:01:31.600] Ollama: iniciando | etapa 1380 ms | turno 1600 ms
+[12:01:32.980] Ollama: respuesta lista | etapa 1380 ms | turno 2980 ms
+[12:01:32.990] TTS: iniciando | etapa 10 ms | turno 2990 ms
+[12:01:33.300] TTS: primer PCM listo | etapa 310 ms | turno 3300 ms
+hablando
+[12:01:33.300] Altavoz: iniciando | etapa 0 ms | turno 3300 ms
+[12:01:35.600] Altavoz: reproducción terminada | etapa 2300 ms | turno 5600 ms
+escuchando
+[12:01:35.800] Fin de voz detectado
+[12:01:35.812] STT Groq: iniciando | etapa 12 ms | turno 12 ms
+[12:01:36.020] STT Groq: listo | etapa 208 ms | turno 220 ms
+procesando
+[12:01:37.400] Ollama: iniciando | etapa 1380 ms | turno 1600 ms
+[12:01:38.780] Ollama: respuesta lista | etapa 1380 ms | turno 2980 ms
+error de sesion: GroqWhisperSTT: el audio capturado no es válido
+recuperandose
+escuchando
+captura: sin descartes; cola max 3/8
