@@ -46,8 +46,9 @@ la situación de los ojos, el laboratorio conversacional y el trabajo posterior.
 
 ## Decisiones que condicionan el camino
 
-- `src/sirah/transport/`, creado en la etapa 1 y sin uso actual, se conserva
-  hasta decidir su función tras la etapa 8 (decisión del director, 2026-08-09).
+- `src/sirah/transport/` era un paquete vacío sin uso; se eliminó en la
+  consolidación del 2026-08-18. Si un transporte distinto del serial llega a
+  hacer falta, se creará donde corresponda (con su ADR).
 - La cámara física con OpenCV y YuNet se incorporará después de validar los
   contratos y las fuentes fake o de reproducción. La instalación base no exige
   OpenCV ni el modelo; véase ADR-0006. `sirah-perceive` permite observar la
