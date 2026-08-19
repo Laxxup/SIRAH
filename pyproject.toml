@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sirah"
-version = "0.3.1"
+version = "0.4.0"
 description = "SIRAH — Sistema Inteligente Robótico de Asistencia Humana; ojos y laboratorio conversacional de baja latencia"
 readme = "README.md"
 requires-python = ">=3.12"
