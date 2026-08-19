@@ -29,3 +29,9 @@ EyeMech_3.2/
 
 # Isolated local development worktrees
 .worktrees/
+
+# Local OpenCode tooling and worktree scripts (never published)
+.opencode/
+opencode.json
+exclude-opencode-worktrees.sh
+sync-opencode-worktrees.sh
