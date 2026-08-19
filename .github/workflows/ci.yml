@@ -14,7 +14,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install linters
-        run: pip install ruff mypy
+        run: pip install ruff mypy numpy
       - name: Ruff
         run: ruff check .
       - name: Mypy
@@ -48,6 +48,6 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install project with test extras
-        run: pip install -e ".[cli,serial,dev]"
+        run: pip install -e ".[cli,serial,dev,perception]"
       - name: Unit tests (full suite)
         run: pytest tests -q
