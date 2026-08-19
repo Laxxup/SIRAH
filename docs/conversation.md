@@ -34,11 +34,8 @@ proyecto, comparte `github.com/Laxxup/SIRAH`.
 Python 3.12 es obligatorio. Instala lo necesario según la ruta elegida.
 
 La reproducción de audio usa `sounddevice`, que necesita PortAudio en el
-sistema. En Linux (incluidas Raspberry Pi) instálalo antes:
-
-```bash
-sudo apt install libportaudio2
-```
+sistema. En Debian/Ubuntu y Raspberry Pi OS: `sudo apt install libportaudio2`;
+en Arch: `sudo pacman -S portaudio`; en Fedora: `sudo dnf install portaudio`.
 
 Ruta local con Faster-Whisper y Kokoro:
 
@@ -50,8 +47,11 @@ Ruta cloud medida en laboratorio con Groq y Edge:
 
 ```bash
 uv sync --extra audio --extra vad --extra conversation --extra edge-tts
-sudo apt install ffmpeg
 ```
+
+Esta ruta usa Edge TTS, que necesita FFmpeg en el sistema: `sudo apt install
+ffmpeg` (Debian/Ubuntu y Raspberry Pi OS), `sudo pacman -S ffmpeg` (Arch) o
+`sudo dnf install ffmpeg` (Fedora).
 
 Silero VAD usa la distribución oficial y su backend ONNX. Faster-Whisper usa
 CPU con `int8` por defecto. El modelo `base` se guarda fuera del repositorio en
@@ -260,11 +260,10 @@ No hay medición todavía en Raspberry Pi 4 de 8 GB.
 ## Voz Edge
 
 Edge TTS usa las voces neuronales de Microsoft sin configurar una clave Azure.
-Instala el extra y `ffmpeg` para usarlo:
+Instala el extra y `ffmpeg` (ver la instalación arriba) para usarlo:
 
 ```bash
 uv sync --extra audio --extra conversation --extra edge-tts
-sudo apt install ffmpeg
 ```
 
 Con `--tts-provider edge`, SIRAH entrega a `ffmpeg` los fragmentos recibidos y

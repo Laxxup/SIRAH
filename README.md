@@ -33,7 +33,7 @@ experimental está marcado como tal.
 
 | Subsistema | Estado | Requisitos |
 |---|---|---|
-| Runtime de ojos: Python + firmware ESP32 (mirada, párpados, parpadeo, límites seguros) | Estable | Ojos físicos, o ninguno (FakeESP32) |
+| Runtime de ojos: Python + firmware ESP32 (mirada, párpados, parpadeo, límites seguros) | Estable | Hardware real opcional; FakeESP32 para pruebas |
 | Protocolo PC ↔ ESP32 v1.0 | Estable | — |
 | Visión: cámara + detección facial; gestos y personas | Experimental | Webcam USB + modelos |
 | Conversación por voz: VAD → STT → LLM → TTS | Laboratorio | Micrófono, bocina y configuración de proveedores |
@@ -102,8 +102,10 @@ uv run sirah-models yunet
 
 # Conversación por voz
 uv sync --extra audio --extra vad --extra conversation --extra edge-tts
-sudo apt install ffmpeg
 ```
+
+La conversación por voz necesita FFmpeg; instálalo con el gestor de paquetes de
+tu sistema (ejemplos por distribución en [docs/conversation.md](docs/conversation.md)).
 
 `uv sync` deja el entorno con exactamente los extras indicados; para
 desarrollar, añade `--extra dev` a la línea que uses. Para la voz local, cambia
