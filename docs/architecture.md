@@ -26,7 +26,7 @@ SIRAH mantiene dos sistemas con límites explícitos:
  arbitraje (visión en vivo)             EyeArbiter → SAFETY > MANUAL > face_tracking
               ↓ Setpoint otorgado
  runtime estable (PC / Raspberry Pi)    RuntimeApp (lifecycle + registry) ·
-                                        HeartbeatWriter · SetpointGate · WorldState
+                                        EyeLinkSupervisor · SetpointGate · WorldState
               ↓ comandos v1.0 (TARGET / BLINK / HEARTBEAT / STATUS / ERR)
  transporte                             EyeTransport (contrato, ADR-0002)
               ↓ serial (o twin in-memory)
