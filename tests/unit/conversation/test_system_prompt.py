@@ -30,8 +30,10 @@ def test_system_prompt_keeps_sirah_identity_and_verified_facts():
 def test_system_prompt_keeps_capabilities_and_limitations():
     assert "ESP32" in SYSTEM_PROMPT
     assert "Bluetooth" in SYSTEM_PROMPT
-    assert "sistema visual sigue en desarrollo" in SYSTEM_PROMPT
-    assert "No reconoces personas, no sigues rostros" in SYSTEM_PROMPT
+    assert "resumen de visión actual" in SYSTEM_PROMPT
+    assert "etiquetas temporales, nunca identidad" in SYSTEM_PROMPT
+    assert "No reconoces identidades, emociones ni objetos" in SYSTEM_PROMPT
+    assert "no afirmes lo que no ves" in SYSTEM_PROMPT
 
 
 def test_system_prompt_guides_adaptive_response_depth():

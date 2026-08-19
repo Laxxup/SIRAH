@@ -17,6 +17,7 @@ la situación de los ojos, el laboratorio conversacional y el trabajo posterior.
 | 8 | Seguimiento 2D con fuente de cámara, detector facial y comportamiento de mirada | Completado | Pipeline cableado, OpenCV/YuNet opcional, E2E offline y `lost_face_center_s` |
 | 8b | Visión en vivo: instrumentación de cámara (fps/dropped/edad de frame), percepción multi-cara, atención anti-flicker, arbitraje de ojos y estado del mundo | Completado | `sirah-perceive`, `AttentionManager`, `EyeArbiter`, `WorldState` y `--attention` en el runtime |
 | 9 | Laboratorio conversacional con VAD, STT, LLM, TTS y medición de latencia | Experimental validado en software y laboratorio | `sirah-conversation`, 401 pruebas, `docs/conversation.md` y protocolo de laboratorio |
+| 9b | M8.1: visión en vivo estructurada → `WorldState` → contexto conversacional | Completado en software; validación física pendiente | `VisionPipeline`, `VisionContextProvider`, `sirah-conversation vision-chat` y pruebas unit/integración |
 
 ## En curso y próximo trabajo
 
@@ -57,6 +58,9 @@ la situación de los ojos, el laboratorio conversacional y el trabajo posterior.
 - La validación física (cámara real + modelo YuNet + foco) y la medición de
   equilibrio productor/consumidor en Raspberry Pi quedan pendientes de
   hardware; los contadores `CameraStats` están listos para ello.
+- El corte M8.1 (visión estructurada → conversación) está completo en software
+  y cubierto por pruebas con fakes, pero la validación física con cámara real,
+  personas en movimiento y chat con Ollama sigue pendiente de hardware.
 - Los informes de investigación y auditoría del directorio local `informes/`
   no se guardan en el repositorio. Las decisiones se documentan en los ADR y en
   esta hoja de ruta.

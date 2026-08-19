@@ -112,10 +112,18 @@ al proveedor configurado. El operador debe ejecutarlos de forma explicita:
 ```bash
 sirah-conversation ollama-check --live
 sirah-conversation text-chat --live
+sirah-conversation vision-chat --live --camera-device 0 --yunet-model <ruta> [--gesture-model <ruta>] [--person-model <ruta>]
 sirah-conversation push-to-talk --live --text-only --duration 5
 sirah-conversation tts-check --live --provider local
 sirah-conversation logs list
 ```
+
+`vision-chat` es un chat de texto cloud anclado en visión en vivo: la cámara,
+el rostro YuNet y los modelos opcionales de gesto/persona alimentan la
+evidencia, y el contexto de cada turno antepone un resumen compacto en español
+(personas presentes con etiquetas temporales, rostro visible y gestos
+permitidos). Si la visión no está disponible o caducó, el LLM responde sin
+afirmar lo que no ve.
 
 ## Modo manos libres
 

@@ -88,7 +88,8 @@ async def test_ollama_client_sends_only_structured_request_and_parses_intent():
     assert "anfitriona" in payload["messages"][0]["content"]
     assert "una frase breve" not in payload["messages"][0]["content"]
     assert "github.com/Laxxup/SIRAH" in payload["messages"][0]["content"]
-    assert "sistema visual" in payload["messages"][0]["content"]
+    assert "resumen de visión actual" in payload["messages"][0]["content"]
+    assert "no afirmes lo que no ves" in payload["messages"][0]["content"]
 
 
 async def test_ollama_client_sends_configured_low_thinking_mode(monkeypatch):

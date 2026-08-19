@@ -14,6 +14,15 @@ español). Histórico de releases. Formato: Conventional Commits.
   para observar cada cara; `detect` (mayor cara) sigue siendo compatible.
 - `feat(cli)`: `sirah-perceive`, CLI de diagnóstico cámara → detector sin
   armar ojos ni abrir el serial.
+- `feat(perception)`: M8.1, corte vertical visión → mundo → conversación:
+  `VisionPipeline` (cámara + rostro YuNet + workers opcionales de gesto/persona
+  sobre un `FrameBroker` y un `EvidenceHub` compartidos) y
+  `VisionContextProvider`; el rostro atendido y las personas rastreadas
+  (presencia + quieta/en movimiento) entran a la evidencia con semántica
+  corregida (`face`, pista `primary`); `format_vision_context` produce un
+  bloque compacto en español (`VISIÓN ACTUAL` + `EVENTOS VISUALES RECIENTES`)
+  que nunca expone cajas, landmarks ni nombres de modelo; `WorldState.perception`
+  ahora lleva `PerceptionFacts`.
 
 ### Comportamiento y runtime
 - `feat(behavior)`: `AttentionManager` (atención opt-in): primario estable a
@@ -28,6 +37,16 @@ español). Histórico de releases. Formato: Conventional Commits.
   setpoint otorgado no cambió.
 - `feat(cli)`: `sirah-runtime --attention` activa la atención con fuente de
   cámara o reproducción.
+
+### Conversación
+- `feat(conversation)`: `ConversationCore` acepta un proveedor `vision_context`
+  y antepone el bloque de visión actual a cada petición cloud sin guardarlo en
+  la memoria de turno (la percepción caduca, no se repite como verdad actual).
+- `feat(conversation)`: `sirah-conversation vision-chat` — chat de texto cloud
+  anclado en visión en vivo (cámara + YuNet + gesto/persona opcionales).
+- `feat(conversation)`: el prompt del sistema describe la visión real (personas
+  con etiquetas temporales, rostro y gestos permitidos; sin identidad,
+  emociones ni objetos) y retira la afirmación de que la visión no existe.
 
 ### Límites conocidos
 - La visión en vivo requiere OpenCV/YuNet (extra opcional) y aún no se ha

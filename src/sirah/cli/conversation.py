@@ -110,6 +110,27 @@ def build_parser() -> argparse.ArgumentParser:
     chat.add_argument("--ollama-model", default=os.getenv("SIRAH_OLLAMA_MODEL", "gpt-oss:20b-cloud"))
     chat.add_argument("--record-session", action="store_true")
     chat.add_argument("--include-text", action="store_true")
+    vision_chat = commands.add_parser(
+        "vision-chat",
+        help="real Cloud text chat grounded on live vision (YuNet + optional "
+        "gesture and person models); requires --live",
+    )
+    vision_chat.add_argument("--live", action="store_true")
+    vision_chat.add_argument("--camera-device", required=True)
+    vision_chat.add_argument("--yunet-model", required=True)
+    vision_chat.add_argument(
+        "--gesture-model",
+        default=None,
+        help="local verified MediaPipe gesture model (gesture_recognizer.task)",
+    )
+    vision_chat.add_argument(
+        "--person-model",
+        default=None,
+        help="local verified MediaPipe person model (efficientdet_lite0.tflite)",
+    )
+    vision_chat.add_argument(
+        "--ollama-model", default=os.getenv("SIRAH_OLLAMA_MODEL", "gpt-oss:20b-cloud")
+    )
     tts = commands.add_parser("tts-check", help="check Azure TTS configuration")
     tts.add_argument("--live", action="store_true")
     tts.add_argument("--provider", choices=("local", "azure", "edge"), default=os.getenv("SIRAH_TTS_PROVIDER", "local"))
@@ -165,6 +186,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.include_text and not args.record_session:
             parser.error("--include-text requires --record-session")
         return asyncio.run(_text_chat(args.ollama_model, args.record_session, args.include_text))
+    if args.command == "vision-chat":
+        try:
+            return asyncio.run(_vision_chat(args))
+        except KeyboardInterrupt:
+            return 0
     if args.command == "tts-check":
         return asyncio.run(_tts_check(args.provider, args.output_device, args.text, lab=args.lab))
     print("Cloud transcripts may leave this device. Press Ctrl-C to stop after speaking.")
@@ -416,6 +442,52 @@ async def _listen(args: argparse.Namespace) -> int:
         if args.lab:
             print(_capture_metrics(source.dropped_chunks, source.queue_high_water_mark))
     return 0
+
+
+async def _vision_chat(args: argparse.Namespace) -> int:
+    """Cloud text chat grounded on live vision: camera → workers → evidence
+    → WorldState → compact AI context → the normal LLM path."""
+    from sirah.perception.opencv_camera import OpenCVCameraSource
+    from sirah.perception.vision_pipeline import VisionPipeline
+    from sirah.perception.yunet import YuNetFaceDetector
+
+    if not _ollama_configured():
+        print("Ollama is not configured; no vision chat was started")
+        return 1
+    from sirah.perception.mediapipe_gesture import MediaPipeGestureRecognizer
+    from sirah.perception.mediapipe_person import MediaPipePersonDetector
+
+    camera = OpenCVCameraSource(args.camera_device)
+    detector = YuNetFaceDetector(Path(args.yunet_model))
+    gesture_recognizer = (
+        MediaPipeGestureRecognizer(Path(args.gesture_model))
+        if args.gesture_model
+        else None
+    )
+    person_detector = (
+        MediaPipePersonDetector(Path(args.person_model))
+        if args.person_model
+        else None
+    )
+    pipeline = VisionPipeline(
+        camera=camera,
+        face_detector=detector,
+        gesture_recognizer=gesture_recognizer,
+        person_detector=person_detector,
+    )
+    await pipeline.start()
+    print("visión en vivo lista; Ctrl-C para detener")
+    try:
+        core = ConversationCore(_proposer(args.ollama_model), vision_context=pipeline.vision_context)
+        while True:
+            text = await asyncio.to_thread(input, "you> ")
+            if not text.strip():
+                return 0
+            observed_at = time.monotonic()
+            proposal = await core.respond(Transcript(text, observed_at, observed_at, 1.0))
+            print(f"sirah> {proposal.speech or ''}")
+    finally:
+        await pipeline.stop()
 
 
 async def _text_chat(model: str, record_session: bool = False, include_text: bool = False) -> int:

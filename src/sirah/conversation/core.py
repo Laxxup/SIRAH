@@ -38,11 +38,13 @@ class ConversationCore:
         clock: Callable[[], datetime] = datetime.now,
         minimum_confidence: float = 0.6,
         context_limit: int = 12,
+        vision_context: Callable[[], str | None] | None = None,
     ) -> None:
         self._proposer = proposer
         self._clock = clock
         self._minimum_confidence = minimum_confidence
         self._context: deque[str] = deque(maxlen=context_limit)
+        self._vision_context = vision_context
 
     async def respond(self, transcript: Transcript) -> IntentProposal:
         self._renew_proposal_budget()
@@ -57,7 +59,7 @@ class ConversationCore:
                 UNDERSTANDING_FALLBACK_SPEECH,
                 EmotionName.CONCERNED,
             )
-        request = IntentRequest("speech_ended", text, transcript.ended_at, tuple(self._context))
+        request = IntentRequest("speech_ended", text, transcript.ended_at, self._request_context())
         proposal = await self._proposer.propose(request)
         if not _is_spanish(proposal.speech) or _claims_wrong_identity(proposal.speech):
             proposal = await self._proposer.propose(
@@ -96,6 +98,19 @@ class ConversationCore:
         self._context.append(f"Persona: {person_text}")
         if proposal.speech:
             self._context.append(f"SIRAH: {proposal.speech}")
+
+    def _request_context(self) -> tuple[str, ...]:
+        """Cloud request context: current vision block + remembered turns.
+
+        The vision block reflects the CURRENT immutable snapshot at ask
+        time and is never stored in the turn memory, so stale perception
+        cannot be replayed as current truth on later turns.
+        """
+        if self._vision_context is not None:
+            vision = self._vision_context()
+            if vision:
+                return (vision,) + tuple(self._context)
+        return tuple(self._context)
 
     def _renew_proposal_budget(self) -> None:
         renew = getattr(self._proposer, "start_turn", None)
