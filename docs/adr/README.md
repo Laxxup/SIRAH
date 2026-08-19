@@ -21,3 +21,4 @@ repository's own record of the decisions that govern it.
 | ADR-0012 | Attention, arbitration and world state as opt-in deterministic layers over the perception→behavior chain (accepted 2026-08-16) |
 | ADR-0013 | Telepresence and single camera ownership: one camera owner, fan-out, freshness (proposed, research track) |
 | ADR-0014 | Evidence layer: raw perception is never authority; only stable state/events reach behavior and conversation (accepted, M2) |
+| ADR-0015 | Person-centric live tracking baseline: EfficientDet-Lite0 + greedy-IoU tracker, temporal provenance (accepted, M6) |
