@@ -52,17 +52,6 @@ class FakeSTT:
         return self._transcript
 
 
-class FakeTTS:
-    def __init__(self, *, failure: Exception | None = None) -> None:
-        self._failure = failure
-        self.spoken: list[str] = []
-
-    async def speak(self, text: str) -> None:
-        if self._failure is not None:
-            raise self._failure
-        self.spoken.append(text)
-
-
 class FakeOperationTTS:
     """Operation-aware synthesis double for conversation replay."""
 

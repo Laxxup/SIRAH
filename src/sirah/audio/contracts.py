@@ -54,8 +54,3 @@ class AudioSource(Protocol):
 @runtime_checkable
 class SpeechToText(Protocol):
     async def transcribe(self, chunks: Sequence[AudioChunk]) -> Transcript: ...
-
-
-@runtime_checkable
-class TextToSpeech(Protocol):
-    async def speak(self, text: str) -> None: ...

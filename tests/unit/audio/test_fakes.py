@@ -8,7 +8,6 @@ from sirah.audio.fakes import (
     FakeOperationTTS,
     FakePCMPlayer,
     FakeSTT,
-    FakeTTS,
 )
 
 
@@ -45,16 +44,6 @@ async def test_fake_stt_records_input_and_returns_configured_transcript():
 
     assert await stt.transcribe((chunk,)) == transcript
     assert stt.requests == [(chunk,)]
-
-
-async def test_fake_tts_records_text_and_can_fail():
-    tts = FakeTTS()
-    await tts.speak("hola")
-    assert tts.spoken == ["hola"]
-
-    failing = FakeTTS(failure=RuntimeError("speaker failed"))
-    with pytest.raises(RuntimeError, match="speaker failed"):
-        await failing.speak("hola")
 
 
 async def test_operation_audio_fakes_record_synthesis_playback_and_cancellation():
