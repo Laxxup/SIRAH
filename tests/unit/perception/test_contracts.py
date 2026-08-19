@@ -4,7 +4,6 @@ wiring; GazeTarget/Frame carry the A1 world semantics."""
 from __future__ import annotations
 
 from sirah.behavior.contracts import Behavior
-from sirah.behavior.event_detector import EventDetector
 from sirah.behavior.gaze_behavior import GazeBehavior
 from sirah.perception.contracts import (
     CameraSource,
@@ -65,10 +64,3 @@ def test_snapshot_rejects_inconsistent_tracking_values():
 
     with pytest.raises(ValueError, match="tracking"):
         PerceptionSnapshot(1.0, True, None, None, None, "tracking")
-
-
-def test_snapshot_satisfies_behavior_event_detector_protocol():
-    detector = EventDetector(arrival_samples=1, cooldown_s=0.0)
-    event = detector.observe(snapshot_from_target(GazeTarget(0.0, 0.0), observed_at=1.0))
-    assert event is not None
-    assert event.kind.value == "person_arrived"

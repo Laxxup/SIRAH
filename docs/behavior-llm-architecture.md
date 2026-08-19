@@ -1,5 +1,15 @@
 # Future Behavior And LLM Boundary
 
+> **HISTÓRICA — no refleja el sistema actual.**
+>
+> Este documento describe un diseño especulativo de comportamiento
+> LLM-guideado que nunca se conectó al runtime. El código asociado
+> (`behavior/future_contracts`, `attention_policy`, `event_detector`,
+> `shadow`) se eliminó en la consolidación del 2026-08-18.
+>
+> El runtime de ojos es determinista y local. No hay LLM en la ruta de
+> comportamiento ni de seguridad física.
+
 This is a design boundary, not an enabled feature. SIRAH's reactive eye motion,
 blink and physical safety remain deterministic and local.
 
