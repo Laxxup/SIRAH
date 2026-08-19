@@ -1,4 +1,4 @@
-# Release Guide
+# Guía de release
 
 Esta guía define el cierre de una release de SIRAH. Python 3.12 es la versión
 mínima soportada.

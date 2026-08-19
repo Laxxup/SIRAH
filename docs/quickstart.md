@@ -1,4 +1,4 @@
-# SIRAH v0.3.1 — Inicio rápido
+# Inicio rápido
 
 SIRAH = **Sistema Inteligente Robótico de Asistencia Humana**. Hay dos rutas
 independientes: ojos con `FakeESP32` o hardware físico, y conversación por voz
@@ -10,37 +10,35 @@ Python ≥ 3.12 en PC o Raspberry Pi 4.
 ## 1. Sin hardware — FakeESP32 (recomendado primero)
 
 ```bash
-git clone <url-del-repo> sirah
+git clone https://github.com/Laxxup/SIRAH.git sirah
 cd sirah
 uv sync --extra cli --extra serial
 uv run sirah-runtime --fake --eyes
 ```
 
-Qué debe pasar: el runtime arma los ojos sobre el gemelo FakeESP32,
-registra `eyes: READY`, mantiene el heartbeat y Ctrl-C lo detiene
-limpiamente. Los componentes que fallan **degradan** en vez de matar la
-app (compruébalo desarmando un componente).
+Qué debe pasar: el runtime arma los ojos sobre el gemelo FakeESP32, mantiene
+el heartbeat y termina limpiamente (exit 0) con Ctrl-C. Con `--verbose`
+imprime al detener el estado final de cada componente (`[off] eyes: shutdown`
+tras un apagado limpio). Un fallo de arranque degrada el componente
+(DEGRADED) en vez de matar la app — compruébalo desarmando un componente.
 
 Opciones útiles: `--verbose` para ver el registro de estados, `--fake`
 selecciona el twin (ADR-0010), `SIRAH_EYES=0` desarma los ojos.
 
 ## 2. Con hardware real
 
-Material (ver [docs/hardware/pin-map.md](hardware/pin-map.md), ADR-0011):
+Material (ver [pin-map.md](hardware/pin-map.md) y ADR-0011):
 
 - ESP32 + PCA9685 (0x40) + rail de 6 servos + fuente externa 5 V con GND
   común (el ESP32 se alimenta por USB solo para lógica/flasheo).
 - Cable USB-UART al dispositivo `/dev/ttyUSB0` (allowlist ADR-0002).
 
-Instala la regla udev para un nombre estable `/dev/sirah-eyes` (opcional;
-por defecto se usa `/dev/ttyUSB0`):
+Una regla udev puede dar un nombre estable `/dev/sirah-eyes` (opcional; por
+defecto se usa `/dev/ttyUSB0`). Sustituye `idVendor`/`idProduct` por los de tu
+puente USB-UART; el ejemplo está en [pin-map.md](hardware/pin-map.md#serial-device-pc--esp32).
 
-```bash
-# udev rule: SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", SYMLINK+="sirah-eyes"
-```
-
-Flasha el firmware (`platform/main.ino`, Arduino IDE o plataforma CLI) y
-arranca:
+Flasha el firmware `firmware/sirah-eyes/platform/main.ino` (Arduino IDE o
+plataforma CLI) y arranca:
 
 ```bash
 uv run sirah-runtime --eyes
@@ -54,7 +52,8 @@ uv run sirah-calibrate validate
 ```
 
 Comprueba que `config/actuators.yaml` espeja sin divergencias
-`firmware/sirah-eyes/config/calibration.h` y `platform/pins.h` (ADR-0009).
+`firmware/sirah-eyes/config/calibration.h` y
+`firmware/sirah-eyes/platform/pins.h` (ADR-0009).
 
 ## 4. Observar la visión (sin ojos)
 
@@ -62,7 +61,8 @@ Con una webcam USB y el modelo YuNet (extra opcional `[perception]`):
 
 ```bash
 uv sync --extra cli --extra serial --extra perception
-uv run sirah-perceive --camera-device /dev/video0 --yunet-model models/face_detection_yunet_2023mar.onnx
+uv run sirah-models yunet --destination models/yunet
+uv run sirah-perceive --camera-device /dev/video0 --yunet-model models/yunet/face_detection_yunet_2023mar.onnx
 ```
 
 `--max-frames N` limita la duración (0 = hasta que la fuente termine) y
@@ -73,10 +73,11 @@ un resumen de frescura: `frames`, `faces` y, si la fuente la instrumenta,
 ojos ni abre el serial (ADR-0009). También acepta `--replay-jsonl` y
 `--replay-video` como fuentes.
 
-Los umbrales del detector YuNet siguen los valores de la clase de OpenCV Zoo
-(score `0.6`, nms `0.3`, top_k `5000`), más permisivos que el default 0.9 de
-`cv2.FaceDetectorYN.create`; caras pequeñas o lejanas aparecen y la capa de
-atención decide si importan.
+`uv run sirah-models` descarga y verifica el modelo por checksum antes de
+guardarlo (Git ignora `models/`). Los umbrales del detector YuNet siguen los
+valores de la clase de OpenCV Zoo (score `0.6`, nms `0.3`, top_k `5000`),
+más permisivos que el default 0.9 de `cv2.FaceDetectorYN.create`; caras
+pequeñas o lejanas aparecen y la capa de atención decide si importan.
 
 ## 5. Problemas frecuentes
 

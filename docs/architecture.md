@@ -1,9 +1,9 @@
-# SIRAH v0.3.1 — Arquitectura
+# Arquitectura
 
-SIRAH = **Sistema Inteligente Robótico de Asistencia Humana** (only in
-Spanish, never translated). This document describes the architecture of the
-runtime físico y del laboratorio conversacional: capas, límites, dirección de
-dependencias y fronteras físicas.
+SIRAH = **Sistema Inteligente Robótico de Asistencia Humana** (acrónimo que
+no se traduce). Este documento describe la arquitectura del runtime físico y
+del laboratorio conversacional: capas, límites, dirección de dependencias y
+fronteras físicas.
 
 ## 1. Sistemas separados
 
@@ -36,16 +36,17 @@ SIRAH mantiene dos sistemas con límites explícitos:
  hardware                               PCA9685 (0x40) → 6 servos (eye X/Y, 4 párpados)
 ```
 
-Dependency direction is always toward stable layers: `cli → runtime →
-(config, hardware)` and `hardware → protocol + config`; `protocol/`,
-`runtime/policies.py` and `transport.py` have zero external dependencies.
+La dirección de dependencias apunta siempre hacia las capas estables:
+`cli → runtime → (config, hardware)` y `hardware → protocol + config`;
+`protocol/`, `runtime/policies.py` y `transport.py` no tienen dependencias
+externas.
 
 ## 3. Frontera estable runtime ↔ ESP32
 
 | | Runtime (PC) | ESP32 firmware (sirah-eyes) |
 |---|---|---|
-| Owns | perception y behavior (Stage 8), policies de seguridad, lifecycle, heartbeat | limits, symmetry, easing, watchdog, blink autónomo, PCA9685 → servos |
-| Never | opera fuera de los límites de `calibration.h`/`actuators.yaml` (gate + firmware, defensa en profundidad); decide personalidad (lab ADR-0007) | — |
+| Es dueño | perception y behavior (Stage 8), policies de seguridad, lifecycle, heartbeat | limits, symmetry, easing, watchdog, blink autónomo, PCA9685 → servos |
+| Nunca | opera fuera de los límites de `calibration.h`/`actuators.yaml` (gate + firmware, defensa en profundidad); decide personalidad (lab ADR-0007) | — |
 
 - PC↔ESP32 = un único transporte, hoy serial (ADR-0002); `EyeTransport`
   permite TCP/BLE/ROS2 sin rediseñar el runtime (ADR-0001).
@@ -145,10 +146,10 @@ micrófono → SoundDeviceAudioSource → Silero VAD local
 
 | Suite | Contenido | Gate |
 |---|---|---|
-| tests/unit | runtime · config · hardware · policies · percepción · atención · arbitraje — 498 en verde hoy | CI siempre |
+| tests/unit | runtime · config · hardware · policies · percepción · atención · arbitraje | CI siempre |
 | tests/contract | corpus golden 91 casos, parser Python ↔ C++ | CI |
 | tests/integration | E2E offline (fake camera → detector → behavior → gate → FakeESP32 → STATE) | CI (desde Stage 8) |
-| tests/replay | datasets grabados (driver a crear; LFS) | CI |
+| tests/replay | datasets grabados (driver en `tests/replay`) | CI |
 | tests/hil | loopback pty + hardware real | SIRAH_HIL=1, fuera de CI |
 
 `FakeESP32` es un twin conductual verificado (ADR-0009/0010): espeja

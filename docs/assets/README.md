@@ -10,7 +10,7 @@ grabación del director; se añaden aquí cuando existan.
 | GIF parpadeo natural + barrido de mirada | P0 | Pendiente |
 | Grabación de terminal: `sirah-runtime --fake --eyes` | P0 | Pendiente |
 | Foto cableado: ESP32 + PCA9685 + rail 6 servos + fuente 5 V | P1 | Pendiente |
-| Screenshot: pytest 169 passed + CI verde | P1 | Pendiente |
+| Screenshot: suite de pytest en verde + CI | P1 | Pendiente |
 | Foto del proceso de calibración (sweep SWX/SWY) | P1 | Pendiente |
 
 Reglas:
