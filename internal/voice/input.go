@@ -351,11 +351,15 @@ func envFloat(getenv func(string) string, name string, fallback float64) float64
 }
 
 func envDuration(getenv func(string) string, name string, fallback time.Duration) time.Duration {
-	value, err := strconv.Atoi(getenv(name))
-	if err != nil || value <= 0 {
-		return fallback
+	if value := strings.TrimSpace(getenv(name)); value != "" {
+		if parsed, err := time.ParseDuration(value); err == nil {
+			return parsed
+		}
+		if number, err := strconv.Atoi(value); err == nil && number > 0 {
+			return time.Duration(number) * time.Millisecond
+		}
 	}
-	return time.Duration(value) * time.Millisecond
+	return fallback
 }
 
 const vadFrameDuration = 10 * time.Millisecond
