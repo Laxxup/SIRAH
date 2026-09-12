@@ -28,23 +28,44 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() (exitCode int) {
 	loadDotEnv(".env")
 	runCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	debug := flag.Bool("debug", false, "show runtime diagnostics")
 	voiceMode := flag.Bool("voice", false, "run hands-free voice mode")
-	preview := flag.Bool("preview", false, "show camera preview window (needs a display, Q quits vision)")
+	preview := flag.Bool("preview", false, "enable camera preview (needs OpenCV and a display; Q exits SIRAH)")
 	selftest := flag.Bool("selftest", false, "run deterministic hardware self-test and exit")
+	flag.Usage = func() {
+		fmt.Fprintln(flag.CommandLine.Output(), "S.I.R.A.H. — Sistema Inteligente Robótico de Asistencia Humana\n\nText mode by default: one stdin line per turn, replies on stdout.\nSet LLM_API_KEY; no audio tools are required for text. Ctrl+C or Ctrl+D exits.\nUse -voice for microphone input and Piper speech (requires GROQ_API_KEY).\n-selftest requires configured ESP32 hardware and a camera; it moves servos.\n\nOptions:")
+		flag.PrintDefaults()
+		fmt.Fprintln(flag.CommandLine.Output(), "\nExamples:\n  CGO_ENABLED=0 go run ./cmd/sirah\n  go run -tags opencv4 ./cmd/sirah -voice -preview")
+	}
 	flag.Parse()
+	if flag.NArg() != 0 {
+		fmt.Fprintf(os.Stderr, "SIRAH: unexpected positional arguments: %q; use -h for help\n", flag.Args())
+		return 2
+	}
 	if *selftest {
-		os.Exit(runSelftest(runCtx, *debug))
+		return runSelftest(runCtx, *debug)
+	}
+	if strings.TrimSpace(os.Getenv("LLM_API_KEY")) == "" {
+		fmt.Fprintln(os.Stderr, "SIRAH: set LLM_API_KEY in .env or the environment to start a conversation")
+		return 1
+	}
+	if *voiceMode && strings.TrimSpace(os.Getenv("GROQ_API_KEY")) == "" {
+		fmt.Fprintln(os.Stderr, "SIRAH: -voice requires GROQ_API_KEY for speech transcription")
+		return 1
 	}
 
 	// Only physically effective actions are announced. nod is accepted by the
 	// firmware but moves nothing yet; follow_person needs a real person
 	// detector (vision only sees faces). Enums and routes stay for the future.
 	actions := []sirah.Action{sirah.ActionBlink, sirah.ActionTired, sirah.ActionCenter, sirah.ActionLookAtUser, sirah.ActionStopLooking}
-	contextData, err := sirah.LoadContext("internal/sirah", actions)
+	contextData, err := sirah.LoadContext("config/persona", actions)
 	if err != nil {
 		fmt.Printf("Context: WARNING - %s\n", err)
 	}
@@ -84,6 +105,7 @@ func main() {
 		}
 	}
 	robot := sirah.Agent{Context: contextData, AvailableActions: actions, LLM: llm, ConversationStore: memory, SessionID: sessionID, UserID: envString("AGENT_USER_ID", "local-user"), HistoryLimit: envInt("AGENT_HISTORY_LIMIT", 12), Timeout: envDuration("LLM_TIMEOUT", 90*time.Second)}
+	robot.WakeupStyle = contextData.WakeupStyle
 	robot.ContextTiming = func(timing sirah.ContextTiming) { contextTiming = timing }
 	var llmDuration time.Duration
 	robot.LLMDuration = func(value time.Duration) { llmDuration = value }
@@ -126,7 +148,8 @@ func main() {
 	}()
 	defer func() { <-targetDone }()
 	visionDone := make(chan struct{})
-	visionEnabled := envBool("VISION_ENABLED", true)
+	visionStarted := false
+	visionEnabled := visionShouldStart(*preview)
 	runVision := func() {
 		defer close(visionDone)
 		if !visionEnabled {
@@ -156,36 +179,50 @@ func main() {
 	}
 	defer func() {
 		stop()
+		if !visionStarted {
+			return
+		}
 		select {
 		case <-visionDone:
 		case <-time.After(2 * time.Second):
 			fmt.Printf("Vision: WARNING - shutdown timeout\n")
 		}
 	}()
-	recorder, err := voice.NewRecorderWithMode(os.Getenv("ARECORD_COMMAND"), os.Getenv("AUDIO_INPUT_DEVICE"), envString("STT_PREPROCESSOR", "raw"))
-	if err != nil {
-		fmt.Printf("Status: CRITICAL - STT preprocessor: %s\n", err)
-		return
-	}
-	defer recorder.Close()
-	transcriber := voice.NewGroq(os.Getenv("GROQ_API_KEY"), os.Getenv("STT_MODEL"), os.Getenv("STT_LANGUAGE"), "", httpClient)
-	transcriber.OnTrace = func(metrics voice.HTTPTraceMetrics) {
-		if *debug {
-			fmt.Printf("[NETWORK GROQ]\ndns_ms=%.1f\nconnect_ms=%.1f\ntls_ms=%.1f\nconnection_reused=%t\nttfb_ms=%.1f\nbody_ms=%.1f\ntotal_ms=%.1f\n", ms(metrics.DNS), ms(metrics.Connect), ms(metrics.TLS), metrics.Reused, ms(metrics.TTFB), ms(metrics.Body), ms(metrics.Total))
+	var recorder voice.Recorder
+	var piper *voice.Piper
+	var pcmPlayer voice.PCMPlayer
+	var transcriber voice.Groq
+	if *voiceMode {
+		recorder, err = voice.NewRecorderWithMode(os.Getenv("ARECORD_COMMAND"), os.Getenv("AUDIO_INPUT_DEVICE"), envString("STT_PREPROCESSOR", "raw"))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Status: CRITICAL - STT preprocessor: %s\n", err)
+			return 1
 		}
+		defer recorder.Close()
+		transcriber = voice.NewGroq(os.Getenv("GROQ_API_KEY"), os.Getenv("STT_MODEL"), os.Getenv("STT_LANGUAGE"), "", httpClient)
+		transcriber.OnTrace = func(metrics voice.HTTPTraceMetrics) {
+			if *debug {
+				fmt.Printf("[NETWORK GROQ]\ndns_ms=%.1f\nconnect_ms=%.1f\ntls_ms=%.1f\nconnection_reused=%t\nttfb_ms=%.1f\nbody_ms=%.1f\ntotal_ms=%.1f\n", ms(metrics.DNS), ms(metrics.Connect), ms(metrics.TLS), metrics.Reused, ms(metrics.TTFB), ms(metrics.Body), ms(metrics.Total))
+			}
+		}
+		piper, err = voice.NewPiper(os.Getenv("PIPER_COMMAND"), os.Getenv("PIPER_SCRIPT"), os.Getenv("PIPER_MODEL"))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Status: CRITICAL - Piper: %s\n", err)
+			return 1
+		}
+		audioCommand := envString("PIPER_AUDIO_COMMAND", "aplay")
+		if _, err := exec.LookPath(audioCommand); err != nil {
+			fmt.Fprintf(os.Stderr, "SIRAH: speech output requires %q; install it or set PIPER_AUDIO_COMMAND: %s\n", audioCommand, err)
+			return 1
+		}
+		if err := piper.Start(runCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "Status: CRITICAL - Piper: %s\n", err)
+			return 1
+		}
+		defer piper.Close()
+		pcmPlayer = voice.NewPCMPlayer(audioCommand, os.Getenv("PIPER_AUDIO_DEVICE"), piper.SampleRate())
+		defer pcmPlayer.Close()
 	}
-	piper, err := voice.NewPiper(os.Getenv("PIPER_COMMAND"), os.Getenv("PIPER_SCRIPT"), os.Getenv("PIPER_MODEL"))
-	if err != nil {
-		fmt.Printf("Status: CRITICAL - Piper: %s\n", err)
-		return
-	}
-	if err := piper.Start(runCtx); err != nil {
-		fmt.Printf("Status: CRITICAL - Piper: %s\n", err)
-		return
-	}
-	defer piper.Close()
-	pcmPlayer := voice.NewPCMPlayer(envString("PIPER_AUDIO_COMMAND", "aplay"), os.Getenv("PIPER_AUDIO_DEVICE"), piper.SampleRate())
-	defer pcmPlayer.Close()
 	body := startBodyController(runCtx, mot, bodyControllerConfig{
 		NaturalBlink: envBool("NATURAL_BLINK_ENABLED", true) && device == serialDevice,
 		OnResult: func(action sirah.Action, natural bool, err error, duration time.Duration) {
@@ -214,6 +251,19 @@ func main() {
 	}()
 
 	turn := func(ctx context.Context, text string, vadDuration, sttDuration time.Duration) {
+		if !*voiceMode {
+			response, err := robot.RespondWithContextStream(ctx, text, sirah.Context{Perception: perception.Load(), PerceptionMaxAge: 2 * time.Second}, func(string) error { return nil })
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "SIRAH: conversation failed: %s\n", err)
+				exitCode = 1
+				return
+			}
+			// Terminal output uses the same marker cleanup, without scheduling
+			// physical actions against a nonexistent PCM playback timeline.
+			fmt.Printf("Robot: %s\n", sirah.CleanTimeline(sirah.ParseTimeline(response.Speech)))
+			_ = robot.RecordTurn(ctx, text, response)
+			return
+		}
 		started := time.Now()
 		// Timeline intercalada: TEXT -> TTS, ACTION -> Motion/Serial en orden.
 		// La posicion se mide en bytes PCM realmente escritos al altavoz
@@ -376,10 +426,12 @@ func main() {
 		}
 		if err != nil {
 			fmt.Printf("Status: CRITICAL - agent: %s\n", err)
+			exitCode = 1
 			return
 		}
 		if err := sirah.ValidateResponse(response); err != nil {
 			fmt.Printf("Status: CRITICAL - invalid response: %s\n", err)
+			exitCode = 1
 			return
 		}
 		rawSpeech := response.Speech
@@ -427,6 +479,7 @@ func main() {
 			close(itemQueue)
 			if err := <-playDone; err != nil {
 				fmt.Printf("Status: CRITICAL - TTS/Speaker: %s\n", err)
+				exitCode = 1
 				return
 			}
 			actionScheduler.MaybeFire(ctx, writtenBytes.Load())
@@ -491,13 +544,22 @@ func main() {
 			return
 		}
 		body.EnableNaturalBlink()
+		fmt.Println("S.I.R.A.H.\nSistema Inteligente Robótico de Asistencia Humana\n\nText mode — type one message per line and press Enter.\nCtrl+C or Ctrl+D to exit.")
+		fmt.Print("> ")
 		reader := bufio.NewScanner(os.Stdin)
 		lines := make(chan string)
+		readErrors := make(chan error, 1)
 		go func() {
 			defer close(lines)
 			for reader.Scan() {
-				lines <- strings.TrimSpace(reader.Text())
+				select {
+				case lines <- strings.TrimSpace(reader.Text()):
+				case <-runCtx.Done():
+					readErrors <- nil
+					return
+				}
 			}
+			readErrors <- reader.Err()
 		}()
 		for {
 			select {
@@ -505,28 +567,40 @@ func main() {
 				return
 			case text, ok := <-lines:
 				if !ok {
+					if err := <-readErrors; err != nil {
+						fmt.Fprintf(os.Stderr, "SIRAH: reading stdin: %s\n", err)
+						exitCode = 1
+					}
 					return
 				}
 				if text != "" {
 					turn(runCtx, text, 0, 0)
 				}
+				fmt.Print("> ")
 			}
 		}
 	}
 	if *preview && visionEnabled {
 		// OpenCV highgui pumps its window on the calling thread: vision
 		// owns the main thread here and interaction runs behind it.
+		interactionDone := make(chan struct{})
 		go func() {
+			defer close(interactionDone)
 			defer stop()
 			interact()
 		}()
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
+		visionStarted = true
 		runVision()
-		return
+		stop()
+		<-interactionDone
+		return exitCode
 	}
+	visionStarted = true
 	go runVision()
 	interact()
+	return exitCode
 }
 
 func configuredWakeupText() string {
@@ -763,9 +837,7 @@ func runVoice(parent context.Context, turn func(context.Context, string, time.Du
 			if ctx.Err() != nil {
 				return
 			}
-			if debug {
-				fmt.Printf("Voice: WARNING - %s\n", err)
-			}
+			fmt.Printf("Voice: WARNING - %s\n", err)
 			continue
 		}
 		sttStarted := time.Now()
@@ -965,6 +1037,10 @@ func envInt(name string, fallback int) int {
 		return value
 	}
 	return fallback
+}
+
+func visionShouldStart(preview bool) bool {
+	return preview || envBool("VISION_ENABLED", false)
 }
 
 func envBool(name string, fallback bool) bool {

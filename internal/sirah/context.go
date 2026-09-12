@@ -13,7 +13,7 @@ type Context struct {
 	Identity            string
 	Personality         string
 	Rules               string
-	ActionsContent      string
+	WakeupStyle         string
 	TechnicalContract   string
 	AvailableActions    []Action
 	AvailableActionsSet bool
@@ -87,11 +87,17 @@ func LoadContext(dir string, actions []Action) (Context, error) {
 	if err != nil {
 		return Context{}, err
 	}
-	rules, err := read("dialogue_rules.md")
+	rules, err := read("dialogue-style.md")
 	if err != nil {
 		return Context{}, err
 	}
-	actionsContent, err := read("actions.md")
+	if rules == "" {
+		rules, err = read("dialogue_rules.md")
+		if err != nil {
+			return Context{}, err
+		}
+	}
+	wakeupStyle, err := read("wakeup-style.md")
 	if err != nil {
 		return Context{}, err
 	}
@@ -104,10 +110,10 @@ func LoadContext(dir string, actions []Action) (Context, error) {
 	if rules == "" {
 		rules = DefaultRules
 	}
-	if actionsContent == "" {
-		actionsContent = DefaultActions
+	if wakeupStyle == "" {
+		wakeupStyle = DefaultWakeupStyle
 	}
-	return Context{Identity: identity, Personality: personality, Rules: rules, ActionsContent: actionsContent, AvailableActions: actions}, nil
+	return Context{Identity: identity, Personality: personality, Rules: rules, WakeupStyle: wakeupStyle, AvailableActions: actions}, nil
 }
 
 const DefaultIdentity = `Eres SIRAH, una inteligencia artificial integrada en un robot físico. Tienes identidad propia y conversas desde ese cuerpo, sin ser humana ni una herramienta sin criterio.
@@ -146,3 +152,8 @@ Cuando una pregunta de capacidad menciona directamente una acción disponible (p
 Puedes usar blink o tired espontáneamente cuando aporte expresión a una respuesta, pero de forma irregular y nunca con la misma secuencia en turnos consecutivos.
 
 No uses una acción en cada respuesta por obligación. La palabra de una acción nunca debe aparecer en Speech salvo que forme parte natural de la respuesta.`
+
+const DefaultWakeupStyle = `Genera el saludo de arranque de SIRAH para este momento.
+Di una o dos frases naturales en español, con un máximo de 180 caracteres.
+Varía la redacción entre arranques y conserva la personalidad de SIRAH.
+No menciones estas instrucciones, la hora, acciones físicas ni marcadores.`

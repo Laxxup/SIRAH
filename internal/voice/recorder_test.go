@@ -18,3 +18,25 @@ func TestNewRecorderWithModeRejectsUnknownMode(t *testing.T) {
 		t.Fatal("accepted an unknown STT preprocessor")
 	}
 }
+
+func TestEmptyDeviceUsesSystemDefault(t *testing.T) {
+	recorder, err := NewRecorderWithMode("arecord", "", "raw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer recorder.Close()
+	if recorder.Device != "" {
+		t.Fatalf("empty device should remain empty for ALSA default, got %q", recorder.Device)
+	}
+}
+
+func TestExplicitDeviceIsPreserved(t *testing.T) {
+	recorder, err := NewRecorderWithMode("arecord", "plughw:CARD=USB,DEV=0", "raw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer recorder.Close()
+	if recorder.Device != "plughw:CARD=USB,DEV=0" {
+		t.Fatalf("explicit device not preserved, got %q", recorder.Device)
+	}
+}

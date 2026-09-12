@@ -29,6 +29,10 @@ func runSelftest(parent context.Context, debug bool) int {
 		return true
 	}
 
+	if os.Getenv("FIRMWARE_SERIAL") == "" {
+		fmt.Println("SELFTEST serial: FAIL - set FIRMWARE_SERIAL to the ESP32 serial port before running -selftest")
+		return 1
+	}
 	serialFile := openSerial(os.Getenv("FIRMWARE_SERIAL"), envInt("FIRMWARE_BAUD", 115200))
 	if serialFile == nil {
 		fmt.Printf("SELFTEST serial: FAIL - cannot open %s\n", os.Getenv("FIRMWARE_SERIAL"))

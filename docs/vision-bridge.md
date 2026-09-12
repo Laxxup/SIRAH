@@ -55,10 +55,11 @@ used here exists in both major versions:
 make check-opencv4
 ```
 
-Ese target ejecuta tests, race detector, vet y build con OpenCV 4. La
-configuracion OpenCV 5 es la ruta por defecto del codigo, pero requiere que
-`pkg-config --modversion opencv5` funcione en el host. Para omitir Vision y CGO,
-usa `make test-headless` y `make vet-headless`.
+Ese target ejecuta tests, race detector, vet y build con OpenCV 4. OpenCV 4
+es la variante actualmente cubierta por CI. El codigo fuente usa OpenCV 5
+como default (`pkg-config opencv5`), pero esa ruta no esta validada
+automaticamente en CI. Para omitir Vision y CGO, usa `make test-headless` y
+`make vet-headless`.
 
 `cmd/sirah` accepts `-preview` to show the same OpenCV debug window while
 the robot runs (needs a display; Q quits the vision loop). The camera can
@@ -91,10 +92,12 @@ codigo.
 
 ## Runtime integration
 
-The main SIRAH process starts Vision as an independent camera worker. The
-optional `-preview` flag enables its HighGUI window. Vision is enabled by default and can be disabled with
-`VISION_ENABLED=false`; `VISION_MODEL` selects the model path and
-`VISION_CAMERA_INDEX` selects the V4L2 index.
+The main SIRAH process starts Vision as an independent camera worker when
+explicitly enabled. Set `VISION_ENABLED=true` to activate it, or use the
+`-preview` flag to activate it and open its HighGUI debug window. The
+`-preview` flag takes precedence over `VISION_ENABLED=false`.
+`VISION_MODEL` selects the model path and `VISION_CAMERA_INDEX` selects the
+V4L2 index.
 
 The worker publishes a mutex-protected latest `PerceptionSnapshot` for context
 construction and a capacity-one latest-target channel for Motion. A short face

@@ -201,6 +201,27 @@ func TestGenerateCreativeWakeupRejectsActions(t *testing.T) {
 	}
 }
 
+func TestGenerateCreativeWakeupUsesCustomStyle(t *testing.T) {
+	llm := &creativeWakeupLLM{response: sirah.Response{Speech: "Saludo personalizado."}}
+	agent := sirah.Agent{
+		LLM:         llm,
+		WakeupStyle: "Escribe un saludo muy corto y directo.",
+	}
+	text, err := generateCreativeWakeup(context.Background(), agent, time.Unix(1, 2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text != "Saludo personalizado." {
+		t.Fatalf("text = %q", text)
+	}
+	if !strings.Contains(llm.context.UserInput, "Escribe un saludo muy corto y directo.") {
+		t.Fatalf("wake-up prompt missing custom style: %q", llm.context.UserInput)
+	}
+	if !strings.Contains(llm.context.UserInput, "1970-01-01T00:00:01.000000002Z") {
+		t.Fatalf("wake-up prompt lacks unique startup id: %q", llm.context.UserInput)
+	}
+}
+
 func TestBodyStopsWithContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	body := startBodyController(ctx, &bodyTestMotion{}, bodyControllerConfig{NaturalBlink: true})

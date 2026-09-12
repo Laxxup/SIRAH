@@ -44,7 +44,7 @@ func (ContextBuilder) Build(c Context) []ContextBlock {
 	appendBlock(ContextIdentity, c.Identity)
 	appendBlock(ContextPersonality, c.Personality)
 	appendBlock(ContextRules, c.Rules)
-	appendBlock(ContextActionDefinitions, c.ActionsContent)
+	appendBlock(ContextActionDefinitions, DefaultActions)
 	if c.AvailableActionsSet || len(c.AvailableActions) > 0 {
 		actions := make([]string, len(c.AvailableActions))
 		for i, action := range c.AvailableActions {

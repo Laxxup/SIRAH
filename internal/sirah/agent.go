@@ -37,6 +37,8 @@ type Agent struct {
 	Personality string
 	// DialogueRules proviene de dialogue_rules.md.
 	DialogueRules string
+	// WakeupStyle proviene de wakeup-style.md.
+	WakeupStyle string
 	// State es el estado interno del agente.
 	State State
 	// Memory es la memoria de largo plazo.
@@ -49,7 +51,7 @@ type Agent struct {
 	ConversationWarning func(error)
 	ContextTiming       func(ContextTiming)
 	LLMDuration         func(time.Duration)
-	// AvailableActions documenta qué acciones puede ejecutar (ver actions.md).
+	// AvailableActions documenta qué acciones puede ejecutar (ver DefaultActions en context.go).
 	AvailableActions  []Action
 	LLM               LLM
 	Context           Context
@@ -146,6 +148,9 @@ func (a Agent) BuildContext(ctx context.Context, input string) Context {
 	}
 	if a.DialogueRules != "" {
 		contextData.Rules = a.DialogueRules
+	}
+	if a.WakeupStyle != "" {
+		contextData.WakeupStyle = a.WakeupStyle
 	}
 	contextData.State = a.State
 	if a.ConversationStore != nil {

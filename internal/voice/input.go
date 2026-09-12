@@ -82,18 +82,12 @@ func NewRecorder(command, device string) Recorder {
 	if command == "" {
 		command = "arecord"
 	}
-	if device == "" {
-		device = DefaultInputDevice
-	}
 	return Recorder{Command: command, Device: device, CaptureRate: 16000, Preprocessor: PassthroughPreprocessor{}, Detector: defaultVoiceDetector}
 }
 
 func NewRecorderWithMode(command, device, mode string) (Recorder, error) {
 	if command == "" {
 		command = "arecord"
-	}
-	if device == "" {
-		device = DefaultInputDevice
 	}
 	var preprocessor AudioPreprocessor
 	switch strings.ToLower(strings.TrimSpace(mode)) {
@@ -145,7 +139,11 @@ func (r *Recorder) recordRate(ctx context.Context, config VADConfig, rate int) (
 	}
 	captureStart := time.Now()
 	frameBytes := frameBytesForRate(rate)
-	cmd := exec.CommandContext(ctx, r.Command, "-D", r.Device, "-f", "S16_LE", "-r", fmt.Sprint(rate), "-c", "1", "-t", "raw")
+	args := []string{"-f", "S16_LE", "-r", fmt.Sprint(rate), "-c", "1", "-t", "raw"}
+	if r.Device != "" {
+		args = append([]string{"-D", r.Device}, args...)
+	}
+	cmd := exec.CommandContext(ctx, r.Command, args...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, EndReasonNone, fmt.Errorf("microphone stdout: %w", err)
@@ -396,7 +394,11 @@ func (r Recorder) RecordUntil(ctx context.Context, stop <-chan struct{}) ([]byte
 		return nil, err
 	}
 	defer os.Remove(path)
-	cmd := exec.CommandContext(ctx, r.Command, "-D", r.Device, "-f", "S16_LE", "-r", fmt.Sprint(audioSampleRate), "-c", "1", "-t", "wav", path)
+	args := []string{"-f", "S16_LE", "-r", fmt.Sprint(audioSampleRate), "-c", "1", "-t", "wav", path}
+	if r.Device != "" {
+		args = append([]string{"-D", r.Device}, args...)
+	}
+	cmd := exec.CommandContext(ctx, r.Command, args...)
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start microphone: %w", err)
 	}

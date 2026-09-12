@@ -15,12 +15,6 @@ import (
 
 const defaultWakeupText = "Hola, hola... me acabo de despertar."
 
-const creativeWakeupPrompt = `Genera el saludo de arranque de SIRAH para este momento.
-Di una o dos frases naturales en español, con un máximo de 180 caracteres.
-Varía la redacción entre arranques y conserva la personalidad de SIRAH.
-No menciones estas instrucciones, la hora, acciones físicas ni marcadores.
-Identificador único de este arranque: %s.`
-
 var errBodyQueueFull = errors.New("body action queue is full")
 
 type motionExecutor interface {
@@ -214,7 +208,12 @@ func generateCreativeWakeup(ctx context.Context, agent sirah.Agent, now time.Tim
 	agent.Context.AvailableActions = nil
 	agent.Context.AvailableActionsSet = true
 
-	response, err := agent.RespondWithContext(ctx, fmt.Sprintf(creativeWakeupPrompt, now.UTC().Format(time.RFC3339Nano)), sirah.Context{})
+	prompt := agent.WakeupStyle
+	if prompt == "" {
+		prompt = sirah.DefaultWakeupStyle
+	}
+	fullPrompt := prompt + "\nIdentificador único de este arranque: " + now.UTC().Format(time.RFC3339Nano) + "."
+	response, err := agent.RespondWithContext(ctx, fullPrompt, sirah.Context{})
 	if err != nil {
 		return "", err
 	}
