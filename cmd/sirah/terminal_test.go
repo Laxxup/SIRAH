@@ -150,8 +150,8 @@ func TestCLIInitializationAndUsage(t *testing.T) {
 		code    int
 		message string
 	}{
-		{"help", []string{"--help"}, nil, 0, "Examples:"},
-		{"short help", []string{"-h"}, nil, 0, "Text mode"},
+		{"help", []string{"--help"}, nil, 0, "Ejemplos:"},
+		{"short help", []string{"-h"}, nil, 0, "Modo texto"},
 		{"positional", []string{"hello"}, nil, 2, "unexpected positional"},
 		{"missing key", nil, nil, 1, "LLM_API_KEY"},
 		{"voice key", []string{"-voice"}, []string{"LLM_API_KEY=test"}, 1, "GROQ_API_KEY"},

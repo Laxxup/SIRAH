@@ -35,14 +35,14 @@ func run() (exitCode int) {
 	loadDotEnv(".env")
 	runCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	debug := flag.Bool("debug", false, "show runtime diagnostics")
-	voiceMode := flag.Bool("voice", false, "run hands-free voice mode")
-	preview := flag.Bool("preview", false, "enable camera preview (needs OpenCV and a display; Q exits SIRAH)")
-	selftest := flag.Bool("selftest", false, "run deterministic hardware self-test and exit")
+	debug := flag.Bool("debug", false, "mostrar información de depuración")
+	voiceMode := flag.Bool("voice", false, "activar el modo de voz manos libres")
+	preview := flag.Bool("preview", false, "mostrar la vista previa de la cámara (requiere OpenCV y una pantalla; Q cierra SIRAH)")
+	selftest := flag.Bool("selftest", false, "comprobar el hardware y salir")
 	flag.Usage = func() {
-		fmt.Fprintln(flag.CommandLine.Output(), "S.I.R.A.H. — Sistema Inteligente Robótico de Asistencia Humana\n\nText mode by default: one stdin line per turn, replies on stdout.\nSet LLM_API_KEY; no audio tools are required for text. Ctrl+C or Ctrl+D exits.\nUse -voice for microphone input and Piper speech (requires GROQ_API_KEY).\n-selftest requires configured ESP32 hardware and a camera; it moves servos.\n\nOptions:")
+		fmt.Fprintln(flag.CommandLine.Output(), "S.I.R.A.H. — Sistema Inteligente Robótico de Asistencia Humana\n\nModo texto por defecto: escribe un mensaje por línea en stdin (entrada estándar); las respuestas se muestran en stdout (salida estándar).\nConfigura LLM_API_KEY; el modo texto no requiere herramientas de audio.\nCtrl+C o Ctrl+D para salir.\n\nUsa -voice para el modo de voz manos libres con micrófono y Piper\n(requiere GROQ_API_KEY).\n\n-selftest requiere un ESP32 configurado y una cámara; mueve los servos.\n\nOpciones:")
 		flag.PrintDefaults()
-		fmt.Fprintln(flag.CommandLine.Output(), "\nExamples:\n  CGO_ENABLED=0 go run ./cmd/sirah\n  go run ./cmd/sirah -voice -preview\n  go run -tags opencv5 ./cmd/sirah -voice -preview   # OpenCV 5 opt-in")
+		fmt.Fprintln(flag.CommandLine.Output(), "\nEjemplos:\n  CGO_ENABLED=0 go run ./cmd/sirah\n  go run ./cmd/sirah -voice -preview\n  go run -tags opencv5 ./cmd/sirah -voice -preview   # OpenCV 5 opcional")
 	}
 	flag.Parse()
 	if flag.NArg() != 0 {
