@@ -29,8 +29,8 @@ jobs:
       - name: Run headless checks
         run: make check
 
-  opencv4:
-    name: Go / OpenCV 4
+  vision-opencv:
+    name: Go / OpenCV
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -47,8 +47,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends g++ libopencv-dev make pkg-config
-      - name: Run OpenCV 4 checks
-        run: make check-opencv4
+      - name: Run OpenCV checks
+        run: make check-opencv
 
   firmware:
     name: Firmware / ESP32

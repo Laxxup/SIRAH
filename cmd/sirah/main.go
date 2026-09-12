@@ -42,7 +42,7 @@ func run() (exitCode int) {
 	flag.Usage = func() {
 		fmt.Fprintln(flag.CommandLine.Output(), "S.I.R.A.H. — Sistema Inteligente Robótico de Asistencia Humana\n\nText mode by default: one stdin line per turn, replies on stdout.\nSet LLM_API_KEY; no audio tools are required for text. Ctrl+C or Ctrl+D exits.\nUse -voice for microphone input and Piper speech (requires GROQ_API_KEY).\n-selftest requires configured ESP32 hardware and a camera; it moves servos.\n\nOptions:")
 		flag.PrintDefaults()
-		fmt.Fprintln(flag.CommandLine.Output(), "\nExamples:\n  CGO_ENABLED=0 go run ./cmd/sirah\n  go run -tags opencv4 ./cmd/sirah -voice -preview")
+		fmt.Fprintln(flag.CommandLine.Output(), "\nExamples:\n  CGO_ENABLED=0 go run ./cmd/sirah\n  go run ./cmd/sirah -voice -preview\n  go run -tags opencv5 ./cmd/sirah -voice -preview   # OpenCV 5 opt-in")
 	}
 	flag.Parse()
 	if flag.NArg() != 0 {

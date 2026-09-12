@@ -1,6 +1,11 @@
-//go:build linux && cgo && !opencv4
+//go:build linux && cgo && opencv5
 
 package vision
+
+// Opt-in OpenCV 5 path (pkg-config opencv5). The YuNet bridge API used here
+// exists in both OpenCV 4 and OpenCV 5. Build with: go build -tags opencv5 ./...
+// OpenCV 4 is the default (vision_cgo_opencv4.go); only the build tag and
+// pkg-config name differ.
 
 /*
 #cgo pkg-config: opencv5
