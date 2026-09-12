@@ -1,6 +1,6 @@
 # Vision Bridge
 
-Vision usa una frontera C++ estrecha compatible con OpenCV 5 y OpenCV 4:
+Vision usa una frontera C++ estrecha compatible con OpenCV 4 y OpenCV 5:
 
 `Go -> internal/vision -> C API -> OpenCV -> V4L2 USB camera / YuNet`
 
@@ -39,27 +39,33 @@ destroys HighGUI windows before releasing the detector and camera.
 
 Required packages:
 
-- OpenCV 5 development headers and libraries, including `core`, `objdetect`, and `videoio`.
+- OpenCV 4 development headers and libraries, including `core`, `objdetect`, and `videoio`.
 - `pkg-config`.
 - A C++11 compiler and Go with CGO enabled.
 - Linux V4L2 support and permissions for the USB camera.
 
-The bridge uses `pkg-config opencv5`; it does not hardcode include or library
-paths. On Raspberry Pi OS ARM64, install the equivalent OpenCV 5 development
-package built for ARM64 and ensure `pkg-config --modversion opencv5` works.
-On systems with OpenCV 4 only (e.g. Fedora `opencv-devel`, verified with 4.13
-including YuNet), build and test with `-tags opencv4` instead; the bridge API
-used here exists in both major versions:
+The bridge uses `pkg-config opencv4` by default; it does not hardcode include
+or library paths. On Raspberry Pi OS ARM64, install the equivalent OpenCV 4
+development package built for ARM64 and ensure `pkg-config --modversion opencv4`
+works. The bridge API used here exists in both major versions:
 
 ```sh
-make check-opencv4
+make check-opencv
 ```
 
-Ese target ejecuta tests, race detector, vet y build con OpenCV 4. OpenCV 4
-es la variante actualmente cubierta por CI. El codigo fuente usa OpenCV 5
-como default (`pkg-config opencv5`), pero esa ruta no esta validada
-automaticamente en CI. Para omitir Vision y CGO, usa `make test-headless` y
-`make vet-headless`.
+Ese target ejecuta tests, race detector, vet y build con OpenCV 4, la ruta por
+defecto y la variante actualmente cubierta por CI. Para omitir Vision y CGO usa
+`make test-headless` y `make vet-headless`.
+
+OpenCV 5 es opt-in mediante el build tag `opencv5`; en sistemas con OpenCV 5
+solo (o ambas), compila y valida con:
+
+```sh
+make check-opencv5
+```
+
+Los targets `*-opencv5` pasan `-tags opencv5` y el bridge resuelve
+`pkg-config opencv5`. Esa ruta no esta validada automaticamente en CI.
 
 `cmd/sirah` accepts `-preview` to show the same OpenCV debug window while
 the robot runs (needs a display; Q quits the vision loop). The camera can
@@ -82,12 +88,15 @@ Si es necesario restaurar el archivo desde upstream, la URL fijada es:
 curl -L -o models/face_detection_yunet_2023mar.onnx \
   https://github.com/opencv/opencv_zoo/raw/f12e12798e8314f7c074a6656816c048dcc95b7a/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
 make verify-model
-go run -tags opencv4 ./cmd/vision --debug
+go run ./cmd/vision --debug
+
+# Con OpenCV 5 instalado (opt-in):
+go run -tags opencv5 ./cmd/vision --debug
 ```
 
 The normal Go tests do not open a camera. The manual command uses camera index
 0, V4L2, 640x480, and a requested capture rate of 15 FPS. Esta prueba manual de
-camara no forma parte de `make check-opencv4` ni es requisito para publicar el
+camara no forma parte de `make check-opencv` ni es requisito para publicar el
 codigo.
 
 ## Runtime integration

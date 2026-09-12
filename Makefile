@@ -1,6 +1,7 @@
-.PHONY: fmt-check mod-check test-headless vet-headless test-opencv4 \
-	test-race-opencv4 vet-opencv4 build-opencv4 check-generated \
-	verify-model test-firmware-host check-firmware check check-opencv4
+.PHONY: fmt-check mod-check test-headless vet-headless test-opencv \
+	test-race-opencv vet-opencv build-opencv test-opencv5 vet-opencv5 \
+	build-opencv5 check-generated verify-model test-firmware-host \
+	check-firmware check check-opencv check-opencv5
 
 fmt-check:
 	@test -z "$$(gofmt -l $$(git ls-files '*.go'))" || { \
@@ -18,17 +19,26 @@ test-headless:
 vet-headless:
 	CGO_ENABLED=0 go vet -mod=readonly ./...
 
-test-opencv4:
-	CGO_ENABLED=1 go test -tags opencv4 -buildvcs=false -mod=readonly -p 1 ./...
+test-opencv:
+	CGO_ENABLED=1 go test -buildvcs=false -mod=readonly -p 1 ./...
 
-test-race-opencv4:
-	CGO_ENABLED=1 go test -race -tags opencv4 -buildvcs=false -mod=readonly -p 1 ./...
+test-race-opencv:
+	CGO_ENABLED=1 go test -race -buildvcs=false -mod=readonly -p 1 ./...
 
-vet-opencv4:
-	CGO_ENABLED=1 go vet -tags opencv4 -mod=readonly ./...
+vet-opencv:
+	CGO_ENABLED=1 go vet -mod=readonly ./...
 
-build-opencv4:
-	CGO_ENABLED=1 go build -tags opencv4 -buildvcs=false -mod=readonly ./cmd/sirah ./cmd/vision
+build-opencv:
+	CGO_ENABLED=1 go build -buildvcs=false -mod=readonly ./cmd/sirah ./cmd/vision
+
+test-opencv5:
+	CGO_ENABLED=1 go test -tags opencv5 -buildvcs=false -mod=readonly -p 1 ./...
+
+vet-opencv5:
+	CGO_ENABLED=1 go vet -tags opencv5 -mod=readonly ./...
+
+build-opencv5:
+	CGO_ENABLED=1 go build -tags opencv5 -buildvcs=false -mod=readonly ./cmd/sirah ./cmd/vision
 
 check-generated:
 	python3 scripts/generate_eyes_calibration.py --check
@@ -53,4 +63,6 @@ check-firmware:
 
 check: fmt-check mod-check test-headless vet-headless check-generated verify-model test-firmware-host
 
-check-opencv4: test-opencv4 test-race-opencv4 vet-opencv4 build-opencv4
+check-opencv: test-opencv test-race-opencv vet-opencv build-opencv
+
+check-opencv5: test-opencv5 vet-opencv5 build-opencv5

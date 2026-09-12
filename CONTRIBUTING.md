@@ -18,7 +18,7 @@ No necesitas cambiar `module github.com/Laxxup/SIRAH` para contribuir mediante P
 | Tipo de cambio | Verificación |
 |---|---|
 | Go / general | `make check` |
-| Vision / OpenCV | `make check-opencv4` |
+| Vision / OpenCV | `make check-opencv` |
 | Firmware | `make check-firmware` |
 | Persona / prompts | `make check` |
 

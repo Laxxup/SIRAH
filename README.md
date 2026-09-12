@@ -74,15 +74,21 @@ Ver [docs/piper.md](docs/piper.md) para instalar Piper y colocar el modelo.
 
 ### Para visión (`VISION_ENABLED=true` o `-preview`)
 
-- OpenCV 4 o 5 con headers de desarrollo
+- OpenCV 4 con headers de desarrollo (ruta por defecto)
 - `pkg-config`, compilador C++11 y CGO habilitado
 - Cámara USB con V4L2 y permisos de acceso
 - Display gráfico si usas `-preview`
 
-En Ubuntu 24.04 la ruta comprobada es OpenCV 4 con el tag de build:
+La ruta por defecto es OpenCV 4:
 
 ```sh
-go run -tags opencv4 ./cmd/sirah -preview
+go run ./cmd/sirah -preview
+```
+
+OpenCV 5 es opcional mediante el build tag `opencv5`:
+
+```sh
+go run -tags opencv5 ./cmd/sirah -preview
 ```
 
 ### Para firmware/hardware
@@ -118,7 +124,7 @@ SIRAH espera un endpoint compatible con OpenAI (`/chat/completions`, Bearer toke
 Visión está **desactivada por defecto**. Para activarla:
 
 ```sh
-VISION_ENABLED=true go run -tags opencv4 ./cmd/sirah
+VISION_ENABLED=true go run ./cmd/sirah
 ```
 
 O usa `-preview` para abrir también la ventana de depuración de OpenCV.
@@ -140,7 +146,7 @@ Cada línea de stdin es un turno. La respuesta aparece en stdout.
 ### Modo voz
 
 ```sh
-go run -tags opencv4 ./cmd/sirah -voice
+go run ./cmd/sirah -voice
 ```
 
 SIRAH escucha continuamente, transcribe, responde y habla.
@@ -148,7 +154,7 @@ SIRAH escucha continuamente, transcribe, responde y habla.
 ### Preview de visión
 
 ```sh
-go run -tags opencv4 ./cmd/sirah -preview
+go run ./cmd/sirah -preview
 ```
 
 Muestra ventana de cámara con detecciones. Q cierra.
@@ -156,7 +162,7 @@ Muestra ventana de cámara con detecciones. Q cierra.
 ### Self-test de hardware
 
 ```sh
-go run -tags opencv4 ./cmd/sirah -selftest
+go run ./cmd/sirah -selftest
 ```
 
 Requiere ESP32 configurado en `FIRMWARE_SERIAL` y una cámara. Mueve servos; no lo ejecutes sin hardware conectado.
@@ -172,16 +178,17 @@ Imprime métricas de red, tiempos y diagnósticos. No uses `-debug` con datos pe
 ## Desarrollo y validación
 
 ```sh
-make check           # tests headless, vet, calibración, checksum YuNet, tests C++ host
-make check-opencv4   # tests + race + vet + build con OpenCV 4
-make check-firmware  # compilación Arduino del sketch de producción
+make check          # tests headless, vet, calibración, checksum YuNet, tests C++ host
+make check-opencv   # tests + race + vet + build con OpenCV 4 (ruta por defecto)
+make check-opencv5  # tests + vet + build con OpenCV 5 (-tags opencv5, opcional)
+make check-firmware # compilación Arduino del sketch de producción
 ```
 
 `make check` no abre cámara, micrófono, altavoz ni puerto serial. Es seguro ejecutarlo en cualquier máquina.
 
 ## Limitaciones conocidas
 
-- **OpenCV 5** es la ruta por defecto en el código fuente, pero CI solo prueba **OpenCV 4** en Ubuntu 24.04. La ruta OpenCV 5 no está verificada automáticamente.
+- **OpenCV 4** es la ruta por defecto y la única validada por CI. **OpenCV 5** es opt-in mediante `-tags opencv5` y actualmente no se verifica automáticamente.
 - **Piper TTS** requiere un modelo de voz externo (`.onnx` + `.onnx.json`). El repositorio no distribuye modelos de voz por cuestiones de licencia y tamaño.
 - **Pruebas físicas (HIL)** del firmware y de la pose `tired` son manuales y pendientes. No bloquean la compilación ni los tests host.
 - **Visión** es opt-in y requiere configuración explícita.
