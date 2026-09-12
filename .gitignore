@@ -1,0 +1,40 @@
+.venv-edge-tts/
+.venv-piper/
+.env
+.env.fish
+.env.*
+!.env.example
+.tasks/
+
+# Python and test artifacts.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.out
+
+# Local editor and OS metadata.
+.idea/
+.vscode/
+.DS_Store
+models/voices/*.onnx
+models/voices/*.onnx.json
+
+# Local STT corpora and evaluation outputs.
+stt-corpus-*/
+*.wav
+benchmarks/
+benchmark-results/
+
+# Native builds and generated artifacts.
+build/
+build-*/
+target/
+bin/
+# Compiled binaries at repo root only (anchored: must not match cmd/ or internal/ package dirs).
+/sirah
+/vision
+*.log
+models/deepfilternet/
+models/*.tar.gz

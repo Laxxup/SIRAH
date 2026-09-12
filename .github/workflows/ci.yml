@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go-headless:
+    name: Go / headless
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Install host verification tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends g++ make python3
+      - name: Run headless checks
+        run: make check
+
+  opencv4:
+    name: Go / OpenCV 4
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Install OpenCV build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends g++ libopencv-dev make pkg-config
+      - name: Run OpenCV 4 checks
+        run: make check-opencv4
+
+  firmware:
+    name: Firmware / ESP32
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Arduino CLI 1.5.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          install_dir="$(mktemp -d "$RUNNER_TEMP/arduino-cli.XXXXXX")"
+          archive="$install_dir/arduino-cli_1.5.1_Linux_64bit.tar.gz"
+          curl --fail --location --silent --show-error \
+            --output "$archive" \
+            https://github.com/arduino/arduino-cli/releases/download/v1.5.1/arduino-cli_1.5.1_Linux_64bit.tar.gz
+          printf '%s  %s\n' \
+            '28a8e119c498a25607821c36cb2dc49e8463941b261a0d99091baa7bc692dd2b' \
+            "$archive" | sha256sum --check --strict -
+          tar --extract --gzip --file "$archive" --directory "$install_dir" arduino-cli
+          version_output="$("$install_dir/arduino-cli" version)"
+          printf '%s\n' "$version_output"
+          case "$version_output" in
+            *"Version: 1.5.1"*) ;;
+            *) exit 1 ;;
+          esac
+          printf '%s\n' "$install_dir" >> "$GITHUB_PATH"
+      - name: Install pinned ESP32 platform and libraries
+        run: |
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32@3.3.11 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli lib install "Adafruit BusIO@1.17.4"
+          arduino-cli lib install "Adafruit PWM Servo Driver Library@3.0.3"
+      - name: Compile production firmware
+        run: make check-firmware
