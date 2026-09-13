@@ -118,6 +118,21 @@ func TestResolveCustomInvalidFallsBackToDefault(t *testing.T) {
 	}
 }
 
+func TestResolveDefaultInvalidFallsBackToBuiltIn(t *testing.T) {
+	dir := t.TempDir()
+	// Write an invalid default file
+	os.WriteFile(filepath.Join(dir, "default.persona.json"), []byte(`{"schema":"wrong"}`), 0644)
+
+	loader := NewPersonaLoader(dir, dir)
+	p, warnings := loader.Resolve("nonexistent")
+	if p.Schema != personaSchema {
+		t.Fatalf("expected built-in fallback, got schema %q", p.Schema)
+	}
+	if len(warnings) != 2 {
+		t.Fatalf("expected 2 warnings (missing profile + invalid default), got %d: %v", len(warnings), warnings)
+	}
+}
+
 func TestValidateSchemaWrong(t *testing.T) {
 	p := Persona{Schema: "wrong", Version: personaVersion}
 	err := validatePersona(&p)
