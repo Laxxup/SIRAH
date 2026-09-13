@@ -204,8 +204,10 @@ func TestGenerateCreativeWakeupRejectsActions(t *testing.T) {
 func TestGenerateCreativeWakeupUsesCustomStyle(t *testing.T) {
 	llm := &creativeWakeupLLM{response: sirah.Response{Speech: "Saludo personalizado."}}
 	agent := sirah.Agent{
-		LLM:         llm,
-		WakeupStyle: "Escribe un saludo muy corto y directo.",
+		LLM: llm,
+		Persona: sirah.Persona{
+			WakeupStyle: "Escribe un saludo muy corto y directo.",
+		},
 	}
 	text, err := generateCreativeWakeup(context.Background(), agent, time.Unix(1, 2))
 	if err != nil {

@@ -208,9 +208,9 @@ func generateCreativeWakeup(ctx context.Context, agent sirah.Agent, now time.Tim
 	agent.Context.AvailableActions = nil
 	agent.Context.AvailableActionsSet = true
 
-	prompt := agent.WakeupStyle
+	prompt := agent.Persona.WakeupStyle
 	if prompt == "" {
-		prompt = sirah.DefaultWakeupStyle
+		prompt = sirah.BuiltInPersona().WakeupStyle
 	}
 	fullPrompt := prompt + "\nIdentificador único de este arranque: " + now.UTC().Format(time.RFC3339Nano) + "."
 	response, err := agent.RespondWithContext(ctx, fullPrompt, sirah.Context{})

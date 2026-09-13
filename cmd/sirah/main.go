@@ -65,9 +65,12 @@ func run() (exitCode int) {
 	// firmware but moves nothing yet; follow_person needs a real person
 	// detector (vision only sees faces). Enums and routes stay for the future.
 	actions := []sirah.Action{sirah.ActionBlink, sirah.ActionTired, sirah.ActionCenter, sirah.ActionLookAtUser, sirah.ActionStopLooking}
-	contextData, err := sirah.LoadContext("config/persona", actions)
-	if err != nil {
-		fmt.Printf("Context: WARNING - %s\n", err)
+
+	personaLoader := sirah.NewPersonaLoader("personas", "config/persona")
+	personaName := strings.TrimSpace(os.Getenv("SIRAH_PERSONA"))
+	persona, warnings := personaLoader.Resolve(personaName)
+	for _, w := range warnings {
+		fmt.Printf("Persona: WARNING - %s\n", w)
 	}
 
 	local := sirah.NewLocalMemory(envInt("AGENT_HISTORY_LIMIT", 12))
@@ -104,8 +107,7 @@ func run() (exitCode int) {
 			fmt.Printf("[NETWORK LLM]\ndns_ms=%.1f\nconnect_ms=%.1f\ntls_ms=%.1f\nconnection_reused=%t\nttfb_ms=%.1f\nbody_ms=%.1f\ntotal_ms=%.1f\n", ms(metrics.DNS), ms(metrics.Connect), ms(metrics.TLS), metrics.Reused, ms(metrics.TTFB), ms(metrics.Body), ms(metrics.Total))
 		}
 	}
-	robot := sirah.Agent{Context: contextData, AvailableActions: actions, LLM: llm, ConversationStore: memory, SessionID: sessionID, UserID: envString("AGENT_USER_ID", "local-user"), HistoryLimit: envInt("AGENT_HISTORY_LIMIT", 12), Timeout: envDuration("LLM_TIMEOUT", 90*time.Second)}
-	robot.WakeupStyle = contextData.WakeupStyle
+	robot := sirah.Agent{Persona: persona, AvailableActions: actions, LLM: llm, ConversationStore: memory, SessionID: sessionID, UserID: envString("AGENT_USER_ID", "local-user"), HistoryLimit: envInt("AGENT_HISTORY_LIMIT", 12), Timeout: envDuration("LLM_TIMEOUT", 90*time.Second)}
 	robot.ContextTiming = func(timing sirah.ContextTiming) { contextTiming = timing }
 	var llmDuration time.Duration
 	robot.LLMDuration = func(value time.Duration) { llmDuration = value }
@@ -192,6 +194,7 @@ func run() (exitCode int) {
 	var piper *voice.Piper
 	var pcmPlayer voice.PCMPlayer
 	var transcriber voice.Groq
+	var err error
 	if *voiceMode {
 		recorder, err = voice.NewRecorderWithMode(os.Getenv("ARECORD_COMMAND"), os.Getenv("AUDIO_INPUT_DEVICE"), envString("STT_PREPROCESSOR", "raw"))
 		if err != nil {
