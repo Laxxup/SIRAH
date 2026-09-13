@@ -53,11 +53,19 @@ func (l *PersonaLoader) Resolve(name string) (Persona, []string) {
 	candidates := l.buildCandidates(name, &warnings)
 
 	for _, c := range candidates {
-		p, err := l.tryLoad(c.path)
-		if err == nil {
-			return p, warnings
+		if c.kind == candidateExternal {
+			p, err := l.tryLoadExternal(c.path)
+			if err == nil {
+				return p, warnings
+			}
+			warnings = append(warnings, fmt.Sprintf("persona candidate %s: %v", c.path, err))
+		} else {
+			p, err := l.tryLoad(c.path)
+			if err == nil {
+				return p, warnings
+			}
+			warnings = append(warnings, fmt.Sprintf("persona candidate %s: %v", c.path, err))
 		}
-		warnings = append(warnings, fmt.Sprintf("persona candidate %s: %v", c.path, err))
 	}
 
 	return BuiltInPersona(), warnings
@@ -67,6 +75,7 @@ type candidateKind int
 
 const (
 	candidateNative candidateKind = iota
+	candidateExternal
 )
 
 type candidate struct {
@@ -82,10 +91,18 @@ func (l *PersonaLoader) buildCandidates(name string, warnings *[]string) []candi
 			path: filepath.Join(l.ProfilesDir, "active.persona.json"),
 			kind: candidateNative,
 		})
-	} else if isValidProfileName(name) {
+		candidates = append(candidates, candidate{
+			path: filepath.Join(l.ProfilesDir, "active.json"),
+			kind: candidateExternal,
+		})
+	} else if IsValidProfileName(name) {
 		candidates = append(candidates, candidate{
 			path: filepath.Join(l.ProfilesDir, name+".persona.json"),
 			kind: candidateNative,
+		})
+		candidates = append(candidates, candidate{
+			path: filepath.Join(l.ProfilesDir, name+".json"),
+			kind: candidateExternal,
 		})
 	} else {
 		*warnings = append(*warnings, fmt.Sprintf("invalid profile name %q", name))
@@ -110,6 +127,24 @@ func (l *PersonaLoader) tryLoad(path string) (Persona, error) {
 	var p Persona
 	if err := dec.Decode(&p); err != nil {
 		return Persona{}, fmt.Errorf("parse: %w", err)
+	}
+	if err := validatePersona(&p); err != nil {
+		return Persona{}, fmt.Errorf("validate: %w", err)
+	}
+	return p, nil
+}
+
+func (l *PersonaLoader) tryLoadExternal(path string) (Persona, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Persona{}, err
+	}
+	p, result, err := ParseAndMap(data)
+	if err != nil {
+		return Persona{}, fmt.Errorf("character card: %w", err)
+	}
+	if len(result.Errors) > 0 {
+		return Persona{}, fmt.Errorf("character card errors: %v", result.Errors)
 	}
 	if err := validatePersona(&p); err != nil {
 		return Persona{}, fmt.Errorf("validate: %w", err)
@@ -161,7 +196,7 @@ func validatePersona(p *Persona) error {
 
 var validProfileName = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
-func isValidProfileName(name string) bool {
+func IsValidProfileName(name string) bool {
 	return validProfileName.MatchString(name)
 }
 
