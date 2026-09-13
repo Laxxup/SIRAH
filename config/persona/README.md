@@ -52,21 +52,21 @@ SIRAH buscará en este orden:
 
 ```bash
 # Sin SIRAH_PERSONA definido
-cp mi-card.json personas/active.json
+cp mi-perfil.persona.json personas/active.persona.json
 ./sirah
 ```
 
 SIRAH buscará:
 1. `personas/active.persona.json`
-2. `personas/active.json`
-3. `config/persona/default.persona.json`
-4. BuiltInPersona
+2. `config/persona/default.persona.json`
+3. BuiltInPersona
+
+> **Nota:** Character Cards JSON externas (`.json`) todavía no son compatibles directamente. El soporte de carga directa e importación se añadirá en un PR posterior.
 
 ## Seguridad
 
 - **No** puedes modificar el formato de salida JSON, la lista de acciones, ni el contrato técnico desde una persona. Estos están protegidos en el código fuente.
 - Una persona puede contener ficción ("soy una exploradora de mundos virtuales"), pero eso no crea capacidades físicas reales.
-- `system_prompt` externo nunca se ejecuta.
 - Campos desconocidos en una `.persona.json` nativa causan error de validación y fallback.
 
 ## default.persona.json
