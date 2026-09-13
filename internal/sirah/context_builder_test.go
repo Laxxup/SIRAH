@@ -10,10 +10,10 @@ import (
 
 func TestContextBuilderMarksStalePerceptionAsUnavailable(t *testing.T) {
 	contextData := Context{
-		Identity:         DefaultIdentity,
+		Identity:          DefaultIdentity,
 		TechnicalContract: DefaultTechnicalContract,
-		Perception:       &vision.PerceptionSnapshot{FaceVisible: true, PersonVisible: true, FaceCount: 1, UpdatedAt: time.Now().Add(-3 * time.Second)},
-		PerceptionMaxAge: time.Second,
+		Perception:        &vision.PerceptionSnapshot{FaceVisible: true, PersonVisible: true, FaceCount: 1, UpdatedAt: time.Now().Add(-3 * time.Second)},
+		PerceptionMaxAge:  time.Second,
 	}
 
 	content := renderContextBlocks(ContextBuilder{}.Build(contextData, BuiltInPersona()))
@@ -24,10 +24,10 @@ func TestContextBuilderMarksStalePerceptionAsUnavailable(t *testing.T) {
 
 func TestContextBuilderPreservesFreshPerception(t *testing.T) {
 	contextData := Context{
-		Identity:         DefaultIdentity,
+		Identity:          DefaultIdentity,
 		TechnicalContract: DefaultTechnicalContract,
-		Perception:       &vision.PerceptionSnapshot{FaceVisible: true, PersonVisible: true, FaceCount: 1, UpdatedAt: time.Now()},
-		PerceptionMaxAge: time.Second,
+		Perception:        &vision.PerceptionSnapshot{FaceVisible: true, PersonVisible: true, FaceCount: 1, UpdatedAt: time.Now()},
+		PerceptionMaxAge:  time.Second,
 	}
 
 	content := renderContextBlocks(ContextBuilder{}.Build(contextData, BuiltInPersona()))
