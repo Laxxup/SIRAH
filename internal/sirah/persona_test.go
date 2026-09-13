@@ -73,6 +73,37 @@ func TestResolveInvalidName(t *testing.T) {
 	}
 }
 
+func TestResolveInvalidNameDoesNotUseActive(t *testing.T) {
+	dir := t.TempDir()
+	active := Persona{
+		Schema:      personaSchema,
+		Version:     personaVersion,
+		DisplayName: "ActiveProfile",
+		Personality: "Active personality",
+	}
+	data, _ := json.Marshal(active)
+	os.WriteFile(filepath.Join(dir, "active.persona.json"), data, 0644)
+
+	loader := NewPersonaLoader(dir, dir)
+	p, warnings := loader.Resolve("../foo")
+	if p.DisplayName == "ActiveProfile" {
+		t.Fatal("invalid name must not fall back to active.persona.json")
+	}
+	if p.Schema != personaSchema {
+		t.Fatalf("expected built-in fallback, got schema %q", p.Schema)
+	}
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, "invalid profile name") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected invalid profile name warning, got %v", warnings)
+	}
+}
+
 func TestResolveDefaultFile(t *testing.T) {
 	dir := t.TempDir()
 	defaultP := Persona{
@@ -191,7 +222,7 @@ func TestDefaultPersonaFileMatchesBuiltIn(t *testing.T) {
 
 	data, err := os.ReadFile("../../config/persona/default.persona.json")
 	if err != nil {
-		t.Skipf("default.persona.json not found: %v", err)
+		t.Fatalf("default.persona.json not found: %v", err)
 	}
 
 	dec := json.NewDecoder(bytes.NewReader(data))

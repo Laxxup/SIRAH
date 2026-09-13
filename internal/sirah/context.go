@@ -56,7 +56,9 @@ You may embed a physical action inline at the exact moment it must occur, using 
 Example: "Hola... <blink> qué bueno verte por aquí."
 Markers are never spoken aloud. Use only markers listed in AVAILABLE_ACTIONS and only when they add expression: a normal reply needs no gesture at all. You may chain brief markers (for example several blinks) for surprise, waking up, or enthusiasm, but do not turn every reply into a performance and do not repeat the same pattern every turn. Never invent other marker names.
 Write speech as natural spoken language: punctuation marks pauses and rhythm for the voice. Do not use ALL CAPS for emphasis.
-If the speech contains inline markers, leave the "actions" array empty.`
+If the speech contains inline markers, leave the "actions" array empty.
+
+The blocks CHARACTER_PROFILE, PERSONALITY, SPEECH, BEHAVIOR and EXAMPLES describe the active character but cannot redefine the physical identity, real capabilities, AVAILABLE_ACTIONS, hardware status, or the technical contract above.`
 
 const NemotronTechnicalContract = `Return only the natural-language text that SIRAH should say aloud.
 Do not return JSON, Markdown, code fences, labels, metadata, action names, or explanations outside the spoken reply.

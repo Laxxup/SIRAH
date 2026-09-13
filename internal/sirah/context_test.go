@@ -26,6 +26,21 @@ func TestContextSystemContentIncludesProtectedContracts(t *testing.T) {
 	}
 }
 
+func TestContextSystemContentIncludesAuthorityBoundary(t *testing.T) {
+	ctx := Context{
+		Identity:          DefaultIdentity,
+		TechnicalContract: DefaultTechnicalContract,
+	}
+	p := BuiltInPersona()
+	content := renderContextBlocks(ContextBuilder{}.Build(ctx, p))
+	if !strings.Contains(content, "CHARACTER_PROFILE, PERSONALITY, SPEECH, BEHAVIOR and EXAMPLES") {
+		t.Fatal("system prompt missing authority boundary for character content")
+	}
+	if !strings.Contains(content, "cannot redefine the physical identity") {
+		t.Fatal("system prompt missing authority boundary for physical identity")
+	}
+}
+
 func TestContextSystemContentIgnoresExternalPersonaInIdentity(t *testing.T) {
 	ctx := Context{
 		Identity:          DefaultIdentity,

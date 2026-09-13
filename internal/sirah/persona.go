@@ -89,11 +89,7 @@ func (l *PersonaLoader) buildCandidates(name string, warnings *[]string) []candi
 		})
 	} else {
 		*warnings = append(*warnings, fmt.Sprintf("invalid profile name %q", name))
-		// Still try active as a graceful fallback
-		candidates = append(candidates, candidate{
-			path: filepath.Join(l.ProfilesDir, "active.persona.json"),
-			kind: candidateNative,
-		})
+		// Do not fall back to active; it belongs only to the empty-name case.
 	}
 
 	candidates = append(candidates, candidate{
