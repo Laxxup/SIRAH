@@ -33,6 +33,12 @@ func main() {
 
 func run() (exitCode int) {
 	loadDotEnv(".env")
+
+	// Subcommand dispatcher for persona management.
+	if len(os.Args) > 1 && os.Args[1] == "persona" {
+		return runPersonaCommand(os.Args[2:])
+	}
+
 	runCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	debug := flag.Bool("debug", false, "mostrar información de depuración")
