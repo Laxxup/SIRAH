@@ -27,18 +27,10 @@ type ContextTiming struct {
 }
 
 // Agent es la "mente" del robot. Solo decide alto nivel: qué decir y qué acciones hacer.
-// Los archivos *.md (identity, personality, dialogue_rules, actions) alimentan estos campos.
 type Agent struct {
-	// Name es el nombre del robot.
 	Name string
-	// Identity proviene de identity.md.
-	Identity string
-	// Personality proviene de personality.md.
-	Personality string
-	// DialogueRules proviene de dialogue_rules.md.
-	DialogueRules string
-	// WakeupStyle proviene de wakeup-style.md.
-	WakeupStyle string
+	// Persona describes the conversational personality.
+	Persona Persona
 	// State es el estado interno del agente.
 	State State
 	// Memory es la memoria de largo plazo.
@@ -140,18 +132,7 @@ func (a Agent) BuildContext(ctx context.Context, input string) Context {
 		a.TechnicalContract = DefaultTechnicalContract
 	}
 	contextData.TechnicalContract = a.TechnicalContract
-	if a.Identity != "" {
-		contextData.Identity = a.Identity
-	}
-	if a.Personality != "" {
-		contextData.Personality = a.Personality
-	}
-	if a.DialogueRules != "" {
-		contextData.Rules = a.DialogueRules
-	}
-	if a.WakeupStyle != "" {
-		contextData.WakeupStyle = a.WakeupStyle
-	}
+	contextData.Identity = DefaultIdentity
 	contextData.State = a.State
 	if a.ConversationStore != nil {
 		historyLimit := a.HistoryLimit
@@ -190,6 +171,7 @@ func (a Agent) BuildContext(ctx context.Context, input string) Context {
 		contextData.AvailableActions = a.AvailableActions
 	}
 	contextData.UserInput = input
+	contextData.SystemContent = renderContextBlocks(ContextBuilder{}.Build(contextData, a.Persona))
 	return contextData
 }
 

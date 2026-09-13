@@ -176,7 +176,7 @@ func (g OpenAICompatibleLLM) requestPayload(contextData Context, streaming bool)
 		contextData.TechnicalContract = DefaultTechnicalContract
 	}
 	messages := make([]map[string]string, 0, 2*len(contextData.History)+2)
-	if content := contextData.SystemContent(); content != "" {
+	if content := contextData.SystemContent; content != "" {
 		messages = append(messages, map[string]string{"role": "system", "content": content})
 	}
 	for _, turn := range contextData.History {

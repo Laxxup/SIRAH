@@ -12,10 +12,12 @@ type ContextKind string
 const (
 	ContextTechnicalContract ContextKind = "TECHNICAL_CONTRACT"
 	ContextIdentity          ContextKind = "IDENTITY"
+	ContextCharacterProfile  ContextKind = "CHARACTER_PROFILE"
 	ContextPersonality       ContextKind = "PERSONALITY"
-	ContextRules             ContextKind = "RULES"
-	ContextActionDefinitions ContextKind = "ACTION_DEFINITIONS"
+	ContextSpeech            ContextKind = "SPEECH"
+	ContextBehavior          ContextKind = "BEHAVIOR"
 	ContextExamples          ContextKind = "EXAMPLES"
+	ContextActionDefinitions ContextKind = "ACTION_DEFINITIONS"
 	ContextAvailableActions  ContextKind = "AVAILABLE_ACTIONS"
 	ContextState             ContextKind = "STATE"
 	ContextPerception        ContextKind = "PERCEPTION"
@@ -33,8 +35,8 @@ type ContextBlock struct {
 // ContextBuilder composes static instructions and useful runtime context.
 type ContextBuilder struct{}
 
-func (ContextBuilder) Build(c Context) []ContextBlock {
-	blocks := make([]ContextBlock, 0, 11)
+func (ContextBuilder) Build(c Context, p Persona) []ContextBlock {
+	blocks := make([]ContextBlock, 0, 13)
 	appendBlock := func(kind ContextKind, content string) {
 		if strings.TrimSpace(content) != "" {
 			blocks = append(blocks, ContextBlock{Kind: kind, Content: content})
@@ -42,8 +44,13 @@ func (ContextBuilder) Build(c Context) []ContextBlock {
 	}
 	appendBlock(ContextTechnicalContract, c.TechnicalContract)
 	appendBlock(ContextIdentity, c.Identity)
-	appendBlock(ContextPersonality, c.Personality)
-	appendBlock(ContextRules, c.Rules)
+	appendBlock(ContextCharacterProfile, p.CharacterProfile)
+	appendBlock(ContextPersonality, p.Personality)
+	appendBlock(ContextSpeech, p.Speech)
+	appendBlock(ContextBehavior, p.Behavior)
+	if len(p.Examples) > 0 {
+		appendBlock(ContextExamples, strings.Join(p.Examples, "\n\n"))
+	}
 	appendBlock(ContextActionDefinitions, DefaultActions)
 	if c.AvailableActionsSet || len(c.AvailableActions) > 0 {
 		actions := make([]string, len(c.AvailableActions))
