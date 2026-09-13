@@ -16,8 +16,8 @@ func TestResolveEmptyUsesDefault(t *testing.T) {
 	if p.Schema != personaSchema {
 		t.Fatalf("expected built-in persona, got schema %q", p.Schema)
 	}
-	if len(warnings) != 2 {
-		t.Fatalf("expected 2 warnings, got %d: %v", len(warnings), warnings)
+	if len(warnings) != 3 {
+		t.Fatalf("expected 3 warnings (missing active.persona.json, missing active.json, missing default), got %d: %v", len(warnings), warnings)
 	}
 }
 
@@ -49,8 +49,8 @@ func TestResolveMissingProfileFallsBack(t *testing.T) {
 	if p.Schema != personaSchema {
 		t.Fatalf("expected built-in fallback")
 	}
-	if len(warnings) != 2 {
-		t.Fatalf("expected 2 warnings, got %d: %v", len(warnings), warnings)
+	if len(warnings) != 3 {
+		t.Fatalf("expected 3 warnings (missing .persona.json, missing .json, missing default), got %d: %v", len(warnings), warnings)
 	}
 }
 
@@ -120,8 +120,8 @@ func TestResolveDefaultFile(t *testing.T) {
 	if p.DisplayName != "DefaultTest" {
 		t.Fatalf("expected DefaultTest, got %q", p.DisplayName)
 	}
-	if len(warnings) != 1 {
-		t.Fatalf("expected 1 warning (missing profile), got %d: %v", len(warnings), warnings)
+	if len(warnings) != 2 {
+		t.Fatalf("expected 2 warnings (missing .persona.json, missing .json), got %d: %v", len(warnings), warnings)
 	}
 }
 
@@ -144,8 +144,8 @@ func TestResolveCustomInvalidFallsBackToDefault(t *testing.T) {
 	if p.DisplayName != "DefaultTest" {
 		t.Fatalf("expected DefaultTest fallback, got %q", p.DisplayName)
 	}
-	if len(warnings) != 1 {
-		t.Fatalf("expected 1 warning (invalid custom), got %d: %v", len(warnings), warnings)
+	if len(warnings) != 2 {
+		t.Fatalf("expected 2 warnings (invalid custom .persona.json, missing .json), got %d: %v", len(warnings), warnings)
 	}
 }
 
@@ -159,8 +159,8 @@ func TestResolveDefaultInvalidFallsBackToBuiltIn(t *testing.T) {
 	if p.Schema != personaSchema {
 		t.Fatalf("expected built-in fallback, got schema %q", p.Schema)
 	}
-	if len(warnings) != 2 {
-		t.Fatalf("expected 2 warnings (missing profile + invalid default), got %d: %v", len(warnings), warnings)
+	if len(warnings) != 3 {
+		t.Fatalf("expected 3 warnings (missing .persona.json, missing .json, invalid default), got %d: %v", len(warnings), warnings)
 	}
 }
 
@@ -267,5 +267,95 @@ func TestResolveEmptyWithActive(t *testing.T) {
 	}
 	if len(warnings) != 0 {
 		t.Fatalf("expected no warnings, got %v", warnings)
+	}
+}
+
+func TestResolveNativeHasPriorityOverRaw(t *testing.T) {
+	dir := t.TempDir()
+	native := Persona{
+		Schema:      personaSchema,
+		Version:     personaVersion,
+		DisplayName: "Native",
+		Personality: "Native personality",
+	}
+	data, _ := json.Marshal(native)
+	os.WriteFile(filepath.Join(dir, "eva.persona.json"), data, 0644)
+
+	// Also write a raw card
+	raw := []byte(`{"spec":"chara_card_v2","spec_version":"2.0","data":{"name":"Raw","personality":"Raw personality"}}`)
+	os.WriteFile(filepath.Join(dir, "eva.json"), raw, 0644)
+
+	loader := NewPersonaLoader(dir, dir)
+	p, _ := loader.Resolve("eva")
+	if p.DisplayName != "Native" {
+		t.Fatalf("expected native priority, got %q", p.DisplayName)
+	}
+}
+
+func TestResolveRawV2DirectLoad(t *testing.T) {
+	dir := t.TempDir()
+	raw := []byte(`{"spec":"chara_card_v2","spec_version":"2.0","data":{"name":"Eva","personality":"Curiosa y directa."}}`)
+	os.WriteFile(filepath.Join(dir, "eva.json"), raw, 0644)
+
+	loader := NewPersonaLoader(dir, dir)
+	p, warnings := loader.Resolve("eva")
+	if p.DisplayName != "Eva" {
+		t.Fatalf("expected Eva from raw card, got %q", p.DisplayName)
+	}
+	if len(warnings) != 1 {
+		t.Fatalf("expected 1 warning (missing .persona.json), got %d: %v", len(warnings), warnings)
+	}
+}
+
+func TestResolveNativeInvalidThenRawValid(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "eva.persona.json"), []byte(`{"schema":"wrong"}`), 0644)
+	raw := []byte(`{"spec":"chara_card_v2","spec_version":"2.0","data":{"name":"Eva","personality":"Curiosa y directa."}}`)
+	os.WriteFile(filepath.Join(dir, "eva.json"), raw, 0644)
+
+	loader := NewPersonaLoader(dir, dir)
+	p, warnings := loader.Resolve("eva")
+	if p.DisplayName != "Eva" {
+		t.Fatalf("expected Eva from raw card after invalid native, got %q", p.DisplayName)
+	}
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, "invalid schema") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected invalid native warning, got %v", warnings)
+	}
+}
+
+func TestResolveRawInvalidFallsBack(t *testing.T) {
+	dir := t.TempDir()
+	raw := []byte(`{not json`)
+	os.WriteFile(filepath.Join(dir, "eva.json"), raw, 0644)
+
+	loader := NewPersonaLoader(dir, dir)
+	p, warnings := loader.Resolve("eva")
+	if p.Schema != personaSchema {
+		t.Fatalf("expected built-in fallback")
+	}
+	if len(warnings) != 3 {
+		t.Fatalf("expected 3 warnings, got %d: %v", len(warnings), warnings)
+	}
+}
+
+func TestResolveActiveJsonWhenEmptyEnv(t *testing.T) {
+	dir := t.TempDir()
+	raw := []byte(`{"spec":"chara_card_v2","spec_version":"2.0","data":{"name":"ActiveCard","personality":"Activa."}}`)
+	os.WriteFile(filepath.Join(dir, "active.json"), raw, 0644)
+
+	loader := NewPersonaLoader(dir, dir)
+	p, warnings := loader.Resolve("")
+	if p.DisplayName != "ActiveCard" {
+		t.Fatalf("expected ActiveCard from active.json, got %q", p.DisplayName)
+	}
+	if len(warnings) != 1 {
+		t.Fatalf("expected 1 warning (missing active.persona.json), got %d: %v", len(warnings), warnings)
 	}
 }
