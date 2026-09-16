@@ -354,6 +354,7 @@ func (p *PCMPlayer) Play(ctx context.Context, chunks <-chan []byte, prebuffer ti
 				}
 				wrote = true
 				if err != nil {
+					_ = p.Close()
 					return fmt.Errorf("write PCM: %w", err)
 				}
 				offset = end
