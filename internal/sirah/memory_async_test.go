@@ -2,8 +2,13 @@ package sirah
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
+
+	zepclient "github.com/getzep/zep-go/v3/client"
+	"github.com/getzep/zep-go/v3/option"
 )
 
 func TestHybridMemoryCachedRecallDoesNotWaitForRemote(t *testing.T) {
@@ -89,5 +94,41 @@ func TestHybridMemoryDoesNotStartRefreshAfterClose(t *testing.T) {
 	}
 	if len(memory.refreshing) != 0 {
 		t.Fatalf("refreshes after close = %#v", memory.refreshing)
+	}
+}
+
+func TestHybridMemoryCloseWaitsForConcurrentAppendRegistration(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer server.Close()
+	memory := NewHybridMemory(NewLocalMemory(1), NewZepMemory(zepclient.NewClient(option.WithBaseURL(server.URL), option.WithMaxAttempts(1))), nil)
+
+	memory.cacheMu.Lock()
+	appendDone := make(chan struct{})
+	go func() {
+		_ = memory.AppendTurn(context.Background(), Turn{SessionID: "session", UserID: "user"})
+		close(appendDone)
+	}()
+	select {
+	case <-appendDone:
+		t.Fatal("AppendTurn registered remote work without coordinating with Close")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	closeDone := make(chan struct{})
+	go func() {
+		_ = memory.Close(context.Background())
+		close(closeDone)
+	}()
+	memory.cacheMu.Unlock()
+
+	select {
+	case <-appendDone:
+	case <-time.After(time.Second):
+		t.Fatal("AppendTurn did not finish")
+	}
+	select {
+	case <-closeDone:
+	case <-time.After(time.Second):
+		t.Fatal("Close did not finish")
 	}
 }
