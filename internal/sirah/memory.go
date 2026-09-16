@@ -162,7 +162,13 @@ func (m *HybridMemory) AppendTurn(ctx context.Context, turn Turn) error {
 		}
 	}
 	if m.remote != nil {
+		m.cacheMu.Lock()
+		if m.closed {
+			m.cacheMu.Unlock()
+			return nil
+		}
 		m.pending.Add(1)
+		m.cacheMu.Unlock()
 		go func() {
 			defer m.pending.Done()
 			ctx, cancel := context.WithTimeout(m.remoteCtx, 5*time.Second)
