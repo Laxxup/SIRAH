@@ -98,10 +98,11 @@ func renderPerceptionAt(value *vision.PerceptionSnapshot, maxAge time.Duration, 
 	}
 	age := now.Sub(value.UpdatedAt)
 	presence := value.PresenceAt(now, maxAge)
+	zone := vision.InteractionZoneFor(value.Target, presence)
 	if presence == vision.PresenceStale {
-		return fmt.Sprintf("presence=%s\nfresh=false\nage_ms=%d\nface_count=0", presence, max(0, age.Milliseconds()))
+		return fmt.Sprintf("presence=%s\nzone=%s\nfresh=false\nage_ms=%d\nface_count=0", presence, zone, max(0, age.Milliseconds()))
 	}
-	return fmt.Sprintf("presence=%s\nfresh=true\nage_ms=%d\nface_count=%d", presence, max(0, age.Milliseconds()), value.FaceCount)
+	return fmt.Sprintf("presence=%s\nzone=%s\nfresh=true\nage_ms=%d\nface_count=%d", presence, zone, max(0, age.Milliseconds()), value.FaceCount)
 }
 
 func renderHardwareStatus(value HardwareStatus) string {

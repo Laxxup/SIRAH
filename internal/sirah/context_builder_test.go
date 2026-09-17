@@ -20,7 +20,7 @@ func TestContextBuilderMarksStalePerceptionAsUnavailable(t *testing.T) {
 	if !strings.Contains(content, "fresh=false") || !strings.Contains(content, "face_count=0") {
 		t.Fatalf("stale perception content = %q", content)
 	}
-	if !strings.Contains(content, "presence=stale") {
+	if !strings.Contains(content, "presence=stale") || !strings.Contains(content, "zone=unknown") {
 		t.Fatalf("stale presence content = %q", content)
 	}
 }
@@ -29,13 +29,16 @@ func TestContextBuilderPreservesFreshPerception(t *testing.T) {
 	contextData := Context{
 		Identity:          DefaultIdentity,
 		TechnicalContract: DefaultTechnicalContract,
-		Perception:        &vision.PerceptionSnapshot{FaceVisible: true, PersonVisible: true, FaceCount: 1, Presence: vision.PresenceVisible, UpdatedAt: time.Now()},
+		Perception:        &vision.PerceptionSnapshot{FaceVisible: true, PersonVisible: true, FaceCount: 1, Presence: vision.PresenceVisible, Target: &vision.Target{X: -0.8}, UpdatedAt: time.Now()},
 		PerceptionMaxAge:  time.Second,
 	}
 
 	content := renderContextBlocks(ContextBuilder{}.Build(contextData, BuiltInPersona()))
-	if !strings.Contains(content, "fresh=true") || !strings.Contains(content, "face_count=1") {
+	if !strings.Contains(content, "fresh=true") || !strings.Contains(content, "face_count=1") || !strings.Contains(content, "zone=left") {
 		t.Fatalf("fresh perception content = %q", content)
+	}
+	if strings.Contains(content, "target_x") || strings.Contains(content, "target_y") {
+		t.Fatalf("context should not expose raw target coordinates: %q", content)
 	}
 	if !strings.Contains(content, "presence=visible") {
 		t.Fatalf("fresh presence content = %q", content)
@@ -50,6 +53,9 @@ func TestContextBuilderRendersPerceptionStateAtControlledTime(t *testing.T) {
 	}, time.Second, now)
 	if !strings.Contains(content, "presence=recently_lost") || !strings.Contains(content, "fresh=true") {
 		t.Fatalf("recently lost content = %q", content)
+	}
+	if !strings.Contains(content, "zone=unknown") {
+		t.Fatalf("recently lost zone content = %q", content)
 	}
 }
 
