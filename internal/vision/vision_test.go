@@ -16,6 +16,9 @@ func TestAnalyzeWithoutDetectorsIsSafe(t *testing.T) {
 	if snapshot.FaceVisible || snapshot.PersonVisible {
 		t.Fatalf("unexpected detections: %#v", snapshot)
 	}
+	if snapshot.Presence != PresenceUnavailable {
+		t.Fatalf("presence = %q, want unavailable", snapshot.Presence)
+	}
 }
 
 func TestDetectionImageRectConvertsPixelBounds(t *testing.T) {
@@ -113,6 +116,70 @@ func TestTemporalTrackerKeepsThenLosesTarget(t *testing.T) {
 	}
 }
 
+func TestTemporalTrackerReportsPresenceTransitions(t *testing.T) {
+	tracker := NewTemporalTracker(TrackerConfig{
+		FrameWidth:   640,
+		FrameHeight:  480,
+		StableFrames: 2,
+		LostAfter:    300 * time.Millisecond,
+	})
+	face := []FaceDetection{{X: 288, Y: 192, Width: 64, Height: 96, Confidence: 0.9}}
+	seenAt := time.Unix(1, 0)
+
+	target := tracker.Update(face, seenAt)
+	if got := presenceForDetection(len(face), target, tracker.targetStable()); got != PresenceVisible {
+		t.Fatalf("first presence = %q, want visible", got)
+	}
+	target = tracker.Update(face, seenAt.Add(10*time.Millisecond))
+	if got := presenceForDetection(len(face), target, tracker.targetStable()); got != PresenceStable {
+		t.Fatalf("stable presence = %q, want stable", got)
+	}
+	target = tracker.Update(nil, seenAt.Add(200*time.Millisecond))
+	if got := presenceForDetection(0, target, tracker.targetStable()); got != PresenceRecentlyLost {
+		t.Fatalf("recent loss presence = %q, want recently_lost", got)
+	}
+	target = tracker.Update(nil, seenAt.Add(311*time.Millisecond))
+	if got := presenceForDetection(0, target, tracker.targetStable()); got != PresenceAbsent {
+		t.Fatalf("confirmed absence presence = %q, want absent", got)
+	}
+	target = tracker.Update(face, seenAt.Add(400*time.Millisecond))
+	if got := presenceForDetection(len(face), target, tracker.targetStable()); got != PresenceVisible {
+		t.Fatalf("reappearance presence = %q, want visible", got)
+	}
+	target = tracker.Update(face, seenAt.Add(410*time.Millisecond))
+	if got := presenceForDetection(len(face), target, tracker.targetStable()); got != PresenceStable {
+		t.Fatalf("reappearance stable presence = %q, want stable", got)
+	}
+}
+
+func TestPerceptionSnapshotMarksStaleWithoutChangingStoredState(t *testing.T) {
+	updatedAt := time.Unix(10, 0)
+	snapshot := PerceptionSnapshot{Presence: PresenceStable, UpdatedAt: updatedAt}
+	if got := snapshot.PresenceAt(updatedAt.Add(500*time.Millisecond), time.Second); got != PresenceStable {
+		t.Fatalf("fresh presence = %q, want stable", got)
+	}
+	if got := snapshot.PresenceAt(updatedAt.Add(2*time.Second), time.Second); got != PresenceStale {
+		t.Fatalf("stale presence = %q, want stale", got)
+	}
+	if snapshot.Presence != PresenceStable {
+		t.Fatalf("stored presence = %q, want stable", snapshot.Presence)
+	}
+}
+
+func TestPerceptionSnapshotWithoutStateIsUnavailable(t *testing.T) {
+	snapshot := PerceptionSnapshot{FaceVisible: true, FaceCount: 1, UpdatedAt: time.Unix(10, 0)}
+	if got := snapshot.PresenceAt(time.Unix(10, 0), time.Second); got != PresenceUnavailable {
+		t.Fatalf("presence = %q, want unavailable", got)
+	}
+}
+
+func TestPerceptionSnapshotDoesNotPersistStaleState(t *testing.T) {
+	snapshot := PerceptionSnapshot{Presence: PresenceStale, UpdatedAt: time.Unix(10, 0)}
+	if got := snapshot.PresenceAt(time.Unix(10, 0), time.Second); got != PresenceUnavailable {
+		t.Fatalf("stored stale presence = %q, want unavailable", got)
+	}
+}
+
 func TestSnapshotStoreCopiesLatestValue(t *testing.T) {
 	store := NewSnapshotStore()
 	target := Target{X: 0.2, Y: -0.1}
@@ -136,8 +203,12 @@ func TestPublishLatestTargetDropsQueuedValue(t *testing.T) {
 func TestRunCameraUnavailableReturnsErrorWithoutBreakingCaller(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	err := RunCamera(ctx, Config{CameraIndex: -1, ModelPath: "missing.onnx", Width: 640, Height: 480, FPS: 15}, nil, nil, nil, nil)
+	var snapshot PerceptionSnapshot
+	err := RunCamera(ctx, Config{CameraIndex: -1, ModelPath: "missing.onnx", Width: 640, Height: 480, FPS: 15}, nil, func(value PerceptionSnapshot) { snapshot = value }, nil, nil)
 	if err == nil {
 		t.Fatal("expected unavailable camera error")
+	}
+	if snapshot.Presence != PresenceUnavailable {
+		t.Fatalf("presence = %q, want unavailable", snapshot.Presence)
 	}
 }

@@ -31,6 +31,19 @@ type Target struct {
 	Y float64
 }
 
+// PresenceState is the high-level state of facial perception. States are
+// mutually exclusive; stale is derived when a snapshot is read.
+type PresenceState string
+
+const (
+	PresenceUnavailable  PresenceState = "unavailable"
+	PresenceAbsent       PresenceState = "absent"
+	PresenceVisible      PresenceState = "visible"
+	PresenceStable       PresenceState = "stable"
+	PresenceRecentlyLost PresenceState = "recently_lost"
+	PresenceStale        PresenceState = "stale"
+)
+
 type Config struct {
 	CameraIndex int
 	ModelPath   string
@@ -55,9 +68,11 @@ type FaceDetection struct {
 }
 
 type TrackerConfig struct {
-	FrameWidth      int
-	FrameHeight     int
-	SmoothingAlpha  float64
+	FrameWidth     int
+	FrameHeight    int
+	SmoothingAlpha float64
+	// StableFrames counts consecutive camera frames; its elapsed time depends on FPS.
+	StableFrames    int
 	LostAfter       time.Duration
 	Hysteresis      float64
 	ProximityWeight float64
@@ -68,6 +83,7 @@ func DefaultTrackerConfig() TrackerConfig {
 		FrameWidth:      640,
 		FrameHeight:     480,
 		SmoothingAlpha:  0.35,
+		StableFrames:    3,
 		LostAfter:       300 * time.Millisecond,
 		Hysteresis:      0.10,
 		ProximityWeight: 0.25,
@@ -81,6 +97,7 @@ type TemporalTracker struct {
 	smoothed      Target
 	lastSeen      time.Time
 	lastDetection FaceDetection
+	stableFrames  int
 }
 
 func NewTemporalTracker(config TrackerConfig) *TemporalTracker {
@@ -95,6 +112,9 @@ func NewTemporalTracker(config TrackerConfig) *TemporalTracker {
 	}
 	if config.SmoothingAlpha <= 0 || config.SmoothingAlpha > 1 {
 		config.SmoothingAlpha = 0.35
+	}
+	if config.StableFrames <= 0 {
+		config.StableFrames = 3
 	}
 	if config.LostAfter <= 0 {
 		config.LostAfter = 300 * time.Millisecond
@@ -113,6 +133,7 @@ func (tracker *TemporalTracker) Update(detections []FaceDetection, now time.Time
 		return nil
 	}
 	if len(detections) == 0 {
+		tracker.stableFrames = 0
 		if tracker.hasTarget && now.Sub(tracker.lastSeen) <= tracker.config.LostAfter {
 			target := tracker.smoothed
 			return &target
@@ -123,6 +144,7 @@ func (tracker *TemporalTracker) Update(detections []FaceDetection, now time.Time
 
 	selected := tracker.selectDetection(detections)
 	raw := tracker.normalize(selected)
+	tracker.stableFrames++
 	if !tracker.hasTarget {
 		tracker.smoothed = raw
 	} else {
@@ -136,6 +158,10 @@ func (tracker *TemporalTracker) Update(detections []FaceDetection, now time.Time
 	tracker.hasTarget = true
 	target := tracker.smoothed
 	return &target
+}
+
+func (tracker *TemporalTracker) targetStable() bool {
+	return tracker != nil && tracker.hasTarget && tracker.stableFrames >= tracker.config.StableFrames
 }
 
 func (tracker *TemporalTracker) selectDetection(detections []FaceDetection) FaceDetection {
@@ -280,6 +306,9 @@ func RunCamera(ctx context.Context, config Config, tracker *TemporalTracker,
 	publish func(PerceptionSnapshot), publishTarget func(Target), debug func(DebugSample)) error {
 	camera, err := Open(config)
 	if err != nil {
+		if publish != nil {
+			publish(PerceptionSnapshot{Presence: PresenceUnavailable, UpdatedAt: time.Now()})
+		}
 		return err
 	}
 	defer camera.Close()
@@ -295,6 +324,9 @@ func RunCamera(ctx context.Context, config Config, tracker *TemporalTracker,
 			if ctx.Err() != nil {
 				return nil
 			}
+			if publish != nil {
+				publish(PerceptionSnapshot{Presence: PresenceUnavailable, UpdatedAt: time.Now()})
+			}
 			return err
 		}
 		readDuration := time.Since(readStarted)
@@ -306,6 +338,9 @@ func RunCamera(ctx context.Context, config Config, tracker *TemporalTracker,
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil
+			}
+			if publish != nil {
+				publish(PerceptionSnapshot{Presence: PresenceUnavailable, UpdatedAt: time.Now()})
 			}
 			return err
 		}
@@ -319,6 +354,7 @@ func RunCamera(ctx context.Context, config Config, tracker *TemporalTracker,
 			FaceVisible: len(detections[:count]) > 0,
 			FaceCount:   count,
 			Target:      target,
+			Presence:    presenceForDetection(count, target, tracker.targetStable()),
 			UpdatedAt:   now,
 		}
 		if publish != nil {
@@ -356,11 +392,48 @@ func RunCamera(ctx context.Context, config Config, tracker *TemporalTracker,
 
 // PerceptionSnapshot es la salida estable de Vision hacia el resto del sistema.
 type PerceptionSnapshot struct {
+	// FaceVisible, PersonVisible and FaceCount are raw measurements. Presence
+	// is the only normative state exposed to consumers.
 	FaceVisible   bool
 	PersonVisible bool
 	FaceCount     int
 	Target        *Target
+	Presence      PresenceState
 	UpdatedAt     time.Time
+}
+
+func presenceForDetection(faceCount int, target *Target, targetStable bool) PresenceState {
+	if faceCount > 0 {
+		if targetStable {
+			return PresenceStable
+		}
+		return PresenceVisible
+	}
+	if target != nil {
+		return PresenceRecentlyLost
+	}
+	return PresenceAbsent
+}
+
+// PresenceAt returns the snapshot state, overriding it with stale when its
+// timestamp is outside the caller's freshness window.
+func (snapshot PerceptionSnapshot) PresenceAt(now time.Time, maxAge time.Duration) PresenceState {
+	if maxAge <= 0 {
+		maxAge = 2 * time.Second
+	}
+	age := now.Sub(snapshot.UpdatedAt)
+	if snapshot.UpdatedAt.IsZero() || age < 0 || age > maxAge {
+		return PresenceStale
+	}
+	if snapshot.Presence != "" {
+		switch snapshot.Presence {
+		case PresenceUnavailable, PresenceAbsent, PresenceVisible, PresenceStable, PresenceRecentlyLost:
+			return snapshot.Presence
+		default:
+			return PresenceUnavailable
+		}
+	}
+	return PresenceUnavailable
 }
 
 type Face struct {
@@ -413,11 +486,16 @@ func (v *Vision) Analyze(frame []byte) (PerceptionSnapshot, error) {
 	if v != nil && v.Tracker != nil {
 		target = v.Tracker.Track(faces, persons)
 	}
+	presence := PresenceUnavailable
+	if v != nil && v.FaceDetector != nil {
+		presence = presenceForDetection(len(faces), target, false)
+	}
 	return PerceptionSnapshot{
 		FaceVisible:   len(faces) > 0,
 		PersonVisible: len(persons) > 0,
 		FaceCount:     len(faces),
 		Target:        target,
+		Presence:      presence,
 		UpdatedAt:     time.Now(),
 	}, nil
 }

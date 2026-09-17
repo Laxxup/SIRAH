@@ -86,17 +86,22 @@ func renderState(value State) string {
 }
 
 func renderPerception(value *vision.PerceptionSnapshot, maxAge time.Duration) string {
+	return renderPerceptionAt(value, maxAge, time.Now())
+}
+
+func renderPerceptionAt(value *vision.PerceptionSnapshot, maxAge time.Duration, now time.Time) string {
 	if value == nil {
 		return ""
 	}
 	if maxAge <= 0 {
 		maxAge = 2 * time.Second
 	}
-	age := time.Since(value.UpdatedAt)
-	if value.UpdatedAt.IsZero() || age < 0 || age > maxAge {
-		return fmt.Sprintf("fresh=false\nage_ms=%d\nface_visible=false\nperson_visible=false\nface_count=0", max(0, age.Milliseconds()))
+	age := now.Sub(value.UpdatedAt)
+	presence := value.PresenceAt(now, maxAge)
+	if presence == vision.PresenceStale {
+		return fmt.Sprintf("presence=%s\nfresh=false\nage_ms=%d\nface_count=0", presence, max(0, age.Milliseconds()))
 	}
-	return fmt.Sprintf("fresh=true\nage_ms=%d\nface_visible=%t\nperson_visible=%t\nface_count=%d", age.Milliseconds(), value.FaceVisible, value.PersonVisible, value.FaceCount)
+	return fmt.Sprintf("presence=%s\nfresh=true\nage_ms=%d\nface_count=%d", presence, max(0, age.Milliseconds()), value.FaceCount)
 }
 
 func renderHardwareStatus(value HardwareStatus) string {

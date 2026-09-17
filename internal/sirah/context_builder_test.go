@@ -12,13 +12,16 @@ func TestContextBuilderMarksStalePerceptionAsUnavailable(t *testing.T) {
 	contextData := Context{
 		Identity:          DefaultIdentity,
 		TechnicalContract: DefaultTechnicalContract,
-		Perception:        &vision.PerceptionSnapshot{FaceVisible: true, PersonVisible: true, FaceCount: 1, UpdatedAt: time.Now().Add(-3 * time.Second)},
+		Perception:        &vision.PerceptionSnapshot{FaceVisible: true, PersonVisible: true, FaceCount: 1, Presence: vision.PresenceVisible, UpdatedAt: time.Now().Add(-3 * time.Second)},
 		PerceptionMaxAge:  time.Second,
 	}
 
 	content := renderContextBlocks(ContextBuilder{}.Build(contextData, BuiltInPersona()))
-	if !strings.Contains(content, "fresh=false") || !strings.Contains(content, "face_visible=false") || !strings.Contains(content, "face_count=0") {
+	if !strings.Contains(content, "fresh=false") || !strings.Contains(content, "face_count=0") {
 		t.Fatalf("stale perception content = %q", content)
+	}
+	if !strings.Contains(content, "presence=stale") {
+		t.Fatalf("stale presence content = %q", content)
 	}
 }
 
@@ -26,13 +29,27 @@ func TestContextBuilderPreservesFreshPerception(t *testing.T) {
 	contextData := Context{
 		Identity:          DefaultIdentity,
 		TechnicalContract: DefaultTechnicalContract,
-		Perception:        &vision.PerceptionSnapshot{FaceVisible: true, PersonVisible: true, FaceCount: 1, UpdatedAt: time.Now()},
+		Perception:        &vision.PerceptionSnapshot{FaceVisible: true, PersonVisible: true, FaceCount: 1, Presence: vision.PresenceVisible, UpdatedAt: time.Now()},
 		PerceptionMaxAge:  time.Second,
 	}
 
 	content := renderContextBlocks(ContextBuilder{}.Build(contextData, BuiltInPersona()))
-	if !strings.Contains(content, "fresh=true") || !strings.Contains(content, "face_visible=true") || !strings.Contains(content, "person_visible=true") || !strings.Contains(content, "face_count=1") {
+	if !strings.Contains(content, "fresh=true") || !strings.Contains(content, "face_count=1") {
 		t.Fatalf("fresh perception content = %q", content)
+	}
+	if !strings.Contains(content, "presence=visible") {
+		t.Fatalf("fresh presence content = %q", content)
+	}
+}
+
+func TestContextBuilderRendersPerceptionStateAtControlledTime(t *testing.T) {
+	now := time.Unix(100, 0)
+	content := renderPerceptionAt(&vision.PerceptionSnapshot{
+		Presence:  vision.PresenceRecentlyLost,
+		UpdatedAt: now.Add(-200 * time.Millisecond),
+	}, time.Second, now)
+	if !strings.Contains(content, "presence=recently_lost") || !strings.Contains(content, "fresh=true") {
+		t.Fatalf("recently lost content = %q", content)
 	}
 }
 
