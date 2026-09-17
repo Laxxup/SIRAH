@@ -152,6 +152,65 @@ func TestTemporalTrackerReportsPresenceTransitions(t *testing.T) {
 	}
 }
 
+func TestInteractionZoneForClassifiesHorizontalTarget(t *testing.T) {
+	tests := []struct {
+		name     string
+		x        float64
+		presence PresenceState
+		want     InteractionZone
+	}{
+		{name: "left", x: -0.8, presence: PresenceVisible, want: InteractionZoneLeft},
+		{name: "left boundary", x: -0.4, presence: PresenceVisible, want: InteractionZoneCenter},
+		{name: "center", x: 0, presence: PresenceStable, want: InteractionZoneCenter},
+		{name: "right boundary", x: 0.4, presence: PresenceStable, want: InteractionZoneCenter},
+		{name: "right", x: 0.8, presence: PresenceStable, want: InteractionZoneRight},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			target := Target{X: test.x}
+			if got := InteractionZoneFor(&target, test.presence); got != test.want {
+				t.Fatalf("zone = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestInteractionZoneForKeepsSmallCenterJitterCentered(t *testing.T) {
+	for _, x := range []float64{-0.39, -0.05, 0.05, 0.39} {
+		target := Target{X: x}
+		if got := InteractionZoneFor(&target, PresenceStable); got != InteractionZoneCenter {
+			t.Fatalf("x=%.2f zone = %q, want center", x, got)
+		}
+	}
+}
+
+func TestInteractionZoneForRequiresCurrentSpatialPresence(t *testing.T) {
+	target := Target{X: -0.8}
+	for _, presence := range []PresenceState{PresenceRecentlyLost, PresenceAbsent, PresenceUnavailable, PresenceStale} {
+		if got := InteractionZoneFor(&target, presence); got != InteractionZoneUnknown {
+			t.Fatalf("presence=%q zone = %q, want unknown", presence, got)
+		}
+	}
+	if got := InteractionZoneFor(nil, PresenceVisible); got != InteractionZoneUnknown {
+		t.Fatalf("nil target zone = %q, want unknown", got)
+	}
+}
+
+func TestInteractionZoneForTransitionsLeftCenterRight(t *testing.T) {
+	target := Target{X: -0.8}
+	if got := InteractionZoneFor(&target, PresenceStable); got != InteractionZoneLeft {
+		t.Fatalf("left zone = %q", got)
+	}
+	target.X = 0
+	if got := InteractionZoneFor(&target, PresenceStable); got != InteractionZoneCenter {
+		t.Fatalf("center zone = %q", got)
+	}
+	target.X = 0.8
+	if got := InteractionZoneFor(&target, PresenceStable); got != InteractionZoneRight {
+		t.Fatalf("right zone = %q", got)
+	}
+}
+
 func TestPerceptionSnapshotMarksStaleWithoutChangingStoredState(t *testing.T) {
 	updatedAt := time.Unix(10, 0)
 	snapshot := PerceptionSnapshot{Presence: PresenceStable, UpdatedAt: updatedAt}

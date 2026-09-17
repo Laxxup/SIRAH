@@ -3,6 +3,7 @@ package vision
 
 import (
 	"context"
+	"math"
 	"sync"
 	"time"
 )
@@ -29,6 +30,36 @@ func retryRead(read func() error, attempts int, delay time.Duration) error {
 type Target struct {
 	X float64
 	Y float64
+}
+
+// InteractionZone is the coarse horizontal location of a valid facial target.
+type InteractionZone string
+
+const (
+	InteractionZoneUnknown InteractionZone = "unknown"
+	InteractionZoneLeft    InteractionZone = "left"
+	InteractionZoneCenter  InteractionZone = "center"
+	InteractionZoneRight   InteractionZone = "right"
+)
+
+const interactionZoneBoundary = 0.4
+
+// InteractionZoneFor derives a semantic zone without adding temporal state.
+// Only current visible or stable targets have valid spatial information.
+func InteractionZoneFor(target *Target, presence PresenceState) InteractionZone {
+	if target == nil || (presence != PresenceVisible && presence != PresenceStable) {
+		return InteractionZoneUnknown
+	}
+	if math.IsNaN(target.X) || math.IsInf(target.X, 0) {
+		return InteractionZoneUnknown
+	}
+	if target.X < -interactionZoneBoundary {
+		return InteractionZoneLeft
+	}
+	if target.X > interactionZoneBoundary {
+		return InteractionZoneRight
+	}
+	return InteractionZoneCenter
 }
 
 // PresenceState is the high-level state of facial perception. States are
