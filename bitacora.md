@@ -6,6 +6,49 @@ Robot conversacional que combina un LLM, reconocimiento de voz (STT), síntesis 
 
 ---
 
+## Introducción
+
+S.I.R.A.H. es un robot conversacional asistente con capacidad de interacción multimodal: escucha voz, procesa lenguaje natural, responde de forma verbal, observa su entorno con visión artificial y expresa estados emocionales o de atención a través de un mecanismo de ojos animados.
+
+El proyecto busca combinar inteligencia artificial, robótica, visión por computadora y control de hardware para crear un agente capaz de interactuar de forma natural con personas. El objetivo no es solo responder preguntas, sino construir un sistema físico que pueda observar, escuchar, interpretar contexto y reaccionar de manera coherente.
+
+Este documento sirve como bitácora del desarrollo del proyecto: recoge la motivación inicial, la evolución del sistema, las decisiones técnicas, los retos encontrados y el estado actual del prototipo.
+
+---
+
+## Quick start
+
+Si alguien quiere entender rápidamente qué hace el proyecto y cómo funciona, la idea general es esta:
+
+**El sistema integra:**
+- Visión: detección y seguimiento facial con OpenCV
+- Voz: captura de audio y reconocimiento de voz (STT) con Groq
+- LLM: procesamiento del lenguaje e integración de un agente de IA
+- TTS: generación de voz con Piper
+- Control del mecanismo: movimiento de ojos y expresiones con ESP32 + servos
+
+**El flujo principal es:**
+1. Una persona habla
+2. El audio se convierte a texto (STT)
+3. El modelo procesa el texto y decide una respuesta
+4. El agente genera una respuesta en lenguaje natural
+5. La respuesta se convierte en voz (TTS)
+6. El robot puede responder también con movimiento visual (ojos)
+
+**Estructura del proyecto:**
+
+El código está organizado en módulos:
+- `internal/vision/` — detección y seguimiento facial
+- `internal/voice/` — captura de audio, STT y TTS
+- `internal/sirah/` — lógica del agente, memoria, contexto
+- `firmware/` — control del ESP32 y comunicación con los servos
+
+**Lo importante:**
+
+El sistema es un prototipo experimental de robótica conversacional. La base funciona (visión + voz + LLM + movimiento), pero la integración completa sigue siendo un trabajo en progreso. Las partes más complejas aún están en desarrollo: la identificación del hablante, la memoria contextual y la percepción visual general.
+
+---
+
 ## Índice
 
 - [Inicio del proyecto](#inicio-del-proyecto)
@@ -26,6 +69,7 @@ Robot conversacional que combina un LLM, reconocimiento de voz (STT), síntesis 
 - [Decisiones técnicas](#decisiones-técnicas)
 - [Problemas encontrados durante las primeras pruebas](#problemas-encontrados-durante-las-primeras-pruebas)
 - [Estado actual del proyecto](#estado-actual-del-proyecto)
+- [Dirección del proyecto](#dirección-del-proyecto)
 - [Glosario](#glosario)
 - [Referencias](#referencias)
 
@@ -227,14 +271,14 @@ Actualmente S.I.R.A.H. no cuenta con un sistema suficientemente desarrollado par
 
 Entre las capacidades que todavía necesitan desarrollarse se encuentran:
 
-- Reconocimiento confiable de colores.
-- Reconocimiento de patrones.
-- Identificación de objetos.
-- Comprensión más completa de una escena.
-- Identificación de diferentes personas.
-- Seguimiento simultáneo de varias personas.
-- Selección de una persona específica como objetivo.
-- Relación entre una persona observada y la información almacenada en la memoria.
+- **Reconocimiento confiable de colores** — necesario para seguimiento visual mejorado y respuestas contextuales sobre el entorno.
+- **Reconocimiento de patrones** — permitiría identificar objetos y contextos recurrentes.
+- **Identificación de objetos** — esencial para que el robot pueda describir y manipular su entorno.
+- **Comprensión más completa de una escena** — para contextualizar conversaciones basadas en lo que rodea al interlocutor.
+- **Identificación de diferentes personas** — permitiría recordar quién es quién y mantener conversaciones personalizadas.
+- **Seguimiento simultáneo de varias personas** — requisito para interacciones en grupo.
+- **Selección de una persona específica como objetivo** — para responder al interlocutor correcto en ambientes con múltiples personas.
+- **Relación entre una persona observada y la información almacenada en la memoria** — para conectar contexto visual con historia conversacional.
 
 Estas funciones representan una parte importante del trabajo futuro relacionado con la visión artificial.
 
@@ -290,7 +334,7 @@ Debido a las necesidades económicas del proyecto y a su naturaleza experimental
 | Decisión | Alternativas consideradas | Motivo |
 | --- | --- | --- |
 | STT con Groq (streaming) | Solución local de STT | Resultados más rápidos y estables para conversación; el local no cumplía latencia |
-| TTS con Piper (local) | Edge-TTS (Azure), Piper vs. servicios externos | No depender de servicio externo; síntesis local
+| TTS con Piper (local) | Edge-TTS (Azure), Piper vs. servicios externos | No depender de servicio externo; síntesis local |
 | Reproducción progresiva de la respuesta del LLM | Esperar la respuesta completa | Reducir latencia percibida; conversación más natural |
 | Mecanismo base EyeMech ε2.0 | Diseño propio | Modelo 3D gratuito y probado; base para experimentar |
 | Go como primer lenguaje | Python directamente | Eficiencia y rendimiento en comunicación entre componentes |
@@ -338,37 +382,54 @@ Por lo tanto, uno de los principales objetivos de la siguiente versión será di
 
 ## Estado actual del proyecto
 
-Después de esta primera etapa de experimentación, S.I.R.A.H. puede considerarse un prototipo funcional experimental.
+Después de esta primera etapa experimental, S.I.R.A.H. puede considerarse un prototipo funcional de robot conversacional con integración multimodal.
 
-El sistema ya es capaz de integrar diferentes componentes que normalmente funcionarían de manera independiente: visión, reconocimiento de voz, modelos de lenguaje, síntesis de voz, memoria y control de un mecanismo físico.
+El sistema ya es capaz de combinar varios subsistemas que normalmente funcionan por separado: captura de voz, reconocimiento de voz, generación de respuestas por IA, síntesis de voz, visión artificial, memoria conversacional y control de un mecanismo físico.
 
-El principal resultado de esta etapa no consiste únicamente en las funciones que se lograron implementar, sino también en la identificación de las limitaciones que deberán solucionarse para conseguir una versión más estable.
+En la práctica, la arquitectura actual ya demuestra que el flujo completo es posible. El sistema puede escuchar una persona, convertir su voz a texto, procesar la información con un modelo de lenguaje, generar una respuesta y devolver esa respuesta en voz, además de controlar los ojos y la expresión visual del robot.
 
-| Capacidad | Estado |
-| --- | --- |
-| Conversación por texto (terminal) | Funcional |
-| Conversación por voz (`-voice`) | Funcional (STT Groq + Piper) |
-| Detección y seguimiento facial (OpenCV/YuNet) | Funcional, opt-in |
-| Ojos animados (6 servos SG90, ESP32 + PCA9685) | Funcional |
-| Memoria conversacional (local + Zep opcional) | Funcional |
-| Character cards / perfiles de personalidad | Implementado (experimental) |
-| Identificación robusta del hablante | Pendiente |
-| Selección de persona a seguir entre varias | Pendiente |
-| Visión general (objetos, colores, patrones) | Pendiente |
-| Migración/reorganización a Python | Planeada |
+Sin embargo, el proyecto sigue siendo experimental. Las capacidades más maduras están relacionadas con la integración general del sistema, mientras que las funciones más complejas aún requieren trabajo para volverse robustas y consistentes.
 
-Actualmente, los principales problemas identificados son:
+| Capacidad | Estado | Comentario |
+| --- | --- | --- |
+| Conversación por texto | Funcional | Se valida en entorno de terminal y pruebas de integración |
+| Conversación por voz (`-voice`) | Funcional | STT Groq + TTS Piper con latencia ~1-2s en flujo normal |
+| Detección y seguimiento facial | Funcional | OpenCV 4 + YuNet, opt-in; funciona en entornos controlados |
+| Ojos animados | Funcional | Control por ESP32 + PCA9685, movimientos fluidos en tiempo real |
+| Memoria conversacional | Funcional | Historial local y soporte opcional de Zep para persistencia |
+| Perfiles de personalidad | Experimental | Character cards definidas, aún requieren validación en conversaciones reales |
+| Identificación robusta del hablante | Pendiente | Necesario para mantener continuidad en conversaciones multi-usuario |
+| Selección de persona a seguir | Pendiente | Requiere mejora en lógica de atención visual con múltiples rostros |
+| Visión general del entorno | Pendiente | Objetos, patrones, colores y comprensión contextual no implementados |
+| Reorganización de arquitectura | Planeada | Se considera migración a Python para mejor mantenibilidad |
 
-- Reconocimiento de voz poco confiable cuando participan varias personas.
-- Falta de identificación robusta del hablante.
-- Sistema de seguimiento visual poco preparado para múltiples personas.
-- Capacidades de visión todavía limitadas.
-- Dependencia de servicios externos con límites gratuitos.
-- Saturación ocasional de los modelos de lenguaje.
-- Latencia elevada cuando se utiliza mayor capacidad de razonamiento.
-- Personalidad conversacional todavía poco consistente.
-- Sistema de memoria que todavía no está relacionado de manera adecuada con la identidad de cada persona.
-- Arquitectura de software que requiere una reorganización.
+**Principales retos actuales:**
+
+- Mejorar la confiabilidad del reconocimiento de voz cuando hay varias personas.
+- Distinguir de forma segura quién está hablando (identificación del hablante).
+- Seguir una persona de manera estable en entornos más complejos.
+- Ampliar la capacidad de percepción visual más allá de detección facial.
+- Reducir la dependencia de servicios externos con límites de uso.
+- Equilibrar latencia y calidad en la respuesta del agente.
+- Hacer que la personalidad del robot sea más consistente en conversaciones largas.
+- Integrar la memoria con la identidad del interlocutor.
+- Reorganizar la arquitectura del software para facilitar mantenimiento y extensión.
+
+## Dirección del proyecto
+
+S.I.R.A.H. no pretende ser simplemente un chatbot con voz. Su objetivo es avanzar hacia un agente físico de asistencia humanoide, con capacidades sensoriales y de interacción más naturales.
+
+La dirección del proyecto es hacia un sistema robótico con presencia, atención visual, memoria contextual y comunicación coherente con personas. El robot debe ser capaz no solo de responder, sino de observar, comprender quién está delante de él y reaccionar de manera apropiada.
+
+**Prioridades inmediatas:**
+
+1. **Estabilizar la percepción del entorno** — mejorar la detección y seguimiento de rostros, expandir capacidades visuales.
+2. **Mejorar la identificación del interlocutor** — saber quién está hablando para personalizar respuestas y recordar contexto.
+3. **Conectar memoria con contexto visual y conversacional** — integrar lo que el robot ve con lo que recuerda y sabe de cada persona.
+4. **Hacer más natural la interacción del robot** — refinar personalidad, latencias, expresiones visuales y tono de respuesta.
+5. **Preparar una arquitectura mantenible** — reorganizar el código (probablemente con migración a Python) para facilitar extensión y colaboración.
+
+En síntesis, el proyecto va más allá de "hacer que el robot hable". Su dirección real es construir un agente robótico con capacidad de comprender quién está delante, qué está pasando en su entorno y cómo responder de manera apropiada y coherente.
 
 ## Glosario
 
